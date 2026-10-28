@@ -1,0 +1,74 @@
+/* The window is transparent and larger than the island; only .island paints. */
+.stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 6px; /* PANEL_TOP_PX */
+  pointer-events: none;
+}
+
+.island {
+  /* AnimatePresence popLayout positions exiting content against this; otherwise it escapes overflow: hidden. */
+  position: relative;
+  pointer-events: auto;
+  overflow: hidden;
+  background: var(--island-bg);
+  color: var(--island-fg);
+  box-shadow:
+    0 0 0 1px var(--island-border),
+    0 10px 30px var(--island-shadow);
+}
+
+/* PANEL_WIDTH_PX, shrunk to fit when Windows text size zooms the webview (the window size is fixed in physical px). */
+.island[data-expanded="true"] {
+  width: min(640px, calc(100vw - 32px));
+}
+
+.island__pill {
+  height: 36px;
+  min-width: 132px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.island__panel {
+  padding: 16px 18px 18px;
+}
+
+.island__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.clock {
+  font-variant-numeric: tabular-nums;
+}
+
+.clock--pill {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.clock--panel {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.clock__time {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.clock__date {
+  font-size: 13px;
+  color: var(--island-muted);
+}

@@ -1,0 +1,120 @@
+# CLAUDE.md
+
+Guidance for Claude Code (and humans) working in this repo.
+
+## Keep the docs current (required)
+
+After every significant change (a new feature, an architecture or IPC change, a new
+dependency, a phase milestone, a bug that took real effort to fix, or a decision that
+was reversed), update these files in the same change:
+
+| File | What to update |
+|---|---|
+| [PLAN.md](PLAN.md) | Tick off tasks, adjust scope, record new commands/events, update "Current status". |
+| [CASESTUDY.md](CASESTUDY.md) | Add a decision-log entry (what, why, alternatives) and any notable challenge + resolution. |
+| [CLAUDE.md](CLAUDE.md) | Update if build/run commands, folder layout, conventions or gotchas changed. |
+
+A change is not finished until these are updated. Small refactors and typo fixes don't need entries.
+
+## Project
+
+**TopBar** (working name, repo `wpill`): a Windows 11 "Dynamic Island"-style bar pinned to
+the top center of the screen. Collapsed it's a small pill; hovering a hot zone at the
+top-middle expands it into a panel (running apps; later media, memory-heavy processes,
+window previews).
+
+- **Platform:** Windows 11 only. Win32/WinRT calls are fine; don't add cross-platform shims.
+- **Stack:** Tauri 2 · React + TypeScript + Vite · Framer Motion · Rust (`windows` crate, `sysinfo`).
+- **Package manager:** pnpm.
+
+## Commands
+
+```powershell
+.\scripts\check-env.ps1     # verify toolchain (Rust/MSVC/Node/WebView2)
+pnpm install
+pnpm tauri dev              # run the app (Vite HMR for React; Rust rebuilds + relaunches on save)
+$env:RUST_LOG='info,topbar_lib=debug'; pnpm tauri dev   # + hover transitions and panel-rect logs
+pnpm tauri build            # release build + NSIS installer (~11 min cold: fat LTO; ~1.5 MB installer)
+cd src-tauri; cargo fmt; cargo clippy --all-targets; cargo test
+pnpm typecheck              # tsc --noEmit
+```
+
+The first `cargo build` compiles ~360 crates (several minutes); later rebuilds of the
+`topbar` crate take 1–2 minutes in debug.
+
+## Layout
+
+- `src-tauri/src/`: `lib.rs` (setup and command registration), `ipc.rs` (event names and DTOs), `error.rs`,
+  `win32.rs` (shared HWND/class/pid helpers), `window/` (create, styles, show/hide),
+  `hover/` (`mod.rs` = poller thread + commands, `logic.rs` = pure state machine + hit tests, unit-tested),
+  `fullscreen.rs`, `apps/` (`enumerate.rs`, `icon.rs`, `activate.rs`).
+- `src/`: `lib/ipc.ts` + `lib/types.ts`, `island/` (Island, Clock, hooks, `motion.ts`), `features/apps/`.
+
+## Architecture rules
+
+1. **Rust owns window and hover state.** The cursor poller in `src-tauri/src/hover/` decides
+   expanded vs collapsed and toggles click-through (`window::set_click_through`). React only animates in
+   response to events. Never drive expand/collapse from DOM `mouseenter`/`mouseleave`:
+   while collapsed the webview gets no mouse events at all.
+2. **One window, never activated.** The island window has `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`.
+   It must never take focus from the user's app. Anything that needs keyboard input
+   (settings, Phase 4) goes in a *separate*, normal window.
+3. **IPC names live in one place.** Rust: `src-tauri/src/ipc.rs` (event name consts + payload
+   structs). TS: `src/lib/ipc.ts` (typed `invoke`/`listen` wrappers). Components never call
+   `invoke("...")` with a string literal.
+4. **Win32 is isolated.** All `unsafe` Win32/WinRT code lives in feature modules under
+   `src-tauri/src/` (`window/`, `hover/`, `apps/`, `fullscreen.rs`, later `media/`,
+   `processes/`, `thumbnails/`). Each `unsafe` block gets a one-line `// SAFETY:` comment.
+   Commands are thin wrappers that return `Result<T, AppError>`.
+5. **Payloads are camelCase.** Rust DTOs use `#[serde(rename_all = "camelCase")]`; TS types in
+   `src/lib/types.ts` mirror them by hand. Update both sides together.
+6. **HWNDs cross IPC as numbers** (`i64` in Rust, `number` in TS). Always revalidate with
+   `IsWindow` before acting on one; windows die between list and click.
+7. **Feature folders scale by phase.** New phases add a folder on both sides
+   (`src/features/<name>/`, `src-tauri/src/<name>/`) plus their entries in `ipc.rs` and `ipc.ts`.
+   They don't touch other features' internals.
+
+## Windows gotchas (read before touching Win32 code)
+
+- **`windows` crate version vs Tauri's.** `WebviewWindow::hwnd()` returns the `HWND` type from
+  *Tauri's* `windows` version (0.62 as of Tauri 2.12). Ours is pinned to the same minor in
+  `Cargo.toml`. After a Tauri upgrade, check `cargo tree -i windows` and bump ours to match.
+- **SetForegroundWindow** is restricted for background processes. Use the fallback chain
+  in `apps/activate.rs` (restore if minimized → `SetForegroundWindow` → empty synthetic mouse
+  `SendInput` and retry → `AttachThreadInput` with the current foreground thread). The empty
+  mouse input avoids the side effects of the classic Alt-key trick, such as menu bars activating.
+  `activate_window` is a sync command, so it runs on the main thread, which has a message queue.
+- **Never use Tauri's `show()` on the island.** It uses `SW_SHOW`, which activates the window. Use
+  `window::show_no_activate` (`SW_SHOWNOACTIVATE` + re-assert `HWND_TOPMOST`).
+- **Startup visibility race.** On a cold start Tauri can apply the builder's `visible(false)`
+  *after* our show in `setup()`. The poller therefore re-shows the window every 250 ms
+  whenever it should be visible and isn't.
+- **Never call Tauri's `set_ignore_cursor_events` on the island.** It toggles `WS_EX_LAYERED` along
+  with `WS_EX_TRANSPARENT`, and DWM drops the surface of a WebView2 window for ~150 ms whenever
+  `WS_EX_LAYERED` changes, so the island visibly blinks out. Use `window::set_click_through(hwnd, bool)`.
+  It keeps the window permanently layered and flips only `WS_EX_TRANSPARENT`, with no `SWP_FRAMECHANGED`.
+  The poller re-asserts it every 250 ms in case Tao rewrites the style.
+- **WebView2 background throttling can't be disabled on Windows** (Tauri's
+  `background_throttling` is unsupported there). Don't build on JS timers running while idle.
+- **Alt+Tab filter:** visible, non-empty title, root owner + last active popup equals
+  itself, not `WS_EX_TOOLWINDOW` (unless `WS_EX_APPWINDOW`), not DWM-cloaked
+  (`DWMWA_CLOAKED`), not our own window.
+- **Transparent windows still eat clicks** over their transparent pixels while not ignoring
+  cursor events. That's why we only accept cursor events while the pointer is inside the
+  reported panel rect.
+- **DPI and Windows "Text size".** Win32 cursor/monitor APIs use physical px. CSS px in the webview
+  are physical ÷ `devicePixelRatio`, and WebView2 folds Windows' *Text size* accessibility
+  setting into that ratio. The monitor scale factor Rust sees does **not** include it (on the
+  dev machine: scale 1.0, text size 120%, so dpr 1.2). Therefore React → Rust geometry is always sent in
+  **physical px** (CSS × `devicePixelRatio`), and CSS must fit the viewport rather than assume
+  640 CSS px are available. Never mix physical and CSS px in one struct.
+- **Icons:** `WM_GETICON` through `SendMessageTimeoutW` (hung apps), then `GetClassLongPtrW`,
+  then the exe icon via `SHGetFileInfoW`. Always `DestroyIcon` what you own.
+
+## Conventions
+
+- Rust: `cargo fmt`, clippy clean, `thiserror` for `AppError`, `log` macros (no `println!`).
+- TS: strict mode, function components + hooks, no default exports except `App`.
+- Animation: Framer Motion `layout` + spring transitions. Keep timing constants in
+  `src/island/motion.ts`.
+- Commits: small, imperative subject line; reference the phase (e.g. `phase1: alt-tab filter`).

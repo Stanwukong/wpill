@@ -1,0 +1,35 @@
+:root {
+  color-scheme: dark;
+  /* The island is always dark, like the hardware it imitates. */
+  --island-bg: #000;
+  --island-fg: #f5f5f7;
+  --island-muted: rgba(245, 245, 247, 0.58);
+  --island-border: rgba(255, 255, 255, 0.08);
+  --island-shadow: rgba(0, 0, 0, 0.35);
+  --tile-hover: rgba(255, 255, 255, 0.09);
+  --tile-active: rgba(255, 255, 255, 0.14);
+  --danger: #ff6b6b;
+
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent; /* required for the transparent window */
+}
+
+body {
+  user-select: none;
+  cursor: default;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
