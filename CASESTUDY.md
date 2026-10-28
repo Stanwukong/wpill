@@ -79,6 +79,21 @@ know about text-size zoom.
 be visible?" (fullscreen). Making it enforce that invariant also covers future cases like
 Explorer restarts, at no extra cost.
 
+### D9: Reprioritized roadmap after Phase 1 (2026-10-28)
+*Why:* Phase 1 proved the core, so the order now follows what makes the product feel like a
+Dynamic Island and what blocks sharing it:
+- Tray icon and autostart moved up from Phase 4 to a tiny Phase 1.5: testers can't quit the app otherwise.
+- The media card (Phase 2) now also drives the *collapsed* pill. A widget that's only visible on hover undersells the concept.
+- A new Phase 2.5, Live Activities, makes the island expand on its own for volume, Bluetooth,
+  battery, Caps Lock and screenshots. This is the signature behavior, and it's cheap once Phase 2's pill plumbing exists.
+- Multi-monitor/DPI and code signing (Phase 4a) come before any public release.
+- Memory-heavy apps (Phase 3) moved behind a settings toggle: niche, and it has the riskiest action.
+- New ideas (timer, drop shelf, clipboard) became Phase 5. Notifications, calendar and live previews became
+  spikes, because their feasibility or sign-in requirements are unproven.
+
+*Alternatives:* keeping the original 2 → 3 → 4 order. It would have shipped a niche process
+killer before the features people notice, and left the app unquittable for testers.
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -138,6 +153,7 @@ to keep that content clipped during the morph.
 | 2026-10-28 | Phase 0: environment audit, Tauri 2 API research, architecture + IPC contract drafted |
 | 2026-10-28 | Phase 1 built: island window, hover state machine, pill ⇄ panel animation, running apps with icons, activation, fullscreen hiding. Fixed text-size DPI mismatch and the startup visibility race. |
 | 2026-10-28 | Fixed collapse flash (own click-through toggling, permanently layered window); size-optimized release profile. |
+| 2026-10-28 | Phase 1 signed off: all 11 manual tests pass. Roadmap reprioritized (D9). |
 
 ## 7. Results & metrics
 

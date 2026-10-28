@@ -4,7 +4,8 @@
 
 ## Current status
 
-**Phase 1 is built and smoke-tested (2026-10-28); waiting on the manual test pass below.**
+**Phase 1 is complete (2026-10-28): built, smoke-tested, and all 11 manual tests passed.**
+**Next: Phase 1.5 (tray icon + launch at startup), then Phase 2 (media card).** See [Roadmap](#roadmap).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -17,7 +18,9 @@ Verified automatically (by driving the cursor and inspecting the live HWND from 
 - Panel renders the clock, date and running apps with icons (Win32 + UWP apps, e.g. WhatsApp).
 - `cargo test` (5 tests), clippy, `tsc` and `vite build` are clean.
 
-Not yet verified (needs a human): clicking an app tile (activation), fullscreen hiding, 125/150 % display scaling.
+Verified by hand (manual checklist, all pass): app activation (including minimized and elevated
+windows), closed-window error, fullscreen hiding without hiding for maximized windows, display
+scaling and text size, and repeated relaunches.
 
 ---
 
@@ -173,8 +176,12 @@ wpill/
 | 2 | command | `media_play_pause`, `media_next`, `media_prev`, `media_seek(positionMs)` |
 | 3 | command | `list_heavy_processes(limit) → ProcessGroup[]` (`{ name, pids, memoryBytes, icon, protected }`) |
 | 3 | command | `end_process_group(name, pids) → EndResult` (per pid: `ok \| accessDenied \| protected \| notFound`) |
-| 4 | event | `monitor:changed`, `settings:changed` |
-| 4 | command | `get_settings`, `set_settings`, `show_thumbnail(hwnd, rect)`, `hide_thumbnail` |
+| 2.5 | event | `activity:show` → `{ kind: "volume" \| "brightness" \| "bluetooth" \| "power" \| "capsLock" \| "screenshot", payload, durationMs }` |
+| 4a | event | `monitor:changed` |
+| 4b | event | `settings:changed` |
+| 4b | command | `get_settings`, `set_settings` |
+| 5 | command | timer: `timer_start(ms)`, `timer_cancel`; event `timer:tick` |
+| spike | command | `show_thumbnail(hwnd, rect)`, `hide_thumbnail` |
 
 ---
 
@@ -191,10 +198,10 @@ wpill/
 - [x] `list_windows`: Alt+Tab filter, title, exe name (UWP resolved through ApplicationFrameHost), icon (cached)
 - [x] `activate_window`: fallback chain, `IsWindow` revalidation, collapse afterwards
 - [x] Fullscreen watcher → hide the window, emit `island:visibility`
-- [ ] Manual test pass (checklist below)
-- [ ] Remove or keep the debug transition logging once Phase 1 is signed off
+- [x] Manual test pass (checklist below): all 11 passed, 2026-10-28
+- [x] Debug transition logging: kept at `debug` level (off by default; enable with `RUST_LOG`)
 
-**Manual test checklist**
+**Manual test checklist** (rerun before each release)
 Hot zone = a 200×10 px strip at the very top center (move the cursor to the top edge).
 1. Pill with the clock is visible at top center. It's not in the taskbar or Alt+Tab.
 2. Click-through while collapsed: click a browser tab or title-bar spot directly under the pill.
@@ -208,27 +215,82 @@ Hot zone = a 200×10 px strip at the very top center (move the cursor to the top
 10. Display scaling 125/150 % and text size 100/120/150 %: the panel fits, the hot zone and leave edges line up with what's drawn. (Scaling is read at startup; restart after changing it until Phase 4.)
 11. Kill and relaunch the app several times: the pill always appears.
 
-## Phase 2: media card
-GSMTC `GlobalSystemMediaTransportControlsSessionManager` (features `Media_Control`,
-`Storage_Streams`). Subscribe to `CurrentSessionChanged`, `MediaPropertiesChanged`,
-`PlaybackInfoChanged`, `TimelinePropertiesChanged` and emit `media:state`. Interpolate
-progress client-side between timeline updates.
+## Roadmap
 
-## Phase 3: memory-heavy apps
+Reprioritized 2026-10-28 after Phase 1 (see CASESTUDY D9). Phase numbers keep their original
+meaning; new phases slot in between.
+
+| Order | Phase | Scope | Why here |
+|---|---|---|---|
+| 1 | **1.5 Shell basics** | Tray icon, quit, launch at startup | ~1 hour. Testers need to quit and autostart before anything is shared. |
+| 2 | **2 Media card** | Now playing + controls, media state in the collapsed pill | Makes the island feel alive; the planned next phase. |
+| 3 | **2.5 Live Activities** | Island auto-expands for system events | The defining Dynamic Island behavior; reuses Phase 2's pill plumbing. |
+| 4 | **4a Release readiness** | Multi-monitor + per-monitor DPI, code signing, v0.2 release | Docking/undocking breaks placement today; unsigned installers trigger SmartScreen. |
+| 5 | **3 Memory-heavy apps** | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
+| 6 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
+| 7 | **Spikes** | Notifications mirror, calendar peek, live window previews | Uncertain feasibility or needs sign-in; prototype before committing. |
+
+### Phase 1.5: shell basics
+- [ ] Tray icon (`tauri` `tray-icon` feature) with **Quit**, **Launch at startup** (checkbox) and **About**
+- [ ] Launch at startup via `tauri-plugin-autostart` (per-user, no admin)
+- [ ] Single instance (`tauri-plugin-single-instance`) so a second launch doesn't stack two islands
+- [ ] Persist the startup choice (`tauri-plugin-store`); a settings window waits for Phase 4b
+
+### Phase 2: media card
+- [ ] Rust `media/`: GSMTC `GlobalSystemMediaTransportControlsSessionManager` (`windows` features
+      `Media_Control`, `Storage_Streams`). Subscribe to `CurrentSessionChanged`, `SessionsChanged`,
+      `MediaPropertiesChanged`, `PlaybackInfoChanged`, `TimelinePropertiesChanged`, and emit `media:state`.
+- [ ] Album art: read the thumbnail stream, re-encode to a PNG/JPEG data URL, cache per track
+- [ ] Controls: `media_play_pause`, `media_next`, `media_prev`, `media_seek` (only where the session allows it)
+- [ ] Panel card: art, title, artist, controls, progress bar interpolated client-side between timeline updates
+- [ ] **Collapsed pill shows media state:** small art + animated equalizer beside the clock while playing
+- [ ] Multiple sessions (e.g. Spotify + a browser tab): show the most recently active one, with a switcher
+- [ ] Test with Spotify, Edge/Chrome (YouTube), the Windows Media Player app, and nothing playing
+
+### Phase 2.5: Live Activities
+A small activity system: an event source in Rust emits `activity:show { kind, payload, durationMs }`.
+The island expands to a compact "activity" size for a few seconds, without stealing hover state, then collapses.
+- [ ] Activity queue + priority (don't interrupt a hovered/expanded island; coalesce rapid repeats)
+- [ ] Volume and brightness changes (Core Audio endpoint volume callbacks; WMI or monitor brightness)
+- [ ] Bluetooth audio connected/disconnected, with battery level where exposed
+- [ ] Charger plugged/unplugged, low battery (`GetSystemPowerStatus` / power notifications)
+- [ ] Caps Lock toggled
+- [ ] Screenshot taken: thumbnail you can drag out (watch the Screenshots folder / clipboard)
+- [ ] Per-activity on/off switches (stored now, UI in Phase 4b)
+
+### Phase 4a: release readiness
+- [ ] Multi-monitor + per-monitor DPI: re-read geometry on `WM_DISPLAYCHANGE` / `WM_DPICHANGED` and
+      reposition. Choose the island's monitor (primary by default)
+- [ ] Code signing (certificate or Azure Trusted Signing) wired into `tauri build`
+- [ ] Rerun the manual checklist; publish v0.2 installer
+
+### Phase 3: memory-heavy apps (behind a settings toggle)
 `sysinfo` refresh every ~2 s while expanded only. Group by process name, sum memory, sort.
 End Task opens a confirm dialog, then `TerminateProcess` per pid. Protected list (csrss,
 wininit, winlogon, services, lsass, smss, svchost, dwm, explorer, System, Registry, and
 our own pid) is refused in Rust, not just hidden in the UI. Access-denied (elevated targets)
-gets a clear message suggesting the app can't close elevated processes unless run as admin.
+gets a clear message explaining the app can't close elevated processes unless run as admin.
+Off by default.
 
-## Phase 4: polish
-Tray icon (`tauri` `tray-icon` feature), settings window (normal focusable window,
-`tauri-plugin-store`), launch at startup (`tauri-plugin-autostart`), multi-monitor and per-monitor
-DPI (`WM_DISPLAYCHANGE` / `WM_DPICHANGED` lead to repositioning), live previews with
-`DwmRegisterThumbnail` drawn into our HWND at rects reported by React.
+### Phase 4b: settings
+A settings window (a normal, focusable window, separate from the island) for: activities on/off,
+Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `tauri-plugin-store`.
+
+### Phase 5: utilities
+- [ ] Timer / stopwatch / focus mode: countdown lives in the pill; presets in the panel
+- [ ] Drop shelf: drag files onto the island to park them, drag them out later
+- [ ] Clipboard history (recent text/images), opt-in
+
+### Spikes (prototype before committing)
+- **Notifications mirror:** `UserNotificationListener` needs user consent and is unreliable for some apps.
+  Decide go/no-go after a prototype.
+- **Calendar peek:** next meeting in the pill + join link; needs Outlook/Google sign-in.
+- **Live window previews:** `DwmRegisterThumbnail` drawn into our HWND at rects reported by React
+  (the original Phase 4 item).
 
 ## Known limitations (Phase 1)
-- Geometry (monitor, scale) is read once at startup. Display changes need a restart until Phase 4.
+- Geometry (monitor, scale) is read once at startup. Display changes need a restart until Phase 4a.
+- No tray icon yet: quit via Task Manager until Phase 1.5.
 - Icons are cached per HICON/exe path. An app that changes its window icon at runtime may show a stale icon.
 - No keyboard interaction in the island by design (`WS_EX_NOACTIVATE`).
 - Fullscreen detection ignores fullscreen apps on secondary monitors (the island only lives on the primary one).

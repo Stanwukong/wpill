@@ -58,7 +58,7 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
    while collapsed the webview gets no mouse events at all.
 2. **One window, never activated.** The island window has `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`.
    It must never take focus from the user's app. Anything that needs keyboard input
-   (settings, Phase 4) goes in a *separate*, normal window.
+   (settings, Phase 4b) goes in a *separate*, normal window.
 3. **IPC names live in one place.** Rust: `src-tauri/src/ipc.rs` (event name consts + payload
    structs). TS: `src/lib/ipc.ts` (typed `invoke`/`listen` wrappers). Components never call
    `invoke("...")` with a string literal.
