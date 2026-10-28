@@ -95,11 +95,12 @@ Dynamic Island and what blocks sharing it:
 killer before the features people notice, and left the app unquittable for testers.
 
 ### D10: The registry is the source of truth for "Launch at startup" (Phase 1.5)
-*Why:* `tauri-plugin-autostart` stores the setting as a per-user `Run` registry value. Keeping a
-second copy in `tauri-plugin-store` would let the two drift apart (e.g. the user disables the entry in Task
-Manager → Startup apps). The tray checkbox reads the registry when the menu is built and re-reads it
-after every toggle, so it always shows the real state, even if a write fails.
+*Why:* the setting lives as a per-user `Run` registry value, and Task Manager keeps its own
+enable/disable switch under `StartupApproved\Run`. Keeping a third copy in `tauri-plugin-store` would let
+them drift apart. `autostart::is_enabled` reads both, and the tray checkbox re-reads them after every
+toggle, so it always shows the real state, even if a write fails or the user changed it in Task Manager.
 *Alternatives:* a settings store, deferred until Phase 4b needs real settings.
+*Revised (C5):* the Run value is written by our own `autostart.rs`, not `tauri-plugin-autostart`.
 Single instance came along in the same phase, because autostart plus a manual launch would otherwise stack two islands.
 
 ## 5. Challenges & resolutions
@@ -147,6 +148,18 @@ to keep that content clipped during the morph.
 *Lesson:* a frame-burst capture plus a pixel count per frame is a cheap, objective way to diagnose
 "it flickers" reports.
 
+### C5: "Launch at startup" worked but TopBar was missing from Startup apps
+*Symptom (user report):* after ticking Launch at startup in the installed build, Task Manager's
+Startup apps didn't list TopBar. *Diagnosis:* the registry entry existed and Windows' own flag said
+enabled, but the value was `C:\Users\DELL 7300\AppData\Local\TopBar\topbar.exe ` (**unquoted, with a
+trailing space**). The `auto-launch` crate behind `tauri-plugin-autostart` formats `"{path} {args}"`
+and never quotes. Any profile path with a space (common: "Firstname Lastname") gets an entry
+that Task Manager can't resolve. It's also the classic unquoted-path hijack vector (`C:\Users\DELL.exe`).
+*Fix:* dropped the plugin for a ~90-line `autostart.rs` on `windows-registry`. It writes a quoted path,
+honors and clears Task Manager's `StartupApproved` switch, and repairs an existing unquoted entry for
+the same exe on launch, so already-installed users get fixed.
+*Lesson:* test paths with spaces. The dev machine happened to have one, and that caught it.
+
 ### Still open
 - **Foreground-lock rules** in practice: the fallback chain is implemented but not yet exercised
   against elevated or minimized targets (manual test 7).
@@ -163,6 +176,7 @@ to keep that content clipped during the morph.
 | 2026-10-28 | Fixed collapse flash (own click-through toggling, permanently layered window); size-optimized release profile. |
 | 2026-10-28 | Phase 1 signed off: all 11 manual tests pass. Roadmap reprioritized (D9). |
 | 2026-10-28 | Phase 1.5 built: tray menu, launch at startup, single instance (verified: second launch exits). |
+| 2026-10-28 | Replaced `tauri-plugin-autostart` with `autostart.rs` (quoted Run path; C5). |
 
 ## 7. Results & metrics
 

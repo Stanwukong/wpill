@@ -1,4 +1,5 @@
 mod apps;
+mod autostart;
 mod error;
 mod fullscreen;
 mod hover;
@@ -15,14 +16,10 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {
             log::info!("second launch ignored; TopBar is already running");
         }))
-        .plugin(
-            tauri_plugin_autostart::Builder::new()
-                .app_name("TopBar")
-                .build(),
-        )
         .manage(hover::Island::default())
         .manage(apps::IconCache::default())
         .setup(|app| {
+            autostart::repair();
             let handle = app.handle().clone();
             let (island, geometry) = window::create(&handle)?;
             hover::spawn(handle.clone(), &island, geometry)?;

@@ -47,9 +47,10 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
 - `src-tauri/src/`: `lib.rs` (setup and command registration), `ipc.rs` (event names and DTOs), `error.rs`,
   `win32.rs` (shared HWND/class/pid helpers), `window/` (create, styles, show/hide),
   `hover/` (`mod.rs` = poller thread + commands, `logic.rs` = pure state machine + hit tests, unit-tested),
-  `fullscreen.rs`, `apps/` (`enumerate.rs`, `icon.rs`, `activate.rs`), `tray.rs` (tray menu, autostart toggle).
-- Plugins (registered in `lib.rs`): `tauri-plugin-single-instance` (must stay first),
-  `tauri-plugin-autostart` (used from Rust only, so no capability entries are needed).
+  `fullscreen.rs`, `apps/` (`enumerate.rs`, `icon.rs`, `activate.rs`), `tray.rs` (tray menu),
+  `autostart.rs` (Run-key entry, quoted path, respects Task Manager's enable flag).
+- Plugins (registered in `lib.rs`): `tauri-plugin-single-instance` (must stay first). Don't use
+  `tauri-plugin-autostart`: it writes the exe path unquoted, which breaks for paths with spaces.
 - `src/`: `lib/ipc.ts` + `lib/types.ts`, `island/` (Island, Clock, hooks, `motion.ts`), `features/apps/`.
 
 ## Architecture rules
@@ -98,6 +99,9 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
   The poller re-asserts it every 250 ms in case Tao rewrites the style.
 - **Autostart registers the exe that toggled it.** Turning on "Launch at startup" from a dev build
   writes `target\debug\topbar.exe` into the Run key. Toggle it from the installed build.
+- **Run-key paths must be quoted** (`"C:\Users\DELL 7300\…\topbar.exe"`). Unquoted paths with spaces
+  don't show in Task Manager's Startup apps and are a hijack risk. `HKCU\…\Explorer\StartupApproved\Run`
+  holds Task Manager's own switch (odd first byte = disabled): read it in `is_enabled`, and clear it when the user toggles from the tray.
 - **Single instance blocks dev while the installed app runs** (same identifier). Quit it from the tray first.
 - **WebView2 background throttling can't be disabled on Windows** (Tauri's
   `background_throttling` is unsupported there). Don't build on JS timers running while idle.

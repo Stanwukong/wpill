@@ -20,8 +20,8 @@ log = "0.4"
 env_logger = "0.11"
 base64 = "0.22"
 png = "0.17"
-tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
+windows-registry = "0.6"
 
 [profile.release]
 codegen-units = 1

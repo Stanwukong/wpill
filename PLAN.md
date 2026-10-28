@@ -234,18 +234,26 @@ meaning; new phases slot in between.
 ### Phase 1.5: shell basics (built 2026-10-28; awaiting the manual tray check)
 - [x] Tray icon (`tauri` `tray-icon` feature, `src-tauri/src/tray.rs`). The menu (left or right click) shows a
       version label ("TopBar 0.1.0", in place of a separate About), a **Launch at startup** checkbox, and **Quit TopBar**
-- [x] Launch at startup via `tauri-plugin-autostart` 2.7 (per-user `HKCU\…\Run` entry named `TopBar`, no admin)
+- [x] Launch at startup: per-user `HKCU\…\Run` entry named `TopBar`, no admin. Written by our own
+      `autostart.rs` with a **quoted** path. `tauri-plugin-autostart` was dropped: its unquoted path
+      didn't show in Task Manager on this machine (CASESTUDY C5). An old unquoted entry for the same exe
+      is repaired on launch.
 - [x] Single instance via `tauri-plugin-single-instance` 2.5: a second launch exits immediately (verified)
 - [x] ~~Persist with `tauri-plugin-store`~~: not needed. The Run registry entry *is* the persisted
       state, and the checkbox re-reads it after every toggle (CASESTUDY D10)
-- [ ] Manual check (below)
+- [ ] Manual check (below). Confirmed so far: installs correctly, and TopBar is listed in Task Manager →
+      Startup apps once the path is quoted. Still to do: sign-out/sign-in launch, untick, Task Manager
+      disable (4b), with the 23:40 installer that includes `autostart.rs`.
 
 **Manual check (Phase 1.5)**
 1. The TopBar icon is in the system tray (it may be in the ^ overflow; drag it out to pin it).
 2. Clicking it shows "TopBar 0.1.0" (greyed out), "Launch at startup" and "Quit TopBar".
 3. **Quit TopBar** closes the island and the tray icon.
-4. Tick **Launch at startup** from the *installed release build*, sign out and back in: the island appears.
-   Untick it: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` no longer has a `TopBar` value.
+4. Tick **Launch at startup** from the *installed release build*. Reopen Task Manager → Startup apps:
+   TopBar is listed and Enabled. Sign out and back in: the island appears.
+   Untick it: TopBar disappears from Startup apps, and `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+   has no `TopBar` value.
+4b. Disable TopBar *in Task Manager*, then open the tray menu: the checkbox shows unticked. Ticking it re-enables it.
 5. Launching TopBar again while it's running doesn't create a second island.
 
 ### Phase 2: media card
