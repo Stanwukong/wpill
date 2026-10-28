@@ -94,6 +94,14 @@ Dynamic Island and what blocks sharing it:
 *Alternatives:* keeping the original 2 → 3 → 4 order. It would have shipped a niche process
 killer before the features people notice, and left the app unquittable for testers.
 
+### D10: The registry is the source of truth for "Launch at startup" (Phase 1.5)
+*Why:* `tauri-plugin-autostart` stores the setting as a per-user `Run` registry value. Keeping a
+second copy in `tauri-plugin-store` would let the two drift apart (e.g. the user disables the entry in Task
+Manager → Startup apps). The tray checkbox reads the registry when the menu is built and re-reads it
+after every toggle, so it always shows the real state, even if a write fails.
+*Alternatives:* a settings store, deferred until Phase 4b needs real settings.
+Single instance came along in the same phase, because autostart plus a manual launch would otherwise stack two islands.
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -154,6 +162,7 @@ to keep that content clipped during the morph.
 | 2026-10-28 | Phase 1 built: island window, hover state machine, pill ⇄ panel animation, running apps with icons, activation, fullscreen hiding. Fixed text-size DPI mismatch and the startup visibility race. |
 | 2026-10-28 | Fixed collapse flash (own click-through toggling, permanently layered window); size-optimized release profile. |
 | 2026-10-28 | Phase 1 signed off: all 11 manual tests pass. Roadmap reprioritized (D9). |
+| 2026-10-28 | Phase 1.5 built: tray menu, launch at startup, single instance (verified: second launch exits). |
 
 ## 7. Results & metrics
 

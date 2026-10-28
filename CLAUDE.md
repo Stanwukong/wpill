@@ -47,7 +47,9 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
 - `src-tauri/src/`: `lib.rs` (setup and command registration), `ipc.rs` (event names and DTOs), `error.rs`,
   `win32.rs` (shared HWND/class/pid helpers), `window/` (create, styles, show/hide),
   `hover/` (`mod.rs` = poller thread + commands, `logic.rs` = pure state machine + hit tests, unit-tested),
-  `fullscreen.rs`, `apps/` (`enumerate.rs`, `icon.rs`, `activate.rs`).
+  `fullscreen.rs`, `apps/` (`enumerate.rs`, `icon.rs`, `activate.rs`), `tray.rs` (tray menu, autostart toggle).
+- Plugins (registered in `lib.rs`): `tauri-plugin-single-instance` (must stay first),
+  `tauri-plugin-autostart` (used from Rust only, so no capability entries are needed).
 - `src/`: `lib/ipc.ts` + `lib/types.ts`, `island/` (Island, Clock, hooks, `motion.ts`), `features/apps/`.
 
 ## Architecture rules
@@ -94,6 +96,9 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
   `WS_EX_LAYERED` changes, so the island visibly blinks out. Use `window::set_click_through(hwnd, bool)`.
   It keeps the window permanently layered and flips only `WS_EX_TRANSPARENT`, with no `SWP_FRAMECHANGED`.
   The poller re-asserts it every 250 ms in case Tao rewrites the style.
+- **Autostart registers the exe that toggled it.** Turning on "Launch at startup" from a dev build
+  writes `target\debug\topbar.exe` into the Run key. Toggle it from the installed build.
+- **Single instance blocks dev while the installed app runs** (same identifier). Quit it from the tray first.
 - **WebView2 background throttling can't be disabled on Windows** (Tauri's
   `background_throttling` is unsupported there). Don't build on JS timers running while idle.
 - **Alt+Tab filter:** visible, non-empty title, root owner + last active popup equals

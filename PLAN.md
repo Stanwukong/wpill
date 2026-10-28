@@ -5,7 +5,8 @@
 ## Current status
 
 **Phase 1 is complete (2026-10-28): built, smoke-tested, and all 11 manual tests passed.**
-**Next: Phase 1.5 (tray icon + launch at startup), then Phase 2 (media card).** See [Roadmap](#roadmap).
+**Phase 1.5 (tray, launch at startup, single instance) is built; it needs the short manual tray check.
+Next: Phase 2 (media card).** See [Roadmap](#roadmap).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -230,11 +231,22 @@ meaning; new phases slot in between.
 | 6 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
 | 7 | **Spikes** | Notifications mirror, calendar peek, live window previews | Uncertain feasibility or needs sign-in; prototype before committing. |
 
-### Phase 1.5: shell basics
-- [ ] Tray icon (`tauri` `tray-icon` feature) with **Quit**, **Launch at startup** (checkbox) and **About**
-- [ ] Launch at startup via `tauri-plugin-autostart` (per-user, no admin)
-- [ ] Single instance (`tauri-plugin-single-instance`) so a second launch doesn't stack two islands
-- [ ] Persist the startup choice (`tauri-plugin-store`); a settings window waits for Phase 4b
+### Phase 1.5: shell basics (built 2026-10-28; awaiting the manual tray check)
+- [x] Tray icon (`tauri` `tray-icon` feature, `src-tauri/src/tray.rs`). The menu (left or right click) shows a
+      version label ("TopBar 0.1.0", in place of a separate About), a **Launch at startup** checkbox, and **Quit TopBar**
+- [x] Launch at startup via `tauri-plugin-autostart` 2.7 (per-user `HKCU\…\Run` entry named `TopBar`, no admin)
+- [x] Single instance via `tauri-plugin-single-instance` 2.5: a second launch exits immediately (verified)
+- [x] ~~Persist with `tauri-plugin-store`~~: not needed. The Run registry entry *is* the persisted
+      state, and the checkbox re-reads it after every toggle (CASESTUDY D10)
+- [ ] Manual check (below)
+
+**Manual check (Phase 1.5)**
+1. The TopBar icon is in the system tray (it may be in the ^ overflow; drag it out to pin it).
+2. Clicking it shows "TopBar 0.1.0" (greyed out), "Launch at startup" and "Quit TopBar".
+3. **Quit TopBar** closes the island and the tray icon.
+4. Tick **Launch at startup** from the *installed release build*, sign out and back in: the island appears.
+   Untick it: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` no longer has a `TopBar` value.
+5. Launching TopBar again while it's running doesn't create a second island.
 
 ### Phase 2: media card
 - [ ] Rust `media/`: GSMTC `GlobalSystemMediaTransportControlsSessionManager` (`windows` features
@@ -290,7 +302,8 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
 
 ## Known limitations (Phase 1)
 - Geometry (monitor, scale) is read once at startup. Display changes need a restart until Phase 4a.
-- No tray icon yet: quit via Task Manager until Phase 1.5.
+- Single instance is keyed on the bundle identifier, so a dev build and the installed release build
+  can't run at the same time. Quit one from the tray first.
 - Icons are cached per HICON/exe path. An app that changes its window icon at runtime may show a stale icon.
 - No keyboard interaction in the island by design (`WS_EX_NOACTIVATE`).
 - Fullscreen detection ignores fullscreen apps on secondary monitors (the island only lives on the primary one).
