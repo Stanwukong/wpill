@@ -118,3 +118,5 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
 - Animation: Framer Motion `layout` + spring transitions. Keep timing constants in
   `src/island/motion.ts`.
 - Commits: small, imperative subject line; reference the phase (e.g. `phase1: alt-tab filter`).
+- **Branches: do not create new branches unless explicitly asked to. All work is committed and
+  pushed to `main`.**
