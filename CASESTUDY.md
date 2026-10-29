@@ -177,6 +177,7 @@ the same exe on launch, so already-installed users get fixed.
 | 2026-10-28 | Phase 1 signed off: all 11 manual tests pass. Roadmap reprioritized (D9). |
 | 2026-10-28 | Phase 1.5 built: tray menu, launch at startup, single instance (verified: second launch exits). |
 | 2026-10-28 | Replaced `tauri-plugin-autostart` with `autostart.rs` (quoted Run path; C5). |
+| 2026-10-30 | Phase 1.5 signed off: tray, startup launch, Task Manager toggle and single instance all pass by hand. |
 
 ## 7. Results & metrics
 

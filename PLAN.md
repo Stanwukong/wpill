@@ -5,8 +5,8 @@
 ## Current status
 
 **Phase 1 is complete (2026-10-28): built, smoke-tested, and all 11 manual tests passed.**
-**Phase 1.5 (tray, launch at startup, single instance) is built; it needs the short manual tray check.
-Next: Phase 2 (media card).** See [Roadmap](#roadmap).
+**Phase 1.5 is complete (2026-10-30): tray menu, launch at startup and single instance, with all manual checks passed.**
+**Next: Phase 2 (media card).** See [Roadmap](#roadmap).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -231,7 +231,7 @@ meaning; new phases slot in between.
 | 6 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
 | 7 | **Spikes** | Notifications mirror, calendar peek, live window previews | Uncertain feasibility or needs sign-in; prototype before committing. |
 
-### Phase 1.5: shell basics (built 2026-10-28; awaiting the manual tray check)
+### Phase 1.5: shell basics (complete 2026-10-30)
 - [x] Tray icon (`tauri` `tray-icon` feature, `src-tauri/src/tray.rs`). The menu (left or right click) shows a
       version label ("TopBar 0.1.0", in place of a separate About), a **Launch at startup** checkbox, and **Quit TopBar**
 - [x] Launch at startup: per-user `HKCU\…\Run` entry named `TopBar`, no admin. Written by our own
@@ -241,9 +241,7 @@ meaning; new phases slot in between.
 - [x] Single instance via `tauri-plugin-single-instance` 2.5: a second launch exits immediately (verified)
 - [x] ~~Persist with `tauri-plugin-store`~~: not needed. The Run registry entry *is* the persisted
       state, and the checkbox re-reads it after every toggle (CASESTUDY D10)
-- [ ] Manual check (below). Confirmed so far: installs correctly, and TopBar is listed in Task Manager →
-      Startup apps once the path is quoted. Still to do: sign-out/sign-in launch, untick, Task Manager
-      disable (4b), with the 23:40 installer that includes `autostart.rs`.
+- [x] Manual check (below): all steps passed on the installer that includes `autostart.rs` (2026-10-30)
 
 **Manual check (Phase 1.5)**
 1. The TopBar icon is in the system tray (it may be in the ^ overflow; drag it out to pin it).
