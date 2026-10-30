@@ -260,6 +260,27 @@ exit ends the session.
 forwarding the raw stdin (simpler, but sends whole answers through the pipe for nothing); `GetConsoleWindow` in the
 forwarder (it has no console: Claude Code starts hooks windowless).
 
+### D21: A local automation agent built on headless Claude Code, approved from the island (planned, Phase 2.7)
+*Why:* after 2.6 the island already knows what Claude Code sessions are doing; the next step is to start them. Claude
+Code already plans, runs commands, edits files and keeps its own permission rules, so TopBar shouldn't become an agent
+framework. It launches `claude -p` with stream-json in and out, shows progress through the existing activity queue,
+and answers Claude Code's permission prompts through `--permission-prompt-tool`, pointed at a tool on an MCP server
+that TopBar provides. The same MCP server then gives Claude the desktop tools Claude Code lacks on Windows (window
+lists, screenshots, UI Automation, and later input), built from code `apps/` already has. One server for both keeps
+one trust boundary: a per-user pipe like D17's, reached through a `topbar.exe mcp` stdio bridge that runs before
+Tauri, so no network port is opened. Approvals are D19 sticky notices with Allow / Deny, so the island stays
+click-only (rule 2) and typing moves to a separate focusable command window. Staged (a: runs and status, b:
+approvals, c: read-only desktop tools, d: input actions, e: routines) so the risky part, synthetic input into other
+apps, comes last and only after the rest has been lived with. The flags were checked in all three Claude Code
+versions installed here (2.1.123, 2.1.159, 2.1.312).
+*Alternatives:* the Claude Agent SDK in a Node or Python sidecar (richer API, `canUseTool` callbacks, but a second
+runtime to ship and keep alive next to a 1.5 MB Rust app); a synchronous `PermissionRequest` hook for approvals (works
+for interactive sessions too, but blocks Claude Code inside a hook with a timeout, and mixes "watch my sessions" with
+"drive my sessions"); an HTTP MCP server on localhost (simpler transport, but opens a port any local process can find,
+which D17 already rejected); screenshot-and-click as the only way to act (slow and brittle; the guidance tells Claude to
+prefer the shell and UI Automation, and to use raw clicks last); `bypassPermissions` with an allow list (no way to see
+or stop a bad step before it happens).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -368,6 +389,8 @@ design, so "nothing happened" needs a trace build, not guesses.
 | 2026-10-30 | Charging activity: orbiting green outline + halo; `motion-designer` agent added for all UI changes (D18). |
 | 2026-10-30 | Phase 2.5 signed off: all 12 manual checks pass (volume, brightness, Bluetooth headphones, charger, Caps Lock, screenshot drag-out, panel and fullscreen behavior). |
 | 2026-10-30 | Phase 2.6 built: hook forwarder + per-user pipe (D17, D20), sticky "needs input" notices (D19), Claude spinner, orange edge and panel section (via the motion-designer agent). Verified from outside and with real Claude Code 2.1.123/2.1.159 sessions; manual checklist pending. |
+| 2026-10-30 | Phase 2.6 signed off: all 12 manual checks pass (Windows Terminal, VS Code, two sessions, permission prompts, Esc, fullscreen, TopBar not running, disconnect). |
+| 2026-10-30 | Phase 2.7 (local automation agent) planned and placed next on the roadmap (D21), with its kick-off prompt. |
 
 ## 7. Results & metrics
 

@@ -10,9 +10,10 @@
 After sign-off, the island also took its colors from the album art (D13).
 **Phase 2.5 is complete (2026-10-30): Live Activities for volume, brightness, Bluetooth audio, power, Caps Lock and
 screenshots, with all 12 manual checks passed.** The charging activity also got an orbiting green outline (D18).
-**Phase 2.6 (Claude Code activity) is built and verified from outside (2026-10-30); waiting on the manual check** in
-[Phase 2.6](#phase-26-claude-code-activity) before sign-off. Kick-off prompt it was built from:
-[prompts/phase-2.6-claude-code.md](prompts/phase-2.6-claude-code.md).
+**Phase 2.6 is complete (2026-10-30): Claude Code activity through hooks (spinner, done / needs-input activities with
+an orange edge, panel section, click to focus, tray Connect/Disconnect), with all 12 manual checks passed.**
+**Next: Phase 2.7 (local automation agent).** See [Phase 2.7](#phase-27-local-automation-agent). Kick-off prompt for a
+new session: [prompts/phase-2.7-automation-agent.md](prompts/phase-2.7-automation-agent.md).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -227,6 +228,11 @@ Activity kinds: `claudeDone { sessionId, project, failed }` (`failed`: `StopFail
 
 | Phase | Kind | Name |
 |---|---|---|
+| 2.7 | window | `command` (label): the focusable command window; the island stays unfocusable |
+| 2.7 | command | `agent_start({ prompt, cwd, model?, maxTurns?, maxBudgetUsd? }) → { runId }`, `agent_send(runId, text)`, `agent_stop(runId)`, `agent_runs() → AgentRun[]`, `agent_transcript(runId) → AgentEvent[]` |
+| 2.7 | command | `agent_decide(requestId, decision: "allow" \| "deny", remember: "once" \| "run")` |
+| 2.7 | event | `agent:run` → `AgentRun { runId, sessionId?, project, status: "starting" \| "working" \| "waiting" \| "done" \| "failed" \| "stopped", turns, costUsd?, startedAtMs, updatedAtMs }`; `agent:output` → `{ runId, event: AgentEvent }` (command window only) |
+| 2.7 | activity kinds | `agentApproval { requestId, runId, project, tool, summary, risk: "read" \| "change" \| "input" }` (sticky, interactive: Allow / Deny), `agentFinished { runId, project, status }` |
 | 3 | command | `list_heavy_processes(limit) → ProcessGroup[]` (`{ name, pids, memoryBytes, icon, protected }`) |
 | 3 | command | `end_process_group(name, pids) → EndResult` (per pid: `ok \| accessDenied \| protected \| notFound`) |
 | 4a | event | `monitor:changed` |
@@ -278,10 +284,11 @@ meaning; new phases slot in between.
 | 2 | **2 Media card** | Now playing + controls, media state in the collapsed pill | Makes the island feel alive; the planned next phase. |
 | 3 | **2.5 Live Activities** | Island auto-expands for system events | The defining Dynamic Island behavior; reuses Phase 2's pill plumbing. |
 | 4 | **2.6 Claude Code activity** | Island shows when a local Claude Code session finishes or needs a decision | Added 2026-10-30 (D17). Small once 2.5's activity queue exists; high daily value while working with Claude Code. |
-| 5 | **4a Release readiness** | Multi-monitor + per-monitor DPI, code signing, v0.2 release | Docking/undocking breaks placement today; unsigned installers trigger SmartScreen. |
-| 6 | **3 Memory-heavy apps** | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
-| 7 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
-| 8 | **Spikes** | Notifications mirror, calendar peek, live window previews | Uncertain feasibility or needs sign-in; prototype before committing. |
+| 5 | **2.7 Local automation agent** | Type an instruction; TopBar runs a headless Claude Code session, shows progress in the island, asks for approvals there, and gives Claude desktop tools through its own MCP server | Added 2026-10-30 (D21). Builds directly on 2.6's pipe, sessions and activities. Staged so each stage is useful on its own. |
+| 6 | **4a Release readiness** | Multi-monitor + per-monitor DPI, code signing, v0.2 release | Docking/undocking breaks placement today; unsigned installers trigger SmartScreen. |
+| 7 | **3 Memory-heavy apps** | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
+| 8 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
+| 9 | **Spikes** | Notifications mirror, calendar peek, live window previews | Uncertain feasibility or needs sign-in; prototype before committing. |
 
 ### Phase 1.5: shell basics (complete 2026-10-30)
 - [x] Tray icon (`tauri` `tray-icon` feature, `src-tauri/src/tray.rs`). The menu (left or right click) shows a
@@ -391,7 +398,7 @@ Kick-off prompt: [prompts/phase-2.5-live-activities.md](prompts/phase-2.5-live-a
 11. **Theme:** with Spotify playing (tinted island), activities use the art's colors; with nothing playing, black + green.
 12. **Switches:** set `"capsLock": false` in `%APPDATA%\dev.wpill.topbar\settings.json`, restart → Caps Lock shows nothing.
 
-### Phase 2.6: Claude Code activity
+### Phase 2.6: Claude Code activity (complete 2026-10-30)
 The island tells you when a local Claude Code session finishes a task or needs a decision, through Claude Code
 hooks. Start from [prompts/phase-2.6-claude-code.md](prompts/phase-2.6-claude-code.md) (research and a design
 proposal before any code). Depends on Phase 2.5's activity queue.
@@ -436,7 +443,9 @@ Claude Code hook ──stdin JSON──▶ topbar.exe hook (forwarder, exits bef
       Captures of the live island (`pnpm tauri dev`): spinner beside the clock while working, "wpill · Needs your
       input" with the orange edge, back to the spinner once the tool ran, then "wpill · Done"; the foreground window
       never changed. 67 Rust tests pass
-- [ ] Manual check (below)
+- [x] Manual check (below): all 12 pass, 2026-10-30 (Windows Terminal with a PowerShell profile, VS Code, two
+      sessions, permission prompts, Esc, fullscreen, TopBar not running, disconnect). Note: a WSL profile runs Linux
+      Claude Code with its own settings, which never calls `topbar.exe` (known limitation)
 
 **Manual hook entries.** Add these to `~/.claude/settings.json` under `"hooks"` (the tray item writes the same thing,
 with the path of the TopBar that wrote it). One group per event, for `SessionStart`, `UserPromptSubmit`, `PostToolUse`,
@@ -475,6 +484,103 @@ restart any open Claude Code sessions)
 12. **Focus:** typing in another app continues while Claude activities come and go.
 
 Only sessions that run on this machine and fire hooks are covered; claude.ai/code cloud sessions don't run here.
+
+### Phase 2.7: local automation agent
+**Goal:** press a hotkey, type an instruction ("build the release installer and copy it to Drafts", "rename these
+screenshots by date", "open the PR page for this branch"), pick a folder, and walk away. TopBar runs a headless Claude
+Code session for it, the island shows it working, asks you to approve risky steps right there (Allow / Deny), and tells
+you when it's done. Claude gets desktop tools (windows, screenshots, UI Automation, and later clicking and typing)
+from TopBar itself. Kick-off prompt: [prompts/phase-2.7-automation-agent.md](prompts/phase-2.7-automation-agent.md)
+(research and a design proposal before any code). Decision: CASESTUDY D21.
+
+```
+hotkey ─▶ command window (focusable, separate) ── agent_start ─▶ Rust agent/ ── spawns ─▶ claude -p (stream-json)
+                ▲ transcript (agent:output)               │  reads NDJSON events ◀──────────────┘   │
+                │                                         ▼                                         │ stdio MCP
+         island: spinner, agentApproval (Allow/Deny), agentFinished          topbar.exe mcp (bridge) ◀┘
+                ▲                                         ▲                         │ per-user pipe
+                └──────── activity queue (2.5/D19) ◀──────┴── TopBar MCP server ◀───┘
+                                                              tools: approve, windows, screenshot, ui_tree, (click, type)
+```
+
+**Building blocks, verified 2026-10-30 in Claude Code 2.1.123, 2.1.159 and 2.1.312:** `-p` with
+`--output-format stream-json` and `--input-format stream-json` (follow-up messages to a running session),
+`--permission-prompt-tool <mcp tool>` (an MCP tool answers permission prompts in headless mode), `--mcp-config`,
+`--strict-mcp-config`, `--permission-mode`, `--allowedTools` / `--disallowedTools`, `--max-turns`, `--max-budget-usd`,
+`--append-system-prompt`, `--session-id`, `--resume`. The exact JSON of the permission tool's input and reply, and of
+the stream events, must be checked against the current docs at kick-off.
+
+**Principles (non-negotiable)**
+- **You approve, the island asks.** Every action Claude Code would ask about goes to `mcp__topbar__approve`, which
+  shows an `agentApproval` activity and waits. Nothing runs with `bypassPermissions`; TopBar always passes
+  `--permission-mode default` explicitly, whatever the user's settings say. Reading (screenshots, window lists, UI
+  trees) is risk `read`; file and shell changes are `change`; clicking and typing into other apps are `input`, which
+  can never be pre-approved for longer than one run.
+- **Rule 2 still holds.** The island never takes keyboard input. Typing happens in the separate `command` window
+  (a normal focusable Tauri window, hidden when not used). Approvals are clicks.
+- **Rust owns runs.** Processes, timers, approvals and limits live in `src-tauri/src/agent/`; React renders events.
+- **Always stoppable.** A visible agent state in the pill, Stop in the panel and the command window, and a global stop
+  hotkey. Stopping kills the whole process tree (Job Object), including anything Claude started.
+- **Leave a trail.** Every tool call, approval and result is appended to
+  `%APPDATA%\dev.wpill.topbar\agent\<runId>.jsonl` (local only, pruned after 30 days).
+- **Island shows status, not content** (as in 2.6): project, step name, the approval summary. Full output lives in
+  the command window.
+
+**Stage 2.7a: command window and headless runs** (useful alone: fire-and-forget tasks with island status)
+- [ ] Global hotkey via `RegisterHotKey` on a message-only window (default to decide; must not clash with Windows or
+      PowerToys shortcuts). Opens the `command` window: prompt box, folder (recent Claude session folders first),
+      model, and limits (turns, budget). Esc hides it
+- [ ] `agent/` module: spawns the chosen `claude.exe` (setting; default the first on PATH) with `CREATE_NO_WINDOW` in a
+      Job Object, stream-json both ways, `--append-system-prompt` with TopBar's agent guidance (prefer the shell, use
+      desktop tools only when there's no other way, never type secrets). Reads NDJSON on its own thread (a `Watcher`):
+      init (session id), assistant steps (tool names → a short step label), result (turns, cost, error)
+- [ ] Runs join 2.6's session list by Claude's session id (its hooks fire too), marked as agent runs: an "agent"
+      badge in the panel and Stop on the row. `agentFinished` replaces `claudeDone` for them (no double activity)
+- [ ] Follow-ups: `agent_send` writes another user message to the running session; finished runs can be resumed
+      (`--resume`)
+- [ ] Limits: default max turns and budget, per run; the run ends with a clear "limit reached" status
+
+**Stage 2.7b: approvals in the island**
+- [ ] `topbar.exe mcp`: a stdio MCP bridge Claude Code spawns from the generated `--mcp-config`. Like the hook
+      forwarder it runs before Tauri and relays JSON-RPC over a second per-user pipe (`topbar-agent-<SID>`, same DACL
+      rules as D17/D20). It carries a per-run token so only runs TopBar started are served
+- [ ] `approve` tool → `agentApproval` activity: a sticky notice (D19) with Allow / Deny buttons and a summary built in
+      Rust (tool + its key argument, e.g. the Bash command, truncated). "Details" opens the command window at that
+      step. No answer in 10 minutes = deny. Remember "for this run" is allowed for `read` and `change`, never for `input`
+- [ ] Several runs waiting: approvals take turns like 2.6's questions; the panel lists pending ones
+- [ ] Interactive (non-agent) sessions stay notify-only, as in 2.6
+
+**Stage 2.7c: desktop tools, read-only**
+- [ ] `list_windows`, `focused_window` (reuse `apps/`), `screenshot(window | screen)` (downscaled PNG as MCP image
+      content; never of the island itself), `ui_tree(window)` via UI Automation (names, roles, values, bounding boxes,
+      depth and size capped; password fields reported without values)
+- [ ] All read-only tools still ask once per run (risk `read`), so you know when Claude is looking at your screen
+
+**Stage 2.7d: desktop actions** (only after 2.7a–c have been used for a while)
+- [ ] `focus_window` (reuse `activate.rs`), `invoke(element)` / `set_value(element)` through UI Automation first,
+      `click(x, y)` / `type_text` / `press_keys` with `SendInput` as the fallback, `launch(app or URL)`
+- [ ] Every action is risk `input`: one approval per action (or per short, listed batch), never remembered. Refused for
+      password fields, for elevated windows (UIPI blocks them anyway; say so), and for TopBar's own windows
+- [ ] Physical input from you while an action runs aborts it (research how to tell real input from ours)
+
+**Stage 2.7e: routines** (stretch)
+- [ ] Saved instructions (prompt + folder + limits), run from the command window or on a schedule while TopBar runs
+
+**Out of scope:** cloud or remote sessions, WSL sessions, voice input, other machines, running TopBar elevated,
+approving prompts of interactive terminal sessions from the island (possible later through the `PermissionRequest`
+hook; deliberately not mixed in here).
+
+**Manual check (draft; finalize at kick-off)**
+1. Hotkey opens the command window with focus in the prompt; Esc hides it; the island never takes focus.
+2. "List the 5 largest files in this folder" runs headless: spinner, then `agentFinished`; the answer is in the window.
+3. A task needing a shell command shows an Allow / Deny activity; Deny → Claude adapts; Allow → it runs.
+4. Stop from the panel kills the run and anything it started (e.g. a long `ping -t`).
+5. Limits: a run capped at 2 turns ends with "limit reached".
+6. Two runs at once: approvals take turns; both finish; transcripts stay separate.
+7. Read-only tools: "what windows are open?" asks once, then answers from `list_windows`.
+8. TopBar quits mid-run: the run stops cleanly; no orphaned `claude.exe`.
+9. The audit log lists every tool call and decision.
+10. (2.7d) "Open Notepad and type hello": each action asks; moving the mouse during typing aborts it.
 
 ### Phase 4a: release readiness
 - [ ] Multi-monitor + per-monitor DPI: re-read geometry on `WM_DISPLAYCHANGE` / `WM_DPICHANGED` and
@@ -525,7 +631,7 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
   prompts are reported ~6 s late (Claude Code's own timing), and after Esc the session reads "working" for about a
   minute (`Stop` doesn't fire; the idle notification corrects it). Clicking focuses the window, not the Windows Terminal
   tab. The hook entry records the exe that clicked "Connect" (connect from the installed build, like autostart).
-  The PowerShell form of the entry (machines without Git Bash) is untested.
+  The PowerShell form of the entry (machines without Git Bash) is untested. Sessions inside WSL aren't seen.
 
 ## Distribution
 - `pnpm tauri build` produces `src-tauri/target/release/bundle/nsis/TopBar_0.1.0_x64-setup.exe`:
