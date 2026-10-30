@@ -539,6 +539,17 @@ the stream events, must be checked against the current docs at kick-off.
 - [ ] Follow-ups: `agent_send` writes another user message to the running session; finished runs can be resumed
       (`--resume`)
 - [ ] Limits: default max turns and budget, per run; the run ends with a clear "limit reached" status
+- [ ] **Claude UI refresh** (feedback after 2.6; through the motion-designer agent, applied to 2.6's activities, the
+      panel section and the new agent UI together so they share one look):
+      - Smaller status text ("Done", "Needs your input", "Stopped"): today it's as large as the project name and
+        competes with it. The project stays the title; the status reads as a quieter secondary line.
+      - A distinct typeface for Claude content (project names, statuses, the command window), so Claude activities
+        read as their own family next to volume or media. It must be installed on Windows or bundled under an open
+        licence (Anthropic's own brand fonts aren't licensed for this). Candidates to compare in renders: Cascadia
+        Mono/Code (echoes the terminal Claude Code runs in, ships with Windows Terminal), a humanist serif, or an
+        OFL font bundled with the app. Fallback stack required; the spinner glyph stays in Segoe UI Symbol
+      - Check both on the plain and the tinted island, at text size 100/120/150 %, and keep the activity's hit area
+        (it changes with the island's size)
 
 **Stage 2.7b: approvals in the island**
 - [ ] `topbar.exe mcp`: a stdio MCP bridge Claude Code spawns from the generated `--mcp-config`. Like the hook

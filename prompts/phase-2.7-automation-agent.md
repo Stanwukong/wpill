@@ -28,6 +28,12 @@ server inside TopBar.
 Design all of 2.7 at the level PLAN.md describes, but build only **2.7a (command window + headless runs)** and
 **2.7b (approvals in the island)**. Stages c–e get their own sessions after I've used a and b.
 
+Include the **Claude UI refresh** listed under 2.7a in PLAN.md: the status line ("Done", "Needs your input",
+"Stopped") is too large next to the project name, so make it smaller and quieter; and give Claude content its own
+typeface (a font that's on Windows or bundled under an open licence, with a fallback stack; no Anthropic brand fonts),
+used consistently in the 2.6 activities, the panel section and the new agent UI. Have the `motion-designer` agent
+render two or three font candidates side by side (plain and tinted island) so I can pick one before it's applied.
+
 ## Before coding
 
 1. **Check the current Claude Code docs** (headless mode / CLI reference / permissions / MCP) and confirm against the
