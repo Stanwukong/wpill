@@ -57,8 +57,22 @@ using Claude Code hooks, so I can work in other windows while it runs.
   manual JSON in PLAN.md.
 - **UI.** Every UI change (activity layouts, status dots, panel section, any animation) goes through the
   `motion-designer` agent (`.claude/agents/motion-designer.md`): delegate it, then review what it returns.
-  Keep it minimal and consistent with the existing activities. "Needs input" should draw attention without
-  alarm, and it must look right on the plain and the album-art-tinted island.
+  Keep it minimal and consistent with the existing activities, and right on the plain and the tinted island.
+  The look I want, in Claude's own visual language:
+  - **Working: Claude Code's spinner.** The same orange glyph Claude Code shows in the terminal while it works,
+    cycling through its frames (· ✢ ✳ ✶ ✻ ✽, then back), at Claude Code's pace. Find the exact frame
+    characters, order, timing and color from the installed Claude Code (its CLI bundle) or its docs; it may
+    use a different set on Windows terminals. It appears in the collapsed pill while any session is working
+    (beside the clock, like the media equalizer) and next to each working session in the panel. Frame-step it
+    in CSS (`steps()` keyframes on a pseudo-element's `content`, or a sprite), not a JS timer, and stop it
+    when nothing is working. Use Unicode glyphs in a font that renders them on Windows (check Segoe UI Symbol /
+    Cascadia), not Anthropic's logo.
+  - **Done or needs input: the island's edges glow Claude orange.** Reuse the charging ring's technique
+    (`.island::before` conic gradient masked to the border, `@property` angle, halo via `box-shadow`, D18) with
+    its own token, e.g. `--claude: #d97757` (confirm the exact brand orange against Claude Code's terminal color).
+    "Done" glows for the activity's duration; "needs input" keeps a calm, slow glow until the session's next
+    event (the sticky notice above), with the spinner glyph still and solid in the activity. Reduced motion:
+    static glyph and a static orange edge.
 
 ## Before coding
 

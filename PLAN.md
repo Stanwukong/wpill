@@ -399,6 +399,9 @@ Claude Code hook ──stdin JSON──▶ topbar.exe hook (forwarder, exits bef
       session state keyed by `session_id` (working / done / needs input) with expiry
 - [ ] Activities: "<project>: done" on `Stop`; "<project>: needs your input" on `Notification`, at higher
       priority. Project = `cwd` folder name; never prompt or transcript text
+- [ ] Claude look: Claude Code's orange spinner glyph (· ✢ ✳ ✶ ✻ ✽, frame-stepped in CSS) in the pill and panel while a
+      session works; the island's edges glow Claude orange (`--claude`, charging-ring technique, D18) when a session
+      is done (for the activity's duration) or needs input (until its next event). Built through the motion-designer agent
 - [ ] Panel section: open sessions with status dots; click focuses the session's terminal or VS Code window
       (best effort: ancestor process chain, then a title match on the folder name)
 - [ ] Tray "Connect Claude Code…": shows the exact `~/.claude/settings.json` entries, asks first, backs up,
