@@ -7,7 +7,9 @@
 **Phase 1 is complete (2026-10-28): built, smoke-tested, and all 11 manual tests passed.**
 **Phase 1.5 is complete (2026-10-30): tray menu, launch at startup and single instance, with all manual checks passed.**
 **Phase 2 is complete (2026-10-30): media card, pill art + equalizer and session switcher, with all 10 manual checks passed.**
-**Next: Phase 2.5 (Live Activities).** See [Roadmap](#roadmap).
+After sign-off, the island also took its colors from the album art (D13).
+**Next: Phase 2.5 (Live Activities).** See [Roadmap](#roadmap). Kick-off prompt for a new session:
+[prompts/phase-2.5-live-activities.md](prompts/phase-2.5-live-activities.md).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -308,6 +310,7 @@ meaning; new phases slot in between.
 ### Phase 2.5: Live Activities
 A small activity system: an event source in Rust emits `activity:show { kind, payload, durationMs }`.
 The island expands to a compact "activity" size for a few seconds, without stealing hover state, then collapses.
+Start from [prompts/phase-2.5-live-activities.md](prompts/phase-2.5-live-activities.md): research and a design proposal come before any code.
 - [ ] Activity queue + priority (don't interrupt a hovered/expanded island; coalesce rapid repeats)
 - [ ] Volume and brightness changes (Core Audio endpoint volume callbacks; WMI or monitor brightness)
 - [ ] Bluetooth audio connected/disconnected, with battery level where exposed

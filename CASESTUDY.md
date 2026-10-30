@@ -228,6 +228,7 @@ the same exe on launch, so already-installed users get fixed.
 | 2026-10-30 | Phase 2 built: GSMTC media watcher (D11), filtered `media:state` (D12), media card with seekable progress, pill art + equalizer, session switcher. |
 | 2026-10-30 | Phase 2 signed off: all 10 manual media checks pass (Spotify, YouTube, two sessions, nothing playing, text sizes). |
 | 2026-10-30 | Island background themed from the album art (D13). |
+| 2026-10-30 | Phase 2.5 kick-off prompt written (`prompts/`), so each phase can start in a fresh session. |
 
 ## 7. Results & metrics
 
