@@ -1,3 +1,9 @@
+.apps {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .apps__heading {
   margin: 0 0 8px;
   font-size: 12px;
@@ -25,7 +31,8 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 2px;
-  max-height: min(300px, calc(100vh - 150px));
+  min-height: 0;
+  max-height: 300px;
   overflow-y: auto;
   scrollbar-width: thin;
 }

@@ -1,6 +1,9 @@
 import { useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AppsList } from "../features/apps/AppsList";
+import { MediaCard } from "../features/media/MediaCard";
+import { Equalizer, PillArt } from "../features/media/PillMedia";
+import { useMedia } from "../features/media/useMedia";
 import { Clock } from "./Clock";
 import { contentFade, islandSpring, PANEL_RADIUS, PILL_RADIUS } from "./motion";
 import { useIslandState } from "./useIslandState";
@@ -11,6 +14,8 @@ export function Island() {
   const { expanded, hidden } = useIslandState();
   const ref = useRef<HTMLDivElement>(null);
   usePanelSizeReporter(ref, expanded);
+  const media = useMedia();
+  const nowPlaying = media.active?.status === "playing" ? media.active : null;
 
   if (hidden) return null;
 
@@ -38,6 +43,7 @@ export function Island() {
               <header className="island__header">
                 <Clock variant="panel" />
               </header>
+              <MediaCard media={media} />
               <AppsList />
             </motion.div>
           ) : (
@@ -50,7 +56,9 @@ export function Island() {
               exit={{ opacity: 0 }}
               transition={contentFade}
             >
+              {nowPlaying && <PillArt session={nowPlaying} />}
               <Clock variant="pill" />
+              {nowPlaying && <Equalizer />}
             </motion.div>
           )}
         </AnimatePresence>

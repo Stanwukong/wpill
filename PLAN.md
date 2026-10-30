@@ -6,7 +6,8 @@
 
 **Phase 1 is complete (2026-10-28): built, smoke-tested, and all 11 manual tests passed.**
 **Phase 1.5 is complete (2026-10-30): tray menu, launch at startup and single instance, with all manual checks passed.**
-**Next: Phase 2 (media card).** See [Roadmap](#roadmap).
+**Phase 2 (media card) is built (2026-10-30); it needs the manual media checklist below.**
+Next after sign-off: Phase 2.5 (Live Activities). See [Roadmap](#roadmap).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -124,7 +125,7 @@ wpill/
 │  │  └─ motion.ts               # spring/timing constants
 │  ├─ features/
 │  │  ├─ apps/                   # Phase 1: AppsList.tsx, useRunningApps.ts
-│  │  ├─ media/                  # Phase 2
+│  │  ├─ media/                  # Phase 2: MediaCard, PillMedia, useMedia, useProgress
 │  │  └─ processes/              # Phase 3
 │  ├─ lib/
 │  │  ├─ ipc.ts                  # typed invoke/listen wrappers (single source of names)
@@ -147,7 +148,8 @@ wpill/
       │  ├─ enumerate.rs         # EnumWindows + Alt+Tab filter
       │  ├─ icon.rs              # HICON → PNG data URL, cached per exe path
       │  └─ activate.rs          # SetForegroundWindow fallback chain
-      ├─ media/                  # Phase 2
+      ├─ media/                  # Phase 2: mod (state + commands), watcher (thread + subscriptions),
+      │                          #   snapshot (session → DTO), artwork (thumbnail → data URL), logic (pure, tested)
       ├─ processes/              # Phase 3
       └─ tray.rs settings.rs thumbnails/   # Phase 4
 ```
@@ -169,12 +171,26 @@ wpill/
 | command | `request_collapse` | `() → void` | E.g. after clicking an app |
 | command | `get_island_state` | `() → { expanded, hidden }` | Initial sync after a webview reload |
 
+### Phase 2
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| event | `media:state` | `{ sessions: MediaSession[] }`, most recently active first | Sent only when something React can't interpolate changed (CASESTUDY D12). Replaces the single-session shape reserved in Phase 0, to support the switcher. |
+| command | `get_media_state` | `() → { sessions }` | Initial sync after a webview reload |
+| command | `media_play_pause` | `(sessionId) → void` | Pause if playing, else play (not every app enables the toggle). |
+| command | `media_next` / `media_prev` | `(sessionId) → void` | |
+| command | `media_seek` | `(sessionId, positionMs) → void` | Relative to the timeline's start. |
+
+`MediaSession { id, appName, title, artist, album, artwork: dataURL|null, status: "playing"|"paused"|"stopped"|"changing",
+positionMs, durationMs|null, updatedAtMs, playbackRate, canPlay, canPause, canNext, canPrev, canSeek }`.
+`id` is ours (a counter), not a Windows id. `positionMs` is the position at `updatedAtMs` (Unix ms, from GSMTC's
+`LastUpdatedTime`); React interpolates `positionMs + (now − updatedAtMs) × playbackRate` while playing.
+Command errors: `mediaSessionGone` (session ended), `mediaRejected` (the app returned `false`).
+
 ### Reserved for later phases (names fixed now so they slot in)
 
 | Phase | Kind | Name |
 |---|---|---|
-| 2 | event | `media:state` → `{ title, artist, album, artwork: dataURL\|null, status, positionMs, durationMs, canPlay/Pause/Next/Prev }` |
-| 2 | command | `media_play_pause`, `media_next`, `media_prev`, `media_seek(positionMs)` |
 | 3 | command | `list_heavy_processes(limit) → ProcessGroup[]` (`{ name, pids, memoryBytes, icon, protected }`) |
 | 3 | command | `end_process_group(name, pids) → EndResult` (per pid: `ok \| accessDenied \| protected \| notFound`) |
 | 2.5 | event | `activity:show` → `{ kind: "volume" \| "brightness" \| "bluetooth" \| "power" \| "capsLock" \| "screenshot", payload, durationMs }` |
@@ -254,16 +270,37 @@ meaning; new phases slot in between.
 4b. Disable TopBar *in Task Manager*, then open the tray menu: the checkbox shows unticked. Ticking it re-enables it.
 5. Launching TopBar again while it's running doesn't create a second island.
 
-### Phase 2: media card
-- [ ] Rust `media/`: GSMTC `GlobalSystemMediaTransportControlsSessionManager` (`windows` features
-      `Media_Control`, `Storage_Streams`). Subscribe to `CurrentSessionChanged`, `SessionsChanged`,
-      `MediaPropertiesChanged`, `PlaybackInfoChanged`, `TimelinePropertiesChanged`, and emit `media:state`.
-- [ ] Album art: read the thumbnail stream, re-encode to a PNG/JPEG data URL, cache per track
-- [ ] Controls: `media_play_pause`, `media_next`, `media_prev`, `media_seek` (only where the session allows it)
-- [ ] Panel card: art, title, artist, controls, progress bar interpolated client-side between timeline updates
-- [ ] **Collapsed pill shows media state:** small art + animated equalizer beside the clock while playing
-- [ ] Multiple sessions (e.g. Spotify + a browser tab): show the most recently active one, with a switcher
-- [ ] Test with Spotify, Edge/Chrome (YouTube), the Windows Media Player app, and nothing playing
+### Phase 2: media card (built 2026-10-30; awaiting the manual media check)
+- [x] Rust `media/`: a `media-watcher` thread (MTA) owns the GSMTC manager and subscribes to `CurrentSessionChanged`,
+      `SessionsChanged`, and per session `MediaPropertiesChanged`, `PlaybackInfoChanged`, `TimelinePropertiesChanged`.
+      Handlers only forward a message; bursts are batched (50 ms) and `media:state` is emitted only on real changes
+      (CASESTUDY D11, D12). A 5 s resync runs while something plays, in case an app goes quiet.
+- [x] Album art: the thumbnail stream is passed through as a data URL (type sniffed from the bytes), not re-encoded;
+      over 1.5 MB is skipped. Cached per (session, track), 16 entries; misses are retried on the next 3 events.
+- [x] Controls: `media_play_pause`, `media_next`, `media_prev`, `media_seek`; buttons are disabled where the session doesn't allow them
+- [x] Panel card: art, title, artist · app, controls, progress bar interpolated on `requestAnimationFrame` while the panel is open; click to seek
+- [x] **Collapsed pill shows media state:** 20 px art + CSS-only equalizer beside the clock while playing
+- [x] Multiple sessions: most recently active first (started playing, new track, new session, or Windows' current session),
+      with app chips as a switcher. A manual pick lasts until a different session becomes most recent.
+- [x] Verified from outside (2026-10-30): Spotify session detected at startup with art, title and artist; pressing play in
+      Spotify produced one `media:state` and the pill switched to art + equalizer; no extra emits during steady playback
+- [ ] Manual check (below)
+
+**Manual check (Phase 2)** (run with `$env:RUST_LOG='info,topbar_lib=debug'` to see `media:state` lines)
+1. **Nothing playing** (close Spotify, no media tabs): the pill is the plain clock; the panel has no media card.
+2. **Spotify:** play a song. Within a second the pill shows its art, the clock and a moving equalizer. The panel card
+   shows art, title, "Artist · Spotify", and the bar advances smoothly with the elapsed time.
+3. **Pause/skip from the island:** pause → Spotify pauses, the art and equalizer leave the pill, the bar stops.
+   Play resumes. Next/previous change the track; the art and title update (art may take a moment).
+4. **Seek:** click the middle of the bar → Spotify jumps there, and the elapsed time follows.
+5. **YouTube in Edge/Chrome:** play a video. It appears with its thumbnail and "Chrome"/"Edge". Play/pause works;
+   next/previous are disabled unless the page provides them (e.g. a playlist).
+6. **Two sessions:** with Spotify playing, start YouTube. YouTube moves to the top and chips appear. Click the Spotify
+   chip → the card switches to Spotify. Then pause and play Spotify from Spotify itself: the card follows the newest session.
+7. **Session ends:** close the browser tab, or quit Spotify → its card/chip disappears within a second.
+8. **Focus:** typing in Notepad continues uninterrupted while you use the media buttons (no focus theft).
+9. **Fit:** at text size 120 % and 150 %, the panel with the media card fits; the apps grid scrolls rather than overflowing.
+10. **Windows Media Player** (the new app): play a local file → it shows as "Media Player" with its controls.
 
 ### Phase 2.5: Live Activities
 A small activity system: an event source in Rust emits `activity:show { kind, payload, durationMs }`.
@@ -306,13 +343,16 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
 - **Live window previews:** `DwmRegisterThumbnail` drawn into our HWND at rects reported by React
   (the original Phase 4 item).
 
-## Known limitations (Phase 1)
+## Known limitations
 - Geometry (monitor, scale) is read once at startup. Display changes need a restart until Phase 4a.
 - Single instance is keyed on the bundle identifier, so a dev build and the installed release build
   can't run at the same time. Quit one from the tray first.
 - Icons are cached per HICON/exe path. An app that changes its window icon at runtime may show a stale icon.
 - No keyboard interaction in the island by design (`WS_EX_NOACTIVATE`).
 - Fullscreen detection ignores fullscreen apps on secondary monitors (the island only lives on the primary one).
+- Media: apps decide what GSMTC exposes. Browsers often disable next/previous, some apps never send a timeline (no
+  progress bar), and live streams have no duration. App names come from the app id (`Spotify.exe` → "Spotify"),
+  with a few known ids mapped; others are just capitalized.
 
 ## Distribution
 - `pnpm tauri build` produces `src-tauri/target/release/bundle/nsis/TopBar_0.1.0_x64-setup.exe`:

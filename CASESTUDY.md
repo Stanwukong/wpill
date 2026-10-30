@@ -103,6 +103,35 @@ toggle, so it always shows the real state, even if a write fails or the user cha
 *Revised (C5):* the Run value is written by our own `autostart.rs`, not `tauri-plugin-autostart`.
 Single instance came along in the same phase, because autostart plus a manual launch would otherwise stack two islands.
 
+### D11: One thread owns every media subscription; handlers only forward (Phase 2)
+*Why:* GSMTC raises its events on arbitrary thread-pool threads, and a single track change fires all three
+session events at once. Having handlers touch shared state would need locking around WinRT calls and would
+re-read the same session three times. Instead, each handler sends a small message over a channel to a
+dedicated `media-watcher` thread (MTA) that owns the manager, the sessions and the artwork cache. It batches
+50 ms of messages and re-reads only what changed. Every registration token is held in a `Subscription`
+guard whose `Drop` calls the matching `Remove…`, so dropping a vanished session's entry (or the whole
+watcher, on `RunEvent::Exit`) unregisters everything without bookkeeping. Sessions are matched across
+`GetSessions()` calls by COM identity (`IUnknown` pointer), because two browser sessions share an app id.
+Commands don't go through the thread: GSMTC objects are agile, so the watcher publishes session handles to
+managed state and async commands `.await` the `Try…Async` call directly.
+*Alternatives:* polling every session on a timer (simple, but wakes the CPU while idle and lags behind
+track changes); routing commands through the watcher thread (one owner, but a slow app would block every update).
+
+### D12: Emit only what React can't work out itself; pass album art through (Phase 2)
+*Why:* the payload carries album art as a data URL (tens to hundreds of kB), and some apps update their
+timeline every second. Re-sending the whole state each time would push megabytes per minute through IPC.
+The payload instead carries `positionMs` plus the time it was measured (`updatedAtMs`), React interpolates,
+and Rust re-emits a timeline change only if it disagrees with that interpolation by more than 1.5 s (a seek,
+a stall). Any other field changing always emits. Steady Spotify playback produced no emits between track
+changes. Album art is passed through as the bytes the app supplied (JPEG/PNG, type sniffed from magic bytes)
+rather than decoded and re-encoded: apps already send reasonably sized images, and re-encoding would
+cost a `Graphics_Imaging` round trip per track for no visible gain.
+The reserved single-session `media:state` shape became `{ sessions: [...] }` (most recent first) so the
+switcher needs no extra event. The selection lives in React: a manual pick lasts until another session
+becomes most recent.
+*Alternatives:* a separate artwork command keyed by track (smaller events, but an extra round trip and
+cache on both sides); downscaling art with `BitmapDecoder` (only worth it if large thumbnails become common).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -166,6 +195,12 @@ the same exe on launch, so already-installed users get fixed.
 - **Testing approach that worked:** with no UI test harness, driving the real cursor with
   `SetCursorPos` and reading the island's `GWL_EXSTYLE` (click-through bit = expanded state) from
   PowerShell gave reliable end-to-end checks of the Rust state machine without touching the app.
+  For Phase 2 the same cursor drive plus a `CopyFromScreen` capture of the expanded panel confirmed the
+  media card (art, title, progress) and the pill's art + equalizer against a live Spotify session.
+- **GSMTC from PowerShell 5.1 is misleading:** a script using `GetSessions()` listed nothing while Spotify had
+  a session (Windows PowerShell doesn't enumerate the projected `IVectorView`). Trust the debug log instead.
+- **Media session identity:** matching sessions by `IUnknown` pointer held up with Spotify; still to be
+  confirmed with several browser tabs (manual check 6).
 
 ## 6. Timeline
 
@@ -178,6 +213,7 @@ the same exe on launch, so already-installed users get fixed.
 | 2026-10-28 | Phase 1.5 built: tray menu, launch at startup, single instance (verified: second launch exits). |
 | 2026-10-28 | Replaced `tauri-plugin-autostart` with `autostart.rs` (quoted Run path; C5). |
 | 2026-10-30 | Phase 1.5 signed off: tray, startup launch, Task Manager toggle and single instance all pass by hand. |
+| 2026-10-30 | Phase 2 built: GSMTC media watcher (D11), filtered `media:state` (D12), media card with seekable progress, pill art + equalizer, session switcher. |
 
 ## 7. Results & metrics
 

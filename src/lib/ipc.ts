@@ -2,12 +2,13 @@
 // Mirrors src-tauri/src/ipc.rs; change both together.
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { AppError, IslandState, VisibilityPayload, WindowInfo } from "./types";
+import type { AppError, IslandState, MediaState, VisibilityPayload, WindowInfo } from "./types";
 
 const EVENTS = {
   hoverEnter: "island:hover-enter",
   hoverLeave: "island:hover-leave",
   visibility: "island:visibility",
+  mediaState: "media:state",
 } as const;
 
 export const commands = {
@@ -17,6 +18,12 @@ export const commands = {
   setPanelRect: (width: number, bottom: number) => invoke<void>("set_panel_rect", { width, bottom }),
   requestCollapse: () => invoke<void>("request_collapse"),
   getIslandState: () => invoke<IslandState>("get_island_state"),
+  getMediaState: () => invoke<MediaState>("get_media_state"),
+  mediaPlayPause: (sessionId: number) => invoke<void>("media_play_pause", { sessionId }),
+  mediaNext: (sessionId: number) => invoke<void>("media_next", { sessionId }),
+  mediaPrev: (sessionId: number) => invoke<void>("media_prev", { sessionId }),
+  mediaSeek: (sessionId: number, positionMs: number) =>
+    invoke<void>("media_seek", { sessionId, positionMs: Math.round(positionMs) }),
 };
 
 export const on = {
@@ -24,6 +31,8 @@ export const on = {
   hoverLeave: (cb: () => void): Promise<UnlistenFn> => listen(EVENTS.hoverLeave, () => cb()),
   visibility: (cb: (payload: VisibilityPayload) => void): Promise<UnlistenFn> =>
     listen<VisibilityPayload>(EVENTS.visibility, (e) => cb(e.payload)),
+  mediaState: (cb: (payload: MediaState) => void): Promise<UnlistenFn> =>
+    listen<MediaState>(EVENTS.mediaState, (e) => cb(e.payload)),
 };
 
 /** Unsubscribes listeners registered with `on.*` (safe to call before they resolve). */

@@ -3899,6 +3899,8 @@ dependencies = [
  "tauri-plugin-single-instance",
  "thiserror 2.0.21",
  "windows",
+ "windows-collections",
+ "windows-future",
  "windows-registry",
 ]
 

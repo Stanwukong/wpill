@@ -33,7 +33,7 @@ window previews).
 .\scripts\check-env.ps1     # verify toolchain (Rust/MSVC/Node/WebView2)
 pnpm install
 pnpm tauri dev              # run the app (Vite HMR for React; Rust rebuilds + relaunches on save)
-$env:RUST_LOG='info,topbar_lib=debug'; pnpm tauri dev   # + hover transitions and panel-rect logs
+$env:RUST_LOG='info,topbar_lib=debug'; pnpm tauri dev   # + hover transitions, panel-rect and media:state logs
 pnpm tauri build            # release build + NSIS installer (~11 min cold: fat LTO; ~1.5 MB installer)
 cd src-tauri; cargo fmt; cargo clippy --all-targets; cargo test
 pnpm typecheck              # tsc --noEmit
@@ -48,10 +48,14 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
   `win32.rs` (shared HWND/class/pid helpers), `window/` (create, styles, show/hide),
   `hover/` (`mod.rs` = poller thread + commands, `logic.rs` = pure state machine + hit tests, unit-tested),
   `fullscreen.rs`, `apps/` (`enumerate.rs`, `icon.rs`, `activate.rs`), `tray.rs` (tray menu),
-  `autostart.rs` (Run-key entry, quoted path, respects Task Manager's enable flag).
+  `autostart.rs` (Run-key entry, quoted path, respects Task Manager's enable flag),
+  `media/` (`mod.rs` = managed state + commands, `watcher.rs` = GSMTC thread + subscriptions,
+  `snapshot.rs`, `artwork.rs`, `logic.rs` = pure helpers, unit-tested).
+- `lib.rs` uses `.build()?.run(|app, event| …)` so `RunEvent::Exit` can stop the media watcher (unregisters its WinRT handlers).
 - Plugins (registered in `lib.rs`): `tauri-plugin-single-instance` (must stay first). Don't use
   `tauri-plugin-autostart`: it writes the exe path unquoted, which breaks for paths with spaces.
-- `src/`: `lib/ipc.ts` + `lib/types.ts`, `island/` (Island, Clock, hooks, `motion.ts`), `features/apps/`.
+- `src/`: `lib/ipc.ts` + `lib/types.ts`, `island/` (Island, Clock, hooks, `motion.ts`), `features/apps/`,
+  `features/media/` (`useMedia` lives in `Island` so state survives the panel remounting; `MediaCard`, `PillMedia`, `useProgress`).
 
 ## Architecture rules
 
@@ -66,7 +70,7 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
    structs). TS: `src/lib/ipc.ts` (typed `invoke`/`listen` wrappers). Components never call
    `invoke("...")` with a string literal.
 4. **Win32 is isolated.** All `unsafe` Win32/WinRT code lives in feature modules under
-   `src-tauri/src/` (`window/`, `hover/`, `apps/`, `fullscreen.rs`, later `media/`,
+   `src-tauri/src/` (`window/`, `hover/`, `apps/`, `fullscreen.rs`, `media/`, later
    `processes/`, `thumbnails/`). Each `unsafe` block gets a one-line `// SAFETY:` comment.
    Commands are thin wrappers that return `Result<T, AppError>`.
 5. **Payloads are camelCase.** Rust DTOs use `#[serde(rename_all = "camelCase")]`; TS types in
@@ -119,6 +123,18 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
   640 CSS px are available. Never mix physical and CSS px in one struct.
 - **Icons:** `WM_GETICON` through `SendMessageTimeoutW` (hung apps), then `GetClassLongPtrW`,
   then the exe icon via `SHGetFileInfoW`. Always `DestroyIcon` what you own.
+- **WinRT async/collections need their own crates.** `windows` re-exports only `windows-core`, so
+  `IAsyncOperation` comes from `windows-future` and `IVectorView` from `windows-collections`. Keep their versions
+  in step with what `windows` pulls in (`cargo tree -i windows-future`). Blocking `.join()` is fine on our own MTA
+  threads (`media-watcher`); in async commands, `.await` the operation instead.
+- **GSMTC events fire on thread-pool threads.** Handlers must only send a message to the `media-watcher` thread;
+  never touch shared state or call back into WinRT from them. Hold every registration in a `Subscription` guard
+  so it's removed on drop. GSMTC objects are agile (`Send + Sync`), so commands can use a cloned session directly.
+- **Media apps fire events in bursts and in odd orders.** Spotify often sends a track's title before its thumbnail,
+  so artwork misses are not cached and are retried. Timeline events are emitted to React only when they disagree
+  with its interpolation (`logic::worth_emitting`); keep `positionAt` in `useProgress.ts` in step with `expected_position`.
+- **Windows PowerShell 5.1 can't list GSMTC sessions** (`GetSessions()` comes back empty). Check media state with the
+  `topbar_lib=debug` log instead.
 
 ## Conventions
 

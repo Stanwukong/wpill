@@ -33,16 +33,23 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 10px;
 }
 
+/* Fits the window (minus the top gap and room for the shadow); the apps grid shrinks first. */
 .island__panel {
   padding: 16px 18px 18px;
+  max-height: calc(100vh - 6px - 34px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 .island__header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  flex: none;
   margin-bottom: 14px;
 }
 

@@ -9,6 +9,7 @@
   --tile-hover: rgba(255, 255, 255, 0.09);
   --tile-active: rgba(255, 255, 255, 0.14);
   --danger: #ff6b6b;
+  --playing: #30d158;
 
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   font-size: 14px;
