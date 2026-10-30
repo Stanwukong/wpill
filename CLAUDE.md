@@ -76,7 +76,7 @@ the drive once); `cargo clean --profile dev` when space runs low.
 - Plugins (registered in `lib.rs`): `tauri-plugin-single-instance` (must stay first). Don't use
   `tauri-plugin-autostart`: it writes the exe path unquoted, which breaks for paths with spaces.
 - `prompts/`: kick-off prompts for starting a phase in a fresh session (one per phase, linked from PLAN.md;
-  currently 2.5, 2.6 and 2.7).
+  currently 2.5, 2.6 and 2.7, plus `spinner-redesign.md` for Phase 4a).
   When a phase is signed off, write the next one so a new session can pick up without this conversation.
 - `src/`: `lib/ipc.ts` + `lib/types.ts`, `island/` (Island, Clock, hooks, `motion.ts`), `features/apps/`,
   `features/media/` (`useMedia` lives in `Island` so state survives the panel remounting; `MediaCard`, `PillMedia`, `useProgress`,

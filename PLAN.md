@@ -647,6 +647,9 @@ hook; deliberately not mixed in here).
 12. **Text size 100 / 120 / 150 %:** the approval activity and the command window fit; the island's click area matches.
 
 ### Phase 4a: release readiness
+- [ ] Own visual identity before a public release: replace the Claude Code look-alike spinner, `✻` mark and orange
+      with TopBar's own working indicator and an amber accent from the femiajanaku palette. Prompt:
+      [prompts/spinner-redesign.md](prompts/spinner-redesign.md)
 - [ ] Multi-monitor + per-monitor DPI: re-read geometry on `WM_DISPLAYCHANGE` / `WM_DPICHANGED` and
       reposition. Choose the island's monitor (primary by default)
 - [ ] Code signing (certificate or Azure Trusted Signing) wired into `tauri build`
