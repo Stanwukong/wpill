@@ -14,11 +14,11 @@ screenshots, with all 12 manual checks passed.** The charging activity also got 
 an orange edge, panel section, click to focus, tray Connect/Disconnect), with all 12 manual checks passed.**
 **Phase 2.7a–b are complete (2026-10-30): headless agent runs from a command window (Win+Alt+A), progress in the
 island, approvals (Allow / Deny) in the island, Cascadia Mono for Claude content, with all 12 manual checks passed.**
-**Phase 2.7c is built and verified from outside (2026-10-30): read-only desktop tools (`list_windows`,
+**Phase 2.7c is complete (2026-10-30): read-only desktop tools (`list_windows`,
 `focused_window`, `screenshot`, `ui_tree`), each approved in the island with an eye in the `read` badge, and a glow on
-the screen's edges while Claude looks.** Waiting for your manual check (below).
-See [Phase 2.7](#phase-27-local-automation-agent). **Next: sign off 2.7c, use it for a while, then 2.7d** (desktop
-actions; its kick-off prompt is written after sign-off).
+the screen's edges while Claude looks, with all 12 manual checks passed.**
+See [Phase 2.7](#phase-27-local-automation-agent). **Next: use 2.7a–c for a while, then 2.7d** (desktop
+actions; its kick-off prompt comes once 2.7c has been lived with).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -620,7 +620,7 @@ hotkey ─▶ command window (focusable, separate) ── agent_start ─▶ Rus
       activity and the command window. 95 Rust tests pass
 - [x] Manual check (below): all 12 pass, 2026-10-30
 
-**Stage 2.7c: desktop tools, read-only** (built 2026-10-30). Kick-off prompt:
+**Stage 2.7c: desktop tools, read-only** (complete 2026-10-30). Kick-off prompt:
 [prompts/phase-2.7c-desktop-tools.md](prompts/phase-2.7c-desktop-tools.md). Decisions: CASESTUDY D25, D26.
 
 *Research at kick-off (Claude Code 2.1.159's bundle, checked live on 2.1.314):* MCP image blocks (`image/png`,
@@ -661,9 +661,9 @@ mode they go to `--permission-prompt-tool`; a user allow rule skips that, hence 
       hwnd → `windowGone`; minimized → `minimized`; elevated Task Manager → `elevated` for both tools; the glow window
       covering 1920×1080 with affinity 17, hidden ~2.3 s after a look; a screen capture with the island showing (no
       pill in the image). Largest image 105 KB, far under the 4 MiB pipe cap. 115 Rust tests pass
-- [ ] Manual check (below)
+- [x] Manual check (below): all 12 pass, 2026-10-30
 
-**Manual check (Phase 2.7c)** (`pnpm tauri dev` with `$env:RUST_LOG='info,topbar_lib=debug'`, model `haiku`, a scratch
+**Manual check (Phase 2.7c, all pass 2026-10-30)** (`pnpm tauri dev` with `$env:RUST_LOG='info,topbar_lib=debug'`, model `haiku`, a scratch
 folder)
 1. **Window list:** "What windows are open?" asks "List open windows" with an eye in the badge; the answer lists your
    windows and never TopBar's command window.

@@ -509,6 +509,7 @@ actually on screen?) before trusting an absence.
 | 2026-10-30 | Phase 2.7a–b built: headless runs in Job Objects (D22), approvals in the island through `topbar.exe mcp` and a token-checked pipe (D23), the command window and the Cascadia Mono refresh (D24, via the motion-designer agent). Verified from outside with haiku runs (deny, allow, allow for this run, turn limit, follow-up resume, Stop with `ping -t`, TopBar killed and quit mid-run); manual checklist pending. |
 | 2026-10-30 | Phase 2.7a–b signed off: all 12 manual checks pass (hotkey, read-only task, deny, allow and "for this run", Stop and the stop hotkey, limits, two runs, panel and fullscreen, follow-up, quit mid-run, audit, text sizes). Stage 2.7c kick-off prompt written. |
 | 2026-10-30 | Stage 2.7c built: read-only desktop tools with a second, TopBar-side approval check (D25), a glow on the screen's edges while Claude looks (D26), an eye in the approval's `read` badge (motion-designer). Verified from outside with haiku runs and direct looks (C10); manual checklist pending. |
+| 2026-10-30 | Stage 2.7c signed off: all 12 manual checks pass (window list, glow, UI tree, password field, covered window, island not captured, deny, for this run, gone/minimized/elevated, locked screen, audit, text sizes). |
 
 ## 7. Results & metrics
 
