@@ -281,6 +281,60 @@ which D17 already rejected); screenshot-and-click as the only way to act (slow a
 prefer the shell and UI Automation, and to use raw clicks last); `bypassPermissions` with an allow list (no way to see
 or stop a bad step before it happens).
 
+### D22: An agent run is `claude -p` in a Job Object, one process per stretch of work (Phase 2.7a)
+*Why:* research at kick-off (2.1.123, 2.1.159, 2.1.312, plus small haiku runs) settled the shape. With stream-json in
+and out, `system/init` opens every turn with the session id, `result` closes it (`num_turns` for that turn,
+`total_cost_usd` for the session, `subtype` `error_max_turns` / `error_max_budget_usd` for the limits), and a user
+message written while a turn runs is queued by Claude Code. So TopBar keeps stdin open while there is unanswered work
+and closes it when every message has its `result`: the process exits, and a later follow-up resumes the same session
+with `--resume` in a new process. There's no idle `claude.exe` per finished task and no "is it still listening" state.
+`claude.exe` starts suspended with `CREATE_NO_WINDOW`, goes into a Job Object with `KILL_ON_JOB_CLOSE`, then resumes,
+so nothing it starts can escape before it's assigned. Stop, the stop hotkey, quitting TopBar and TopBar dying all end
+the whole tree (checked with `ping -t localhost` under three shells). The session's own transcript is already on disk,
+so a stopped run still resumes. Runs started by TopBar fire the user's hooks too; 2.6's listener recognises them
+because TopBar's own pid (and creation time) is in the hook's ancestor chain, and leaves them to `agent/`. The
+`claude` on PATH is often an npm shim that can't be spawned without a shell, so TopBar finds real `claude.exe` files
+(PATH, npm, `~/.local/bin`, VS Code's extension) and uses the newest version unless `agent.claudePath` says otherwise.
+*Alternatives:* one long-lived process per run waiting on stdin for follow-ups (an idle process per task, and an
+extra state to explain); `--permission-mode` from the user's settings (TopBar always passes `default`, which all
+three versions accept; 2.1.312 lists it as `manual`); SIGTERM/SIGINT semantics from the docs (POSIX only; on Windows
+Stop is TerminateJobObject, and the transcript is already saved); `AskUserQuestion` (nobody can type an answer mid-run,
+so it's disallowed and the guidance says to ask in the final message instead).
+
+### D23: Approvals: a token-checked pipe, Rust-built summaries, and narrow "allow for this run" (Phase 2.7b)
+*Why:* `--permission-prompt-tool mcp__topbar__approve` calls TopBar's MCP tool with `{ tool_name, input,
+tool_use_id }` and expects a text block holding `{"behavior":"allow","updatedInput":…}` or `{"behavior":"deny",
+"message":…}` (verified by hand; the docs don't give the schema). Claude Code starts `topbar.exe mcp` from a per-run
+`mcp.json` whose `env` carries the run id and a 128-bit random token; the bridge relays JSON-RPC over a second per-user
+pipe (`topbar-agent-<SID>`, same DACL as D17), and its first message must name a live run with that token, so a stray
+local process can't attach to the approval channel. TopBar answers MCP itself; the bridge only relays, caps messages at
+4 MiB and answers oversized ones with an error so Claude Code never waits forever. Each request becomes a D19 sticky
+notice keyed per request, so several runs' approvals take turns and park under the panel and fullscreen; the panel
+also lists them with Allow / Deny. Unanswered for 10 minutes means deny, with a message telling Claude nobody
+answered. Risk classes: reads (Read, Grep, WebFetch…) are `read`; everything else (shell, edits, unknown and other
+MCP tools) is `change`; 2.7d's desktop actions will be `input`. "Allow for this run" is remembered per program for
+shell commands (`Bash:git`), as one group for edits, per host for fetches, and never for `input` or for a shell
+command containing an operator (`&`, `|`, `;`, backtick, `$(`, redirects, newlines), since remembering `cd` would also
+allow `cd x && rm -rf y`. Defaults live in `settings.json` (`agent` block): `--strict-mcp-config` on (only TopBar's
+server; the user's own servers can be turned back on), the user's settings kept (their allow rules, hooks and plugins
+still apply, so steps they already allow aren't asked about), 25 turns and $1 per run, Win+Alt+A / Win+Alt+Escape.
+*Alternatives:* trusting any pipe client (a local process could answer approvals); remembering per tool (allowing one
+`git status` would allow every command); `--setting-sources project,local` to send everything to the island (drops the
+user's hooks and plugins too; available as `agent.userSettings: false`); a short timeout (too short for a coffee
+break, while the run holds nothing but a pending tool call).
+
+### D24: Claude content in Cascadia Mono, a quieter status, and a separate command window (Phase 2.7a)
+*Why:* after 2.6 the status ("Done", "Needs your input") competed with the project name. The status is now 11 px at
+48 % white on the project's baseline, and Claude content (activities, panel rows, approvals, the command window's
+transcript) uses `--font-claude`: Cascadia Mono, which ships with Windows 11 and echoes the terminal Claude Code runs
+in. Candidates were rendered side by side (Cascadia Mono, Sitka Text, IBM Plex Sans); Plex and Sitka read as "slightly
+different Segoe" at 14 px. Typing happens in a separate, normal `command` window (rule 2): frameless, created on first
+use, hidden on Esc, opened by a global hotkey registered on its own thread without any window (`WM_HOTKEY` goes to the
+thread's queue, and receiving it lets TopBar take the foreground). It's sized by Windows' Text size factor so the page
+keeps the same CSS room at 120 % and 150 %.
+*Alternatives:* typing in the island (breaks rule 2 and steals focus); a message-only window for the hotkey (not needed
+without a window target); Anthropic's brand fonts (not licensed for this); bundling an OFL font (no visible gain).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -356,6 +410,21 @@ invalid JSON escape, so the forwarder (correctly) dropped the input. *Fix:* gene
 script and pipe those. *Lesson:* test the boundary with bytes you've inspected (`od -c`); a quiet forwarder is the
 design, so "nothing happened" needs a trace build, not guesses.
 
+### C8: The agent pipe refused every bridge's hello
+*Symptom:* the first real agent run failed with "MCP tool mcp__topbar__approve not found"; TopBar's log said it had
+refused two connections "without a valid run token". *Diagnosis:* the bridge writes its hello as soon as it connects,
+so by the time TopBar reads, the message is already waiting and the overlapped `ReadFile` completes at once. On that
+path the byte count wasn't fetched (no count pointer is passed with overlapped I/O), so the message read as empty and
+failed to parse. 2.6's pipe never hit this because it always calls `GetOverlappedResult` afterwards. *Fix:* fetch the
+count from `GetOverlappedResult` on the immediate path too. *Lesson:* with overlapped I/O, "completed synchronously" is
+a normal outcome, not a fast path to skip; and the audit trail made the user-visible symptom obvious on the first run.
+
+### C9: Paths and disks on the test machine
+Two environment problems surfaced while verifying 2.7. The scratch folder came in as an 8.3 short path
+(`C:\Users\DELL73~1\…`), and Claude Code then asked before reading files inside its own working folder, because it
+compares paths as text; run folders are now normalised with `GetLongPathNameW`. And the debug `target` folder had
+grown to ~20 GB of stale builds, filling the drive mid-link (`os error 112`); `cargo clean --profile dev` freed 14 GB.
+
 ### Still open
 - **Foreground-lock rules** in practice: the fallback chain is implemented but not yet exercised
   against elevated or minimized targets (manual test 7).
@@ -391,6 +460,7 @@ design, so "nothing happened" needs a trace build, not guesses.
 | 2026-10-30 | Phase 2.6 built: hook forwarder + per-user pipe (D17, D20), sticky "needs input" notices (D19), Claude spinner, orange edge and panel section (via the motion-designer agent). Verified from outside and with real Claude Code 2.1.123/2.1.159 sessions; manual checklist pending. |
 | 2026-10-30 | Phase 2.6 signed off: all 12 manual checks pass (Windows Terminal, VS Code, two sessions, permission prompts, Esc, fullscreen, TopBar not running, disconnect). |
 | 2026-10-30 | Phase 2.7 (local automation agent) planned and placed next on the roadmap (D21), with its kick-off prompt. |
+| 2026-10-30 | Phase 2.7a–b built: headless runs in Job Objects (D22), approvals in the island through `topbar.exe mcp` and a token-checked pipe (D23), the command window and the Cascadia Mono refresh (D24, via the motion-designer agent). Verified from outside with haiku runs (deny, allow, allow for this run, turn limit, follow-up resume, Stop with `ping -t`, TopBar killed and quit mid-run); manual checklist pending. |
 
 ## 7. Results & metrics
 

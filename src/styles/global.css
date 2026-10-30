@@ -41,6 +41,10 @@
   /* Claude Code's own orange (its dark theme's `claude` color); never follows the album art. */
   --claude: #d77757;
   --claude-rgb: 215, 119, 87;
+  /* Claude content (projects, statuses, commands, transcripts): Claude Code lives in a terminal. The ✻ mark and the
+     spinner stay Segoe UI Symbol (claude.css); headings and chrome stay Segoe. */
+  --font-claude: "Cascadia Mono", "Cascadia Code", Consolas, "Segoe UI Variable Text", monospace;
+  --claude-status: rgba(245, 245, 247, 0.48);
 
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   font-size: 14px;

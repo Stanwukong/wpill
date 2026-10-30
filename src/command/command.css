@@ -1,0 +1,926 @@
+/*
+ * The command window: an opaque, normal window in the island's palette. Segoe for chrome, --font-claude for what
+ * Claude reads and writes (prompts, transcript, commands). The only motion is a short fade on new entries.
+ */
+html,
+body,
+#root {
+  background: #141416;
+}
+
+body {
+  color: var(--island-fg);
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+.cmd {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: inset 0 0 0 1px var(--island-border);
+}
+
+/* Title bar: the whole strip drags the window (data-tauri-drag-region), except its buttons. */
+.cmd__bar {
+  flex: none;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid var(--island-border);
+}
+
+.cmd__bar .claude-mark {
+  width: 18px;
+  height: 18px;
+  font-size: 15px;
+}
+
+.cmd__title {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.cmd__spacer {
+  flex: 1;
+  align-self: stretch;
+}
+
+.cmd__hotkey {
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--island-muted);
+  padding: 1px 6px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px var(--island-border);
+}
+
+.cmd__hotkey--error {
+  box-shadow: none;
+  color: rgba(255, 107, 107, 0.8);
+}
+
+.cmd__close {
+  width: 32px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--island-muted);
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.cmd__close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.cmd__close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--island-fg);
+}
+
+.cmd__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* Runs sidebar */
+.cmd__runs {
+  flex: none;
+  width: 212px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 6px;
+  box-sizing: border-box;
+  border-right: 1px solid var(--island-border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Windows' Text size zooms the page inside a fixed-size window; give the transcript the room. */
+@media (max-width: 560px) {
+  .cmd__runs {
+    width: 168px;
+  }
+}
+
+.cmd-new,
+.cmd-run {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  transition: background-color 120ms ease;
+}
+
+.cmd-new:hover,
+.cmd-run:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.cmd-new[aria-pressed="true"],
+.cmd-run[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.cmd-new {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.cmd-new__plus {
+  width: 14px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--claude);
+}
+
+.cmd-runs {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 6px 0 0;
+  border-top: 1px solid var(--island-border);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.cmd-run {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 10px;
+  margin-bottom: 1px;
+  white-space: nowrap;
+}
+
+.cmd-run__line,
+.cmd-run__detail {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cmd-run__line {
+  align-items: center;
+}
+
+.cmd-run__mark {
+  flex: none;
+  width: 14px;
+  display: grid;
+  place-items: center;
+}
+
+.cmd-run__project {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-claude);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.cmd-run__time {
+  flex: none;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--island-muted);
+}
+
+.cmd-run__detail {
+  padding-left: 22px;
+  font-size: 11px;
+}
+
+.cmd-run__status {
+  flex: none;
+  color: var(--claude-status);
+}
+
+.cmd-run[data-status="waiting"] .cmd-run__status {
+  color: var(--claude);
+}
+
+.cmd-run[data-status="failed"] .cmd-run__status {
+  color: var(--danger);
+}
+
+.cmd-run__prompt {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-claude);
+  color: rgba(245, 245, 247, 0.38);
+}
+
+.cmd__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cmd__view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cmd__view[hidden] {
+  display: none;
+}
+
+/* Shared controls */
+.cmd-btn {
+  flex: none;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition:
+    background-color 120ms ease,
+    opacity 120ms ease;
+}
+
+.cmd-btn--primary {
+  background: var(--claude);
+  color: #1a0f0b;
+}
+
+.cmd-btn--primary:hover {
+  background: color-mix(in srgb, var(--claude) 88%, white);
+}
+
+.cmd-btn--quiet {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.cmd-btn--quiet:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.cmd-btn:disabled {
+  opacity: 0.4;
+}
+
+.cmd-error {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+/* Inputs: a faint well with a hairline, Claude orange hairline when focused. */
+.task__prompt,
+.composer__box,
+.task-field select,
+.task-field input {
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px var(--island-border);
+  outline: none;
+  transition: box-shadow 120ms ease;
+}
+
+.task__prompt:focus,
+.composer__box:focus-within,
+.task-field select:focus,
+.task-field input:focus {
+  box-shadow: inset 0 0 0 1px rgba(var(--claude-rgb), 0.6);
+}
+
+/* New task */
+.task {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px;
+  overflow-y: auto;
+}
+
+/* Six to eight lines: it takes the spare height but never crowds Folder, Options and Run out of view. */
+.task__prompt {
+  flex: 1 1 auto;
+  min-height: 140px;
+  max-height: 184px;
+  resize: none;
+  padding: 12px 14px;
+  font-family: var(--font-claude);
+  font-size: 13px;
+  line-height: 1.5;
+  user-select: text;
+}
+
+.task__prompt::placeholder,
+.composer__input::placeholder {
+  color: rgba(245, 245, 247, 0.32);
+}
+
+.task__section {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.task__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--island-muted);
+}
+
+/* Room for four folders; more scroll. */
+.task__folders {
+  flex: none;
+  list-style: none;
+  margin: 0 -4px;
+  padding: 0;
+  max-height: 120px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.task-folder {
+  width: 100%;
+  height: 30px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 8px 0 26px;
+  position: relative;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 30px;
+  transition: background-color 120ms ease;
+}
+
+.task-folder:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* The chosen folder: a Claude-orange dot in the gutter and a faint fill. */
+.task-folder[aria-selected="true"] {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.task-folder[aria-selected="true"]::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 12px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--claude);
+}
+
+.task-folder__name {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-claude);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.task-folder__path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11.5px;
+  color: rgba(245, 245, 247, 0.4);
+}
+
+.task__empty {
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--island-muted);
+}
+
+.task__browse {
+  align-self: flex-start;
+  height: 26px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.task__disclosure {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--island-muted);
+  white-space: nowrap;
+}
+
+.task__disclosure:hover {
+  color: var(--island-fg);
+}
+
+.task__disclosure svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  transition: transform 150ms ease-out;
+}
+
+.task__disclosure[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.task__summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-left: 4px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: rgba(245, 245, 247, 0.4);
+}
+
+.task__options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.task-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--island-muted);
+}
+
+.task-field--wide {
+  grid-column: 1 / -1;
+}
+
+.task-field select,
+.task-field input {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--island-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.task-field select option {
+  background: #1f1f22;
+}
+
+/* Stays in reach when the form scrolls (Options open, or a large Text size). */
+.task__footer {
+  flex: none;
+  position: sticky;
+  bottom: -16px;
+  margin: auto -18px -16px;
+  padding: 10px 18px 16px;
+  background: #141416;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.task__footer .cmd-error {
+  flex: 1;
+}
+
+.task__hint {
+  font-size: 11px;
+  color: rgba(245, 245, 247, 0.4);
+}
+
+/* A run */
+.run {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.run__head {
+  flex: none;
+  height: 44px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 14px 0 18px;
+  line-height: 44px;
+  border-bottom: 1px solid var(--island-border);
+  white-space: nowrap;
+}
+
+.run__project {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-claude);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.run__cwd {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11.5px;
+  color: rgba(245, 245, 247, 0.4);
+}
+
+.run__status {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 34%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-claude);
+  font-size: 11px;
+  color: var(--claude-status);
+}
+
+.run__status[data-status="waiting"] {
+  color: var(--claude);
+}
+
+.run__status[data-status="failed"] {
+  color: var(--danger);
+}
+
+.run__stop {
+  align-self: center;
+  height: 26px;
+  padding: 0 10px 0 8px;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.run__log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 18px 8px;
+  scrollbar-width: thin;
+  user-select: text;
+  cursor: text;
+  font-family: var(--font-claude);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.run__empty {
+  color: var(--island-muted);
+}
+
+/* Transcript entries. New ones fade in (160 ms); nothing else moves. */
+.entry {
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  animation: entry-in 160ms ease-out;
+}
+
+@keyframes entry-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entry {
+    animation: none;
+  }
+}
+
+/* Your prompt: right-aligned, in a faint well. */
+.entry--user {
+  width: fit-content;
+  max-width: 82%;
+  margin-left: auto;
+  padding: 8px 12px;
+  border-radius: 12px 12px 4px 12px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--island-fg);
+}
+
+.entry--text {
+  color: rgba(245, 245, 247, 0.92);
+}
+
+.entry--tool {
+  margin-bottom: 4px;
+  color: rgba(245, 245, 247, 0.62);
+}
+
+.entry__chevron {
+  display: inline-block;
+  width: 1.4ch;
+  color: var(--claude);
+}
+
+.entry--result-block {
+  margin: 0 0 10px 1.4ch;
+}
+
+.entry__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px 1px 2px;
+  margin-left: -2px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-size: 11px;
+  color: rgba(245, 245, 247, 0.42);
+  cursor: pointer;
+}
+
+.entry__toggle:hover:not(:disabled) {
+  color: var(--island-fg);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.entry__toggle:disabled {
+  cursor: default;
+}
+
+.entry__toggle svg {
+  width: 11px;
+  height: 11px;
+  transition: transform 150ms ease-out;
+}
+
+.entry__toggle[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.entry--result-block[data-error="true"] .entry__toggle {
+  color: rgba(255, 107, 107, 0.75);
+}
+
+.entry__output {
+  margin: 4px 0 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: inset 0 0 0 1px var(--island-border);
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: rgba(245, 245, 247, 0.6);
+  scrollbar-width: thin;
+}
+
+.entry--result-block[data-error="true"] .entry__output {
+  background: rgba(255, 107, 107, 0.06);
+  color: rgba(255, 190, 190, 0.75);
+}
+
+/* Approval asked / answered: one quiet line. */
+.entry--note {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: rgba(245, 245, 247, 0.5);
+}
+
+.entry__note-label {
+  flex: none;
+  font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-size: 11px;
+  color: var(--claude);
+}
+
+.entry__note-what {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgba(245, 245, 247, 0.72);
+}
+
+.entry__note-outcome {
+  flex: none;
+  font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-size: 11px;
+}
+
+.entry--note[data-outcome="waiting"] .entry__note-outcome {
+  color: var(--claude);
+}
+
+.entry--note[data-outcome="denied"] .entry__note-outcome {
+  color: rgba(255, 107, 107, 0.8);
+}
+
+/* End of a turn: a hairline and one muted line of totals. */
+.entry--result {
+  margin-top: 14px;
+  padding-top: 8px;
+  border-top: 1px solid var(--island-border);
+  font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--island-muted);
+}
+
+.entry--result[data-status="failed"] {
+  color: rgba(255, 107, 107, 0.85);
+}
+
+.entry--error {
+  color: var(--danger);
+}
+
+/* Approvals waiting on this run, above the composer. */
+.run__pending {
+  flex: none;
+  list-style: none;
+  margin: 0;
+  padding: 8px 14px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* One line when there's room; the choices wrap under the command when the window is narrow. */
+.pending {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 7px 8px 7px 12px;
+  border-radius: 10px;
+  background: rgba(var(--claude-rgb), 0.08);
+  box-shadow: inset 0 0 0 1px rgba(var(--claude-rgb), 0.35);
+  white-space: nowrap;
+}
+
+.pending__what {
+  flex: 1 1 240px;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pending__actions {
+  flex: none;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pending .agent-link {
+  margin: 0 2px 0 0;
+}
+
+.pending__tool {
+  flex: none;
+  font-family: var(--font-claude);
+  font-size: 11.5px;
+  color: var(--claude);
+}
+
+.pending__summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-claude);
+  font-size: 12px;
+}
+
+.pending .agent-btn {
+  height: 26px;
+  padding: 0 12px;
+}
+
+/* Follow-up */
+.composer {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px 14px;
+}
+
+.composer__box {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 4px 4px 4px 12px;
+}
+
+.composer__input {
+  flex: 1;
+  min-height: 22px;
+  margin: 4px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  resize: none;
+  font-family: var(--font-claude);
+  font-size: 12.5px;
+  line-height: 22px;
+  user-select: text;
+  scrollbar-width: thin;
+}
+
+.composer__send {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: var(--claude);
+  color: #1a0f0b;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease;
+}
+
+.composer__send svg {
+  width: 15px;
+  height: 15px;
+}
+
+.composer__send:disabled {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--island-muted);
+}
+
+/* Large Text size: the prompt gives way so the folder list stays in view. */
+@media (max-height: 420px) {
+  .task__prompt {
+    flex: 0 0 84px;
+    min-height: 84px;
+  }
+}

@@ -24,6 +24,20 @@ pub enum AppError {
     ClaudeWindowNotFound,
     #[error("{0}")]
     ClaudeSettings(String),
+    #[error("That agent run is gone.")]
+    AgentRunGone,
+    #[error("That approval was already answered or has expired.")]
+    AgentApprovalGone,
+    #[error(
+        "Claude Code wasn't found. Install it, or set agent.claudePath in TopBar's settings.json."
+    )]
+    AgentNoClaude,
+    #[error("{0}")]
+    AgentInvalid(String),
+    #[error("{0}")]
+    AgentStart(String),
+    #[error("The command window isn't open.")]
+    NoCommandWindow,
     #[error(transparent)]
     Win32(#[from] windows::core::Error),
     #[error(transparent)]
@@ -43,6 +57,12 @@ impl AppError {
             Self::ClaudeSessionGone => "claudeSessionGone",
             Self::ClaudeWindowNotFound => "claudeWindowNotFound",
             Self::ClaudeSettings(_) => "claudeSettings",
+            Self::AgentRunGone => "agentRunGone",
+            Self::AgentApprovalGone => "agentApprovalGone",
+            Self::AgentNoClaude => "agentNoClaude",
+            Self::AgentInvalid(_) => "agentInvalid",
+            Self::AgentStart(_) => "agentStart",
+            Self::NoCommandWindow => "noCommandWindow",
             Self::Win32(_) => "win32",
             Self::Tauri(_) => "tauri",
         }

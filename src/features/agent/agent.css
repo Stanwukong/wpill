@@ -1,0 +1,239 @@
+/* Agent UI pieces shared by the island's panel and the command window. Claude content uses --font-claude. */
+
+.agent-glyph {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+/* The run's state dot (14 px slot). Waiting breathes (3 s, opacity only) because it waits on the user. */
+.agent-dot {
+  display: block;
+  width: 7px;
+  height: 7px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: var(--island-muted);
+}
+
+.agent-dot[data-status="waiting"] {
+  background: var(--claude);
+  animation: agent-breathe 3000ms ease-in-out infinite;
+}
+
+.agent-dot[data-status="failed"] {
+  background: var(--danger);
+}
+
+@keyframes agent-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-dot[data-status="waiting"] {
+    animation: none;
+  }
+}
+
+/* "agent": tells the TopBar-started runs apart from terminal sessions. Segoe, like other chrome. */
+.agent-badge {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgba(var(--claude-rgb), 0.4);
+  font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 13px;
+  letter-spacing: 0.02em;
+  color: var(--claude);
+}
+
+/* Buttons: Allow is the one filled thing (Claude orange); Deny and the rest stay quiet. */
+.agent-btn {
+  flex: none;
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    opacity 120ms ease;
+}
+
+.agent-btn--quiet {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--island-fg);
+}
+
+.agent-btn--quiet:hover {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.agent-btn--allow {
+  background: var(--claude);
+  color: #1a0f0b;
+}
+
+.agent-btn--allow:hover {
+  background: color-mix(in srgb, var(--claude) 88%, white);
+}
+
+.agent-btn:active {
+  opacity: 0.8;
+}
+
+/* Answered, waiting for Rust to withdraw it. */
+.agent-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* A text-only choice ("Allow git for this run", "Details"). */
+.agent-link {
+  flex: none;
+  min-width: 0;
+  padding: 2px 4px;
+  margin: 0 -4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-size: 11.5px;
+  color: var(--island-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.agent-link:hover {
+  color: var(--island-fg);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.agent-link:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Risk: reads and changes are quiet words; input (TopBar acting on other apps) is a small red-tinted tag. */
+.agent-risk {
+  flex: none;
+  font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-size: 10.5px;
+  line-height: 14px;
+  color: var(--island-muted);
+}
+
+.agent-risk[data-risk="change"] {
+  color: rgba(245, 245, 247, 0.72);
+}
+
+.agent-risk[data-risk="input"] {
+  padding: 0 5px;
+  border-radius: 5px;
+  background: rgba(255, 107, 107, 0.16);
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* Panel rows (inside .claude__list; base layout from .claude-row in claude.css). */
+.agent-row {
+  box-sizing: border-box;
+  cursor: default;
+}
+
+.agent-row__project {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.agent-row__status {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--claude-status);
+}
+
+.agent-row[data-status="waiting"] .agent-row__status {
+  color: var(--claude);
+}
+
+.agent-row[data-status="failed"] .agent-row__status {
+  color: var(--danger);
+}
+
+.agent-row__stop {
+  flex: none;
+  width: 24px;
+  height: 22px;
+  margin-right: -4px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--island-muted);
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.agent-row__stop:hover {
+  color: var(--island-fg);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* An approval under its run, indented to the project column. */
+.agent-pending {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 32px;
+  white-space: nowrap;
+}
+
+.agent-pending__tool {
+  flex: none;
+  font-size: 11px;
+  color: var(--claude-status);
+}
+
+.agent-pending__summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-claude);
+  font-size: 12px;
+  color: rgba(245, 245, 247, 0.86);
+}
+
+.agent-pending .agent-btn {
+  height: 22px;
+  padding: 0 9px;
+  font-size: 11.5px;
+}

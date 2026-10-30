@@ -8,5 +8,9 @@ fn main() {
         topbar_lib::forward_hook();
         return;
     }
+    // `topbar.exe mcp` is TopBar's MCP server for agent runs, started by Claude Code over stdio.
+    if std::env::args_os().nth(1).is_some_and(|arg| arg == "mcp") {
+        std::process::exit(topbar_lib::mcp_bridge());
+    }
     topbar_lib::run()
 }

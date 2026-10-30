@@ -46,7 +46,11 @@ impl Switches {
             Activity::Power(_) => self.power,
             Activity::CapsLock(_) => self.caps_lock,
             Activity::Screenshot(_) => self.screenshot,
-            Activity::ClaudeDone(_) | Activity::ClaudeNeedsInput(_) => self.claude,
+            Activity::ClaudeDone(_)
+            | Activity::ClaudeNeedsInput(_)
+            | Activity::AgentFinished(_) => self.claude,
+            // A run waits on its approval, so it can't be switched off (it would only time out).
+            Activity::AgentApproval(_) => true,
         }
     }
 }

@@ -58,6 +58,31 @@ export interface ClaudeNeedsInputActivity {
   project: string;
 }
 
+export type AgentRisk = "read" | "change" | "input";
+export type AgentStatus = "starting" | "working" | "waiting" | "done" | "failed" | "stopped";
+export type AgentEndReason = "completed" | "maxTurns" | "maxBudget" | "error" | "stopped";
+
+/** An agent run asks to use a tool. Sticky and interactive: Allow / Deny. */
+export interface AgentApprovalActivity {
+  requestId: number;
+  runId: string;
+  project: string;
+  /** Display name, e.g. `Bash` or `github · create_issue`. */
+  tool: string;
+  /** One line: the command, the file, the host. */
+  summary: string;
+  risk: AgentRisk;
+  /** What "allow for this run" covers ("git", "edits"); `null` where it isn't offered. */
+  rememberAs: string | null;
+}
+
+export interface AgentFinishedActivity {
+  runId: string;
+  project: string;
+  status: AgentStatus;
+  reason: AgentEndReason | null;
+}
+
 export type Activity =
   | { kind: "volume"; payload: VolumeActivity }
   | { kind: "brightness"; payload: BrightnessActivity }
@@ -66,7 +91,9 @@ export type Activity =
   | { kind: "capsLock"; payload: CapsLockActivity }
   | { kind: "screenshot"; payload: ScreenshotActivity }
   | { kind: "claudeDone"; payload: ClaudeDoneActivity }
-  | { kind: "claudeNeedsInput"; payload: ClaudeNeedsInputActivity };
+  | { kind: "claudeNeedsInput"; payload: ClaudeNeedsInputActivity }
+  | { kind: "agentApproval"; payload: AgentApprovalActivity }
+  | { kind: "agentFinished"; payload: AgentFinishedActivity };
 
 /** `activity:show`. The same `id` again means the activity was updated in place (e.g. another volume step). */
 export type ActivityPayload = Activity & {
@@ -142,6 +169,80 @@ export interface ClaudeHooksStatus {
   installed: boolean;
 }
 
+export interface AgentRun {
+  runId: string;
+  /** Folder name of `cwd`. */
+  project: string;
+  cwd: string;
+  /** The first prompt, shortened. */
+  prompt: string;
+  status: AgentStatus;
+  /** Set once the run has ended. */
+  reason: AgentEndReason | null;
+  /** What it's doing now ("Running git status"), while working. */
+  step: string | null;
+  turns: number;
+  /** Claude Code's own estimate for the session. */
+  costUsd: number | null;
+  model: string | null;
+  /** Approvals waiting for an answer, oldest first. */
+  pending: AgentApprovalActivity[];
+  error: string | null;
+  startedAtMs: number;
+  updatedAtMs: number;
+}
+
+export interface AgentRuns {
+  /** Most recently started first. */
+  runs: AgentRun[];
+}
+
+export type AgentEvent =
+  | { kind: "user"; text: string }
+  | { kind: "text"; text: string }
+  | { kind: "tool"; id: string; name: string; label: string }
+  | { kind: "toolResult"; id: string; isError: boolean; text: string }
+  | { kind: "approval"; requestId: number; tool: string; summary: string; risk: AgentRisk }
+  | { kind: "decision"; requestId: number; allow: boolean; by: "user" | "remembered" | "timeout" | "runEnded" }
+  | { kind: "result"; status: AgentStatus; reason: AgentEndReason; turns: number; costUsd: number | null }
+  | { kind: "error"; message: string };
+
+export type AgentEntry = AgentEvent & { atMs: number };
+
+/** `agent:output` (command window only). */
+export interface AgentOutput {
+  runId: string;
+  entry: AgentEntry;
+}
+
+export interface AgentStartRequest {
+  prompt: string;
+  cwd: string;
+  model?: string | null;
+  maxTurns?: number | null;
+  maxBudgetUsd?: number | null;
+  claudePath?: string | null;
+}
+
+export interface ClaudeInstall {
+  path: string;
+  version: string | null;
+  source: string;
+}
+
+export interface AgentOptions {
+  installs: ClaudeInstall[];
+  defaultInstall: string | null;
+  /** Most recent first. */
+  recentFolders: string[];
+  model: string | null;
+  maxTurns: number;
+  maxBudgetUsd: number | null;
+  hotkey: string;
+  /** Set when a hotkey couldn't be registered. */
+  hotkeyError: string | null;
+}
+
 export interface AppError {
   kind:
     | "windowGone"
@@ -154,6 +255,12 @@ export interface AppError {
     | "claudeSessionGone"
     | "claudeWindowNotFound"
     | "claudeSettings"
+    | "agentRunGone"
+    | "agentApprovalGone"
+    | "agentNoClaude"
+    | "agentInvalid"
+    | "agentStart"
+    | "noCommandWindow"
     | "win32"
     | "tauri";
   message: string;

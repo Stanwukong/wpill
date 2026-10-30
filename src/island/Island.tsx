@@ -1,6 +1,8 @@
 import { useRef, type CSSProperties } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ActivityView } from "../features/activities/ActivityView";
+import { AgentRunItems } from "../features/agent/AgentRunItems";
+import { isLive, recentRuns, useAgentRuns } from "../features/agent/useAgentRuns";
 import { AppsList } from "../features/apps/AppsList";
 import { ClaudeSpinner } from "../features/claude/ClaudeGlyphs";
 import { ClaudeSection } from "../features/claude/ClaudeSection";
@@ -23,14 +25,21 @@ export function Island() {
   const mode = expanded ? "panel" : activity ? "activity" : "pill";
   // Drives the orbiting charge ring on the island's edge (features/activities/activities.css).
   const charging = activity?.kind === "power" && activity.payload.event === "pluggedIn";
-  // Drives the Claude orange edge (activities.css): steady when done, breathing while it needs input.
+  // Drives the Claude orange edge (activities.css): steady when done, breathing while it needs the user.
   const claude =
-    activity?.kind === "claudeDone" ? "done" : activity?.kind === "claudeNeedsInput" ? "needsInput" : undefined;
+    activity?.kind === "claudeDone" || activity?.kind === "agentFinished"
+      ? "done"
+      : activity?.kind === "claudeNeedsInput" || activity?.kind === "agentApproval"
+        ? "needsInput"
+        : undefined;
   const ref = useRef<HTMLDivElement>(null);
   usePanelSizeReporter(ref, mode === "pill" ? null : mode);
   const media = useMedia();
   const claudeSessions = useClaudeSessions();
-  const claudeWorking = claudeSessions.some((s) => s.status === "working");
+  const agentRuns = useAgentRuns();
+  const claudeWorking = claudeSessions.some((s) => s.status === "working") || agentRuns.some((r) => isLive(r.status));
+  // Computed at render (no timer): the panel remounts on every expand and re-renders on run events.
+  const panelRuns = expanded ? recentRuns(agentRuns) : [];
   const nowPlaying = media.active?.status === "playing" ? media.active : null;
   // Tinted while there is an active session with art (playing or paused); plain black otherwise.
   const theme = useArtTheme(media.active?.artwork ?? null);
@@ -56,7 +65,8 @@ export function Island() {
         <AnimatePresence mode="popLayout" initial={false}>
           {mode === "activity" && activity ? (
             // Keyed by kind: an in-place update (another volume step) re-renders without a crossfade. Claude's two
-            // kinds share a key per session, so needs-input → done for the same session switches in place.
+            // kinds share a key per session, so needs-input → done for the same session switches in place. Agent
+            // activities are keyed per approval / run (activityKey).
             <motion.div
               key={activityKey(activity)}
               className="island__activity"
@@ -82,7 +92,10 @@ export function Island() {
                 <Clock variant="panel" />
               </header>
               <MediaCard media={media} />
-              <ClaudeSection sessions={claudeSessions} />
+              <ClaudeSection
+                sessions={claudeSessions}
+                agent={panelRuns.length > 0 ? <AgentRunItems runs={panelRuns} /> : null}
+              />
               <AppsList />
             </motion.div>
           ) : (
@@ -111,5 +124,8 @@ function activityKey(activity: ActivityPayload): string {
   if (activity.kind === "claudeDone" || activity.kind === "claudeNeedsInput") {
     return `activity-claude-${activity.payload.sessionId}`;
   }
+  // Each approval is its own card (the next one crossfades in); the finished notice never morphs out of one.
+  if (activity.kind === "agentApproval") return `activity-agent-approval-${activity.payload.requestId}`;
+  if (activity.kind === "agentFinished") return `activity-agent-finished-${activity.payload.runId}`;
   return `activity-${activity.kind}`;
 }

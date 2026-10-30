@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ClaudeSession, ClaudeStatus } from "../../lib/types";
 import { ClaudeSpinner } from "./ClaudeGlyphs";
 import { focusClaudeSession } from "./useClaudeSessions";
@@ -20,13 +21,17 @@ function ago(updatedAtMs: number): string {
   return `${Math.floor(hours / 24)} d ago`;
 }
 
-/** Panel section: one row per local Claude Code session; a click focuses its terminal or editor. */
-export function ClaudeSection({ sessions }: { sessions: ClaudeSession[] }) {
-  if (sessions.length === 0) return null;
+/**
+ * Panel section: one row per local Claude Code session; a click focuses its terminal or editor. `agent` holds the
+ * agent runs' rows (`<li>`s, features/agent), listed first; null when there are none.
+ */
+export function ClaudeSection({ sessions, agent }: { sessions: ClaudeSession[]; agent?: ReactNode }) {
+  if (sessions.length === 0 && !agent) return null;
   return (
     <section className="claude" aria-label="Claude Code">
       <h2 className="claude__heading">Claude Code</h2>
       <ul className="claude__list">
+        {agent}
         {sessions.map((s) => (
           <li key={s.sessionId}>
             <button className="claude-row" data-status={s.status} onClick={() => focusClaudeSession(s.sessionId)}>

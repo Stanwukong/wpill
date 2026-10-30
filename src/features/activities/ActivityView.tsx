@@ -1,5 +1,9 @@
 import type { ReactNode } from "react";
 import type { ActivityPayload, PowerActivity } from "../../lib/types";
+import { endLabel } from "../agent/labels";
+import { openRun } from "../agent/useAgentRuns";
+import { focusClaudeSession } from "../claude/useClaudeSessions";
+import { AgentApproval } from "./AgentApproval";
 import { ClaudeActivity } from "./ClaudeActivity";
 import { BatteryIcon, CapsLockIcon, HeadphonesIcon, SpeakerIcon, SunIcon } from "./icons";
 import { ScreenshotActivity } from "./ScreenshotActivity";
@@ -48,11 +52,31 @@ export function ActivityView({ activity }: { activity: ActivityPayload }) {
       return <ScreenshotActivity id={activity.id} shot={activity.payload} />;
     case "claudeDone": {
       const { sessionId, project, failed } = activity.payload;
-      return <ClaudeActivity sessionId={sessionId} project={project} state={failed ? "stopped" : "done"} />;
+      return (
+        <ClaudeActivity
+          project={project}
+          state={failed ? "stopped" : "done"}
+          onOpen={() => focusClaudeSession(sessionId)}
+        />
+      );
     }
     case "claudeNeedsInput": {
       const { sessionId, project } = activity.payload;
-      return <ClaudeActivity sessionId={sessionId} project={project} state="needsInput" />;
+      return <ClaudeActivity project={project} state="needsInput" onOpen={() => focusClaudeSession(sessionId)} />;
+    }
+    case "agentApproval":
+      return <AgentApproval approval={activity.payload} />;
+    case "agentFinished": {
+      const { runId, project, status, reason } = activity.payload;
+      // Only a completed run gets the check; limits, failures and stops read as "stopped" (no mark).
+      return (
+        <ClaudeActivity
+          project={project}
+          state={reason === "completed" || (reason === null && status === "done") ? "done" : "stopped"}
+          label={endLabel(status, reason)}
+          onOpen={() => openRun(runId)}
+        />
+      );
     }
   }
 }

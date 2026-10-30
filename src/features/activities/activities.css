@@ -165,18 +165,26 @@
   min-width: 0;
   display: flex;
   align-items: baseline;
-  gap: 7px;
+  gap: 8px;
+  font-family: var(--font-claude);
 }
 
+/* Cascadia's 600 reads heavy next to Segoe; 500 matches the weight of the other activity titles. */
 .claude-activity__line .activity__title {
   flex: 0 1 auto;
+  font-size: 13.5px;
+  font-weight: 500;
 }
 
+/* The clip reaches 2 px left so Cascadia's edge-to-edge glyphs (the T of "Turn") aren't shaved. */
 .claude-activity__status {
   flex: none;
   overflow: hidden;
-  font-size: 12px;
-  color: var(--island-muted);
+  padding-left: 2px;
+  margin-left: -2px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--claude-status);
 }
 
 .claude-activity__status > span {
@@ -327,4 +335,103 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+/*
+ * Agent approval: three compact lines. ✻ · project · tool · risk; the command (Claude font, one line) in a quiet
+ * well that opens the command window; then the choices, aligned to the project column. No motion of its own: the
+ * island morphs to its height and the orange edge breathes (`data-claude="needsInput"`).
+ */
+.activity--approval {
+  height: auto;
+  padding: 10px 14px 12px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+}
+
+.approval__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.approval__title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--font-claude);
+}
+
+.approval__title .activity__title {
+  flex: 0 1 auto;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.approval__tool {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--claude-status);
+}
+
+.approval__summary {
+  margin-left: 32px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px 0 9px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px var(--island-border);
+  color: var(--island-muted);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.approval__summary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--island-fg);
+}
+
+.approval__command {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-claude);
+  font-size: 12px;
+  color: rgba(245, 245, 247, 0.9);
+}
+
+.approval__actions {
+  margin-left: 32px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.approval__buttons {
+  margin-left: auto;
+  flex: none;
+  display: flex;
+  gap: 6px;
+}
+
+.approval__buttons .agent-btn {
+  height: 26px;
+  padding: 0 14px;
+}
+
+/* The pending choice stays readable while the others dim. */
+.activity--approval [data-chosen="true"]:disabled {
+  opacity: 0.8;
 }

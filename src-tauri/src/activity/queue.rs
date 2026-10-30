@@ -62,10 +62,11 @@ fn rules(activity: &Activity) -> Rules {
         Activity::Bluetooth(_) => notice(2, ms(3000), ms(10_000)),
         Activity::Screenshot(_) => notice(2, ms(6000), ms(30_000)),
         Activity::ClaudeDone(_) => notice(2, ms(5000), ms(120_000)),
-        Activity::ClaudeNeedsInput(_) => Rules {
+        Activity::ClaudeNeedsInput(_) | Activity::AgentApproval(_) => Rules {
             sticky: true,
             ..notice(3, Duration::ZERO, Duration::ZERO)
         },
+        Activity::AgentFinished(_) => notice(2, ms(5000), ms(120_000)),
     }
 }
 
@@ -81,7 +82,15 @@ fn key(activity: &Activity) -> String {
         // One key per session, so "done" replaces that session's "needs input" in place.
         Activity::ClaudeDone(c) => claude_key(c.session_id),
         Activity::ClaudeNeedsInput(c) => claude_key(c.session_id),
+        // One per request, so approvals from several runs take turns like several sessions' questions.
+        Activity::AgentApproval(a) => approval_key(a.request_id),
+        Activity::AgentFinished(f) => format!("agent:{}", f.run_id),
     }
+}
+
+/// The key of an agent approval, for `Signal::Retract` once it's answered.
+pub fn approval_key(request_id: u32) -> String {
+    format!("approval:{request_id}")
 }
 
 /// The key a Claude Code session's activities share, for `Signal::Retract`.
@@ -93,7 +102,11 @@ pub fn claude_key(session_id: u32) -> String {
 pub fn interactive(activity: &Activity) -> bool {
     matches!(
         activity,
-        Activity::Screenshot(_) | Activity::ClaudeDone(_) | Activity::ClaudeNeedsInput(_)
+        Activity::Screenshot(_)
+            | Activity::ClaudeDone(_)
+            | Activity::ClaudeNeedsInput(_)
+            | Activity::AgentApproval(_)
+            | Activity::AgentFinished(_)
     )
 }
 

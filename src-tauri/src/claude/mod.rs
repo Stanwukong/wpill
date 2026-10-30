@@ -43,6 +43,11 @@ pub fn forward_hook() {
     forward::run();
 }
 
+/// The island's name for a working folder (its last component, shortened), shared with agent runs.
+pub fn project_name(cwd: &str) -> String {
+    sessions::project(cwd)
+}
+
 /// Tauri-managed copy of the listener's sessions, for commands.
 #[derive(Default)]
 pub struct Claude(Mutex<Vec<Session>>);
@@ -109,6 +114,10 @@ fn listen(app: &AppHandle, out: &Sender<Signal>, server: &pipe::Server, stop: &H
                 return;
             }
             pipe::Next::Message(bytes) => match protocol::decode(&bytes) {
+                // Agent runs started by TopBar fire the same hooks; `agent/` shows those itself.
+                Some(msg) if msg.chain.iter().any(process::is_self) => {
+                    log::debug!("claude hook {:?} from an agent run; ignored", msg.event);
+                }
                 Some(msg) => {
                     log::debug!(
                         "claude hook {:?} ({})",

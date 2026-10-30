@@ -4,6 +4,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   ActivityHidePayload,
+  AgentEntry,
+  AgentOptions,
+  AgentOutput,
+  AgentRuns,
+  AgentStartRequest,
   ActivityPayload,
   AppError,
   ClaudeHooksStatus,
@@ -22,6 +27,9 @@ const EVENTS = {
   activityShow: "activity:show",
   activityHide: "activity:hide",
   claudeSessions: "claude:sessions",
+  agentRuns: "agent:runs",
+  agentOutput: "agent:output",
+  commandFocusRun: "command:focus-run",
 } as const;
 
 /** Which island shape a reported rect measures. */
@@ -50,6 +58,20 @@ export const commands = {
   claudeHooksStatus: () => invoke<ClaudeHooksStatus>("claude_hooks_status"),
   claudeHooksInstall: () => invoke<void>("claude_hooks_install"),
   claudeHooksRemove: () => invoke<void>("claude_hooks_remove"),
+  agentStart: (request: AgentStartRequest) => invoke<{ runId: string }>("agent_start", { request }),
+  /** A follow-up: queued into the running turn, or resumes a finished run. */
+  agentSend: (runId: string, text: string) => invoke<void>("agent_send", { runId, text }),
+  agentStop: (runId: string) => invoke<void>("agent_stop", { runId }),
+  agentRuns: () => invoke<AgentRuns>("agent_runs"),
+  agentTranscript: (runId: string) => invoke<AgentEntry[]>("agent_transcript", { runId }),
+  agentDecide: (requestId: number, decision: "allow" | "deny", remember: "once" | "run") =>
+    invoke<void>("agent_decide", { requestId, decision, remember }),
+  agentOptions: () => invoke<AgentOptions>("agent_options"),
+  /** The shell's folder picker; `null` if cancelled. */
+  agentPickFolder: () => invoke<string | null>("agent_pick_folder"),
+  /** Opens (and focuses) the command window, optionally on one run. */
+  commandWindowShow: (runId?: string) => invoke<void>("command_window_show", { runId: runId ?? null }),
+  commandWindowHide: () => invoke<void>("command_window_hide"),
 };
 
 export const on = {
@@ -65,6 +87,14 @@ export const on = {
     listen<ActivityHidePayload>(EVENTS.activityHide, (e) => cb(e.payload)),
   claudeSessions: (cb: (payload: ClaudeSessions) => void): Promise<UnlistenFn> =>
     listen<ClaudeSessions>(EVENTS.claudeSessions, (e) => cb(e.payload)),
+  agentRuns: (cb: (payload: AgentRuns) => void): Promise<UnlistenFn> =>
+    listen<AgentRuns>(EVENTS.agentRuns, (e) => cb(e.payload)),
+  /** Delivered to the command window only. */
+  agentOutput: (cb: (payload: AgentOutput) => void): Promise<UnlistenFn> =>
+    listen<AgentOutput>(EVENTS.agentOutput, (e) => cb(e.payload)),
+  /** Command window only: which run to show. */
+  commandFocusRun: (cb: (runId: string) => void): Promise<UnlistenFn> =>
+    listen<string>(EVENTS.commandFocusRun, (e) => cb(e.payload)),
 };
 
 /** Unsubscribes listeners registered with `on.*` (safe to call before they resolve). */

@@ -10,6 +10,11 @@ pub mod events {
     pub const ACTIVITY_SHOW: &str = "activity:show";
     pub const ACTIVITY_HIDE: &str = "activity:hide";
     pub const CLAUDE_SESSIONS: &str = "claude:sessions";
+    pub const AGENT_RUNS: &str = "agent:runs";
+    /// Sent to the `command` window only.
+    pub const AGENT_OUTPUT: &str = "agent:output";
+    /// Sent to the `command` window only: which run to select when it opens.
+    pub const COMMAND_FOCUS_RUN: &str = "command:focus-run";
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -57,6 +62,8 @@ pub enum Activity {
     Screenshot(ScreenshotActivity),
     ClaudeDone(ClaudeDoneActivity),
     ClaudeNeedsInput(ClaudeNeedsInputActivity),
+    AgentApproval(AgentApprovalActivity),
+    AgentFinished(AgentFinishedActivity),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -169,6 +176,192 @@ pub struct ClaudeSession {
     pub status: ClaudeStatus,
     /// Unix epoch ms of the last status change.
     pub updated_at_ms: i64,
+}
+
+/// How much an agent step can affect: reading, changing files or running commands, or input into other apps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AgentRisk {
+    Read,
+    Change,
+    Input,
+}
+
+/// An agent run asks to use a tool. Sticky: it stays until it's answered, times out, or the run ends.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentApprovalActivity {
+    pub request_id: u32,
+    pub run_id: String,
+    pub project: String,
+    /// Display name, e.g. `Bash` or `github · create_issue`.
+    pub tool: String,
+    /// One line built in Rust: the command, the file, the host.
+    pub summary: String,
+    pub risk: AgentRisk,
+    /// What "allow for this run" would cover ("git", "edits"), or `None` where it isn't offered (`input`
+    /// actions, compound shell commands).
+    pub remember_as: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentFinishedActivity {
+    pub run_id: String,
+    pub project: String,
+    pub status: AgentStatus,
+    pub reason: Option<AgentEndReason>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AgentStatus {
+    Starting,
+    Working,
+    /// Waiting for an approval.
+    Waiting,
+    Done,
+    Failed,
+    Stopped,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AgentEndReason {
+    Completed,
+    MaxTurns,
+    MaxBudget,
+    Error,
+    Stopped,
+}
+
+/// `agent:runs`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRunsPayload {
+    /// Most recently started first.
+    pub runs: Vec<AgentRun>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRun {
+    pub run_id: String,
+    /// Folder name of `cwd`.
+    pub project: String,
+    pub cwd: String,
+    /// The first prompt, shortened, for the command window's run list.
+    pub prompt: String,
+    pub status: AgentStatus,
+    /// Set once the run has ended.
+    pub reason: Option<AgentEndReason>,
+    /// What it's doing now ("Running git status"), while working.
+    pub step: Option<String>,
+    pub turns: u32,
+    /// Claude Code's own estimate for the session.
+    pub cost_usd: Option<f64>,
+    pub model: Option<String>,
+    /// Approvals waiting for an answer, oldest first.
+    pub pending: Vec<AgentApprovalActivity>,
+    /// Why it failed, when it did.
+    pub error: Option<String>,
+    pub started_at_ms: i64,
+    pub updated_at_ms: i64,
+}
+
+/// One transcript entry: what the command window shows for a run.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentEntry {
+    pub at_ms: i64,
+    #[serde(flatten)]
+    pub event: AgentEvent,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum AgentEvent {
+    /// A prompt or follow-up you sent.
+    User {
+        text: String,
+    },
+    /// Claude's text.
+    Text {
+        text: String,
+    },
+    Tool {
+        id: String,
+        name: String,
+        label: String,
+    },
+    ToolResult {
+        id: String,
+        is_error: bool,
+        text: String,
+    },
+    Approval {
+        request_id: u32,
+        tool: String,
+        summary: String,
+        risk: AgentRisk,
+    },
+    Decision {
+        request_id: u32,
+        allow: bool,
+        /// `user`, `remembered`, `timeout` or `runEnded`.
+        by: &'static str,
+    },
+    Result {
+        status: AgentStatus,
+        reason: AgentEndReason,
+        turns: u32,
+        cost_usd: Option<f64>,
+    },
+    Error {
+        message: String,
+    },
+}
+
+/// `agent:output`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentOutputPayload {
+    pub run_id: String,
+    pub entry: AgentEntry,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentStarted {
+    pub run_id: String,
+}
+
+/// A `claude.exe` TopBar found.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeInstall {
+    pub path: String,
+    /// `2.1.312`, or `None` if `--version` didn't answer.
+    pub version: Option<String>,
+    /// e.g. "npm", "VS Code", "native", "PATH".
+    pub source: &'static str,
+}
+
+/// `agent_options`: what the command window offers.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentOptions {
+    pub installs: Vec<ClaudeInstall>,
+    /// The install a run uses unless one is picked.
+    pub default_install: Option<String>,
+    /// Most recent first: folders of earlier runs, then Claude Code's own projects.
+    pub recent_folders: Vec<String>,
+    pub model: Option<String>,
+    pub max_turns: u32,
+    pub max_budget_usd: Option<f64>,
+    pub hotkey: String,
+    /// Set when the hotkey couldn't be registered (taken by another app).
+    pub hotkey_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]

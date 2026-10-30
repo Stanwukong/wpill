@@ -23,6 +23,16 @@ Read `CLAUDE.md` first (architecture rules and Windows gotchas apply to you too)
   tokens. Edge effects on `.island`: the charge ring uses `::before`, the Claude glow `::after` (driven by
   `data-charging` / `data-claude`); glyph spinners step a stacked pseudo-element with `steps()` rather than JS. Design for both the
   plain black island and a tinted one.
+- **Claude content uses `--font-claude`** (Cascadia Mono → Consolas fallback): project names (13.5 px, weight 500;
+  Cascadia's 600 reads heavy), statuses (11 px, 400, `--claude-status`), commands, prompts and transcripts. Headings,
+  buttons and other chrome stay Segoe; the ✻ mark and the spinner stay Segoe UI Symbol. Cascadia's glyphs touch the
+  cell edge, so clips around its text need ~2 px of slack.
+- **Agent UI** (Phase 2.7): `features/agent/` (shared `agent.css`: `agent-btn` with Allow as the only filled, orange
+  button, `agent-link` for quiet text choices, `agent-risk` (reads/changes quiet, input a red tag), `agent-dot` that
+  breathes while waiting). The approval activity is the one multi-line activity; the panel lists runs through
+  `ClaudeSection`'s `agent` slot. The command window (`src/command/`) is a normal opaque window (`#141416`) in the
+  same tokens; it's sized in physical px by Rust, so Text size shrinks its CSS viewport (480×373 at 150%): check it
+  there too.
 
 ## Motion system
 

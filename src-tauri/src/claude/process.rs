@@ -85,6 +85,18 @@ pub fn created(pid: u32) -> Option<u64> {
     }
 }
 
+/// Whether `p` is this TopBar process: a hook from a Claude Code session TopBar started itself (an agent run,
+/// which `agent/` reports on its own).
+pub fn is_self(p: &Proc) -> bool {
+    static SELF: std::sync::OnceLock<Option<(u32, u64)>> = std::sync::OnceLock::new();
+    let own = SELF.get_or_init(|| {
+        // SAFETY: no preconditions.
+        let pid = unsafe { GetCurrentProcessId() };
+        created(pid).map(|c| (pid, c))
+    });
+    own.is_some_and(|(pid, created)| p.pid == pid && p.created == created)
+}
+
 /// Whether `p` is still running (same pid *and* creation time).
 pub fn alive(p: &Proc) -> bool {
     // SAFETY: as in `created`; GetExitCodeProcess writes one u32.

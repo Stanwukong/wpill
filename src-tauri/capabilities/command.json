@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "command",
+  "description": "Permissions for the command window (focusable; typing agent instructions)",
+  "windows": ["command"],
+  "permissions": ["core:default", "core:window:allow-start-dragging", "core:window:allow-minimize"]
+}

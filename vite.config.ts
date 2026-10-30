@@ -12,5 +12,9 @@ export default defineConfig({
   },
   build: {
     target: "es2022",
+    // Two pages: the island (index.html) and the focusable command window (command.html).
+    rollupOptions: {
+      input: { main: "index.html", command: "command.html" },
+    },
   },
 });

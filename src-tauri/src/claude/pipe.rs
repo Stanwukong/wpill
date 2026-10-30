@@ -4,17 +4,10 @@
 //! with the stop event, so shutdown never leaves a `ConnectNamedPipe` pending, and a client that connects
 //! but never writes can't wedge the listener.
 
-use windows::core::{Error, Result, HSTRING, PWSTR};
+use windows::core::{Error, Result, HSTRING};
 use windows::Win32::Foundation::{
-    LocalFree, ERROR_BROKEN_PIPE, ERROR_IO_PENDING, ERROR_MORE_DATA, ERROR_PIPE_CONNECTED, HLOCAL,
-    WAIT_OBJECT_0, WAIT_TIMEOUT,
-};
-use windows::Win32::Security::Authorization::{
-    ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
-};
-use windows::Win32::Security::{
-    GetTokenInformation, TokenUser, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, TOKEN_QUERY,
-    TOKEN_USER,
+    ERROR_BROKEN_PIPE, ERROR_IO_PENDING, ERROR_MORE_DATA, ERROR_PIPE_CONNECTED, WAIT_OBJECT_0,
+    WAIT_TIMEOUT,
 };
 use windows::Win32::Storage::FileSystem::{
     ReadFile, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OVERLAPPED, PIPE_ACCESS_INBOUND,
@@ -23,13 +16,11 @@ use windows::Win32::System::Pipes::{
     ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, PIPE_READMODE_MESSAGE,
     PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_MESSAGE, PIPE_WAIT,
 };
-use windows::Win32::System::Threading::{
-    GetCurrentProcess, OpenProcessToken, WaitForMultipleObjects,
-};
+use windows::Win32::System::Threading::WaitForMultipleObjects;
 use windows::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
 
 use super::protocol::MAX_MESSAGE;
-use crate::win32::Handle;
+use crate::win32::{self, Handle, UserOnly};
 
 /// A connected client gets this long to deliver its message.
 const READ_TIMEOUT_MS: u32 = 500;
@@ -39,36 +30,8 @@ const READ_TIMEOUT_MS: u32 = 500;
 pub fn name() -> Option<HSTRING> {
     Some(HSTRING::from(format!(
         r"\\.\pipe\topbar-claude-{}",
-        user_sid()?
+        win32::user_sid()?
     )))
-}
-
-fn user_sid() -> Option<String> {
-    // SAFETY: the token handle is closed by the guard; `buf` is sized by the first call and holds a
-    // TOKEN_USER whose SID points into it; the string from ConvertSidToStringSidW is freed with LocalFree.
-    unsafe {
-        let mut token = Default::default();
-        OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).ok()?;
-        let token = Handle(token);
-        let mut len = 0u32;
-        let _ = GetTokenInformation(token.0, TokenUser, None, 0, &mut len);
-        // u64s keep the TOKEN_USER aligned.
-        let mut buf = vec![0u64; (len as usize).div_ceil(8)];
-        GetTokenInformation(
-            token.0,
-            TokenUser,
-            Some(buf.as_mut_ptr().cast()),
-            len,
-            &mut len,
-        )
-        .ok()?;
-        let user = &*(buf.as_ptr() as *const TOKEN_USER);
-        let mut text = PWSTR::null();
-        ConvertSidToStringSidW(user.User.Sid, &mut text).ok()?;
-        let sid = text.to_string().ok();
-        let _ = LocalFree(Some(HLOCAL(text.0.cast())));
-        sid
-    }
 }
 
 pub struct Server {
@@ -91,25 +54,12 @@ impl Server {
     /// another process already owns the name (`FILE_FLAG_FIRST_PIPE_INSTANCE`).
     pub fn create() -> Result<Self> {
         let name = name().ok_or_else(Error::from_thread)?;
-        let sid = user_sid().ok_or_else(Error::from_thread)?;
-        // Protected DACL: generic all to this user's SID only; no inherited entries.
-        let sddl = HSTRING::from(format!("D:P(A;;GA;;;{sid})"));
-        // SAFETY: `descriptor` is allocated by the conversion and freed with LocalFree after the pipe is
-        // created; the attributes struct only borrows it for that call.
+        let sid = win32::user_sid().ok_or_else(Error::from_thread)?;
+        let security = UserOnly::new(&sid)?;
+        let attributes = security.attributes();
+        // SAFETY: `attributes` borrows `security`, which outlives the call.
         let pipe = unsafe {
-            let mut descriptor = PSECURITY_DESCRIPTOR::default();
-            ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                &sddl,
-                SDDL_REVISION_1,
-                &mut descriptor,
-                None,
-            )?;
-            let attributes = SECURITY_ATTRIBUTES {
-                nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
-                lpSecurityDescriptor: descriptor.0,
-                bInheritHandle: false.into(),
-            };
-            let pipe = CreateNamedPipeW(
+            CreateNamedPipeW(
                 &name,
                 PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
                 PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
@@ -118,13 +68,11 @@ impl Server {
                 MAX_MESSAGE as u32,
                 0,
                 Some(&attributes),
-            );
-            let _ = LocalFree(Some(HLOCAL(descriptor.0)));
-            if pipe.is_invalid() {
-                return Err(Error::from_thread());
-            }
-            pipe
+            )
         };
+        if pipe.is_invalid() {
+            return Err(Error::from_thread());
+        }
         Ok(Self {
             pipe: Handle(pipe),
             io: Handle::event()?,

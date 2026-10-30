@@ -12,8 +12,10 @@ After sign-off, the island also took its colors from the album art (D13).
 screenshots, with all 12 manual checks passed.** The charging activity also got an orbiting green outline (D18).
 **Phase 2.6 is complete (2026-10-30): Claude Code activity through hooks (spinner, done / needs-input activities with
 an orange edge, panel section, click to focus, tray Connect/Disconnect), with all 12 manual checks passed.**
-**Next: Phase 2.7 (local automation agent).** See [Phase 2.7](#phase-27-local-automation-agent). Kick-off prompt for a
-new session: [prompts/phase-2.7-automation-agent.md](prompts/phase-2.7-automation-agent.md).
+**Phase 2.7a–b are built (2026-10-30): headless agent runs from a command window (Win+Alt+A), progress in the island,
+approvals (Allow / Deny) in the island, Cascadia Mono for Claude content. Verified from outside; the manual check below
+is pending.** See [Phase 2.7](#phase-27-local-automation-agent). Stages 2.7c–e follow after sign-off (their kick-off
+prompt is written then).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -224,15 +226,33 @@ stays in Rust and is looked up by `id`.
 Activity kinds: `claudeDone { sessionId, project, failed }` (`failed`: `StopFailure`, an API error) and
 `claudeNeedsInput { sessionId, project }`. Both are interactive (take clicks while hovered).
 
+### Phase 2.7 (a–b)
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| window | `command` | `command.html` → `src/command/` | Focusable, frameless, created on first use, hidden on Esc. The island stays unfocusable. |
+| command | `agent_start` | `({ request: { prompt, cwd, model?, maxTurns?, maxBudgetUsd?, claudePath? } }) → { runId }` | Async. Folder normalised to its long path. Errors `agentInvalid`, `agentNoClaude`, `agentStart`. |
+| command | `agent_send` | `(runId, text) → void` | Queued into the running turn, or resumes a finished run (`--resume`). |
+| command | `agent_stop` | `(runId) → void` | Kills the run's Job Object (the whole tree). |
+| command | `agent_runs` / `agent_transcript` | `() → { runs }` / `(runId) → AgentEntry[]` | Initial sync; the transcript keeps the last 400 entries. |
+| command | `agent_decide` | `(requestId, decision: "allow" \| "deny", remember: "once" \| "run")` | Error `agentApprovalGone` if it was already answered or expired. |
+| command | `agent_options` | `() → AgentOptions` | Installs (newest first), default install, recent folders, defaults, hotkey and `hotkeyError`. |
+| command | `agent_pick_folder` | `() → string \| null` | Sync (main thread): the shell's folder picker, owned by the command window. |
+| command | `command_window_show` / `command_window_hide` | `(runId?)` / `()` | Show focuses it and sends `command:focus-run`. |
+| event | `agent:runs` | `{ runs: AgentRun[] }`, newest first | Replaces the reserved single-run `agent:run`. `AgentRun { runId, project, cwd, prompt, status, reason, step, turns, costUsd, model, pending: AgentApprovalActivity[], error, startedAtMs, updatedAtMs }`. |
+| event | `agent:output` | `{ runId, entry: AgentEntry }` | Command window only. `AgentEntry = { atMs, kind: "user" \| "text" \| "tool" \| "toolResult" \| "approval" \| "decision" \| "result" \| "error", … }`. |
+| event | `command:focus-run` | `runId` | Command window only. |
+
+`status`: `starting | working | waiting | done | failed | stopped`; `reason`: `completed | maxTurns | maxBudget | error |
+stopped`. Activity kinds: `agentApproval { requestId, runId, project, tool, summary, risk: "read" | "change" | "input",
+rememberAs: string | null }` (sticky, interactive) and `agentFinished { runId, project, status, reason }` (5 s notice,
+not shown after Stop). `rememberAs` ("git", "edits") replaces the planned `canRemember` flag so the island can say what
+"for this run" covers.
+
 ### Reserved for later phases (names fixed now so they slot in)
 
 | Phase | Kind | Name |
 |---|---|---|
-| 2.7 | window | `command` (label): the focusable command window; the island stays unfocusable |
-| 2.7 | command | `agent_start({ prompt, cwd, model?, maxTurns?, maxBudgetUsd? }) → { runId }`, `agent_send(runId, text)`, `agent_stop(runId)`, `agent_runs() → AgentRun[]`, `agent_transcript(runId) → AgentEvent[]` |
-| 2.7 | command | `agent_decide(requestId, decision: "allow" \| "deny", remember: "once" \| "run")` |
-| 2.7 | event | `agent:run` → `AgentRun { runId, sessionId?, project, status: "starting" \| "working" \| "waiting" \| "done" \| "failed" \| "stopped", turns, costUsd?, startedAtMs, updatedAtMs }`; `agent:output` → `{ runId, event: AgentEvent }` (command window only) |
-| 2.7 | activity kinds | `agentApproval { requestId, runId, project, tool, summary, risk: "read" \| "change" \| "input" }` (sticky, interactive: Allow / Deny), `agentFinished { runId, project, status }` |
 | 3 | command | `list_heavy_processes(limit) → ProcessGroup[]` (`{ name, pids, memoryBytes, icon, protected }`) |
 | 3 | command | `end_process_group(name, pids) → EndResult` (per pid: `ok \| accessDenied \| protected \| notFound`) |
 | 4a | event | `monitor:changed` |
@@ -508,12 +528,23 @@ hotkey ─▶ command window (focusable, separate) ── agent_start ─▶ Rus
                                                               tools: approve, windows, screenshot, ui_tree, (click, type)
 ```
 
-**Building blocks, verified 2026-10-30 in Claude Code 2.1.123, 2.1.159 and 2.1.312:** `-p` with
-`--output-format stream-json` and `--input-format stream-json` (follow-up messages to a running session),
-`--permission-prompt-tool <mcp tool>` (an MCP tool answers permission prompts in headless mode), `--mcp-config`,
-`--strict-mcp-config`, `--permission-mode`, `--allowedTools` / `--disallowedTools`, `--max-turns`, `--max-budget-usd`,
-`--append-system-prompt`, `--session-id`, `--resume`. The exact JSON of the permission tool's input and reply, and of
-the stream events, must be checked against the current docs at kick-off.
+**Research at kick-off (2026-10-30, Claude Code 2.1.123, 2.1.159 and 2.1.312, plus small haiku runs):**
+- `--permission-mode default` works in all three (2.1.312's help lists `manual`, an alias since 2.1.200). The flag
+  overrides `defaultMode` from settings, but the user's allow rules, `PermissionRequest` hooks and mods still apply:
+  steps already allowed in `~/.claude/settings.json` aren't asked about. From 2.1.302 `-p` starts in Manual anyway.
+- `--permission-prompt-tool` and `--max-turns` work but aren't in `--help`. The prompt tool gets
+  `{ tool_name, input, tool_use_id }` and replies with a text block holding `{"behavior":"allow","updatedInput":…}` or
+  `{"behavior":"deny","message":…}` (not in the docs; checked by hand). A deny reaches Claude as an error tool result.
+- Stream-json: `system/init` (session id, model, MCP status) opens every turn; `assistant` has `text` / `tool_use`;
+  `user` has `tool_result`; `result` has `subtype` (`success`, `error_max_turns`, `error_max_budget_usd`,
+  `error_during_execution`), `num_turns` (this turn), `total_cost_usd` (the session), `errors`, `permission_denials`.
+  A user message written mid-turn is queued. A turn limit exits with code 1 and may let one more batch of tools run.
+- `--max-budget-usd` caps Claude Code's own estimate (can overshoot); on a subscription it's a usage cap, not billing.
+- Hooks fire in `-p` runs with the same session id, so the user's TopBar hooks see agent runs (2.6 now ignores them).
+- Windows has no SIGTERM/SIGINT for these: Stop is TerminateJobObject; the transcript is on disk, so `--resume` works.
+- Differences from this plan: `agent:run` → `agent:runs` (a list, like `claude:sessions`); `AgentRun` has no
+  `sessionId` (Claude's id stays in Rust); the hotkey needs no message-only window (`RegisterHotKey(NULL)` posts to
+  the thread); `AskUserQuestion` is disallowed (nobody can type an answer mid-run).
 
 **Principles (non-negotiable)**
 - **You approve, the island asks.** Every action Claude Code would ask about goes to `mcp__topbar__approve`, which
@@ -532,39 +563,47 @@ the stream events, must be checked against the current docs at kick-off.
   the command window.
 
 **Stage 2.7a: command window and headless runs** (useful alone: fire-and-forget tasks with island status)
-- [ ] Global hotkey via `RegisterHotKey` on a message-only window (default to decide; must not clash with Windows or
-      PowerToys shortcuts). Opens the `command` window: prompt box, folder (recent Claude session folders first),
-      model, and limits (turns, budget). Esc hides it
-- [ ] `agent/` module: spawns the chosen `claude.exe` (setting; default the first on PATH) with `CREATE_NO_WINDOW` in a
-      Job Object, stream-json both ways, `--append-system-prompt` with TopBar's agent guidance (prefer the shell, use
-      desktop tools only when there's no other way, never type secrets). Reads NDJSON on its own thread (a `Watcher`):
-      init (session id), assistant steps (tool names → a short step label), result (turns, cost, error)
-- [ ] Runs join 2.6's session list by Claude's session id (its hooks fire too), marked as agent runs: an "agent"
-      badge in the panel and Stop on the row. `agentFinished` replaces `claudeDone` for them (no double activity)
-- [ ] Follow-ups: `agent_send` writes another user message to the running session; finished runs can be resumed
-      (`--resume`)
-- [ ] Limits: default max turns and budget, per run; the run ends with a clear "limit reached" status
-- [ ] **Claude UI refresh** (feedback after 2.6; through the motion-designer agent, applied to 2.6's activities, the
-      panel section and the new agent UI together so they share one look):
-      - ~~Smaller status text~~: done early in 2.6's activity layout v2 (one row, sliding status, check / dots).
-        Carry the same treatment into the panel section and the agent UI.
-      - A distinct typeface for Claude content (project names, statuses, the command window), so Claude activities
-        read as their own family next to volume or media. It must be installed on Windows or bundled under an open
-        licence (Anthropic's own brand fonts aren't licensed for this). Candidates to compare in renders: Cascadia
-        Mono/Code (echoes the terminal Claude Code runs in, ships with Windows Terminal), a humanist serif, or an
-        OFL font bundled with the app. Fallback stack required; the spinner glyph stays in Segoe UI Symbol
-      - Check both on the plain and the tinted island, at text size 100/120/150 %, and keep the activity's hit area
-        (it changes with the island's size)
+- [x] Global hotkeys via `RegisterHotKey` on the `agent-hotkeys` thread (no window): **Win+Alt+A** opens the `command`
+      window (prompt, recent folders, Browse…, model, turns, budget, Claude Code install), **Win+Alt+Escape** stops
+      every run. A taken hotkey is logged and shown in the window. Esc hides it
+- [x] `agent/` module: finds `claude.exe` installs (PATH, npm shim → real exe, `~/.local/bin`, VS Code; newest
+      version unless `agent.claudePath`), spawns it suspended with `CREATE_NO_WINDOW` into a Job Object
+      (`KILL_ON_JOB_CLOSE`), stream-json both ways, `--append-system-prompt` with TopBar's guidance (`run.rs`). Stdout
+      is parsed on its own thread (`stream.rs`): init (session id), tool steps (→ "Running git status"), result (turns,
+      cost, limits). Stdin closes once every message has its result; follow-ups resume with `--resume`
+- [x] No double activities: 2.6's listener ignores hooks whose ancestor chain contains TopBar itself; agent runs are
+      listed from `agent:runs` in the same panel section (agent badge, step, Stop), and `agentFinished` replaces
+      `claudeDone` for them
+- [x] Follow-ups (`agent_send`), Stop (panel, command window, hotkey), limits (`maxTurns` 25, `maxBudgetUsd` 1 by
+      default; "Turn limit reached" / "Budget reached")
+- [x] Audit trail `%APPDATA%\dev.wpill.topbar\agent\<runId>.jsonl` (start, tool, approval, asked, decision, followUp,
+      stop, result; tool input cut to 4 KB), pruned after 30 days. Run ids are `20261030-142233-7f3a`
+- [x] Settings in `settings.json` → `agent`: `hotkey`, `stopHotkey`, `claudePath`, `model`, `maxTurns`,
+      `maxBudgetUsd`, `strictMcpConfig` (true), `userSettings` (true), `approvalTimeoutSecs` (600)
+- [x] **Claude UI refresh** (motion-designer agent): status 11 px at 48 % white on the project's baseline; Claude
+      content in **Cascadia Mono** (`--font-claude`, fallback Cascadia Code → Consolas → Segoe UI Variable Text),
+      picked from rendered candidates (Cascadia Mono, Sitka Text, IBM Plex Sans); the spinner stays Segoe UI Symbol.
+      The command window is sized by Windows' Text size factor
 
 **Stage 2.7b: approvals in the island**
-- [ ] `topbar.exe mcp`: a stdio MCP bridge Claude Code spawns from the generated `--mcp-config`. Like the hook
-      forwarder it runs before Tauri and relays JSON-RPC over a second per-user pipe (`topbar-agent-<SID>`, same DACL
-      rules as D17/D20). It carries a per-run token so only runs TopBar started are served
-- [ ] `approve` tool → `agentApproval` activity: a sticky notice (D19) with Allow / Deny buttons and a summary built in
-      Rust (tool + its key argument, e.g. the Bash command, truncated). "Details" opens the command window at that
-      step. No answer in 10 minutes = deny. Remember "for this run" is allowed for `read` and `change`, never for `input`
-- [ ] Several runs waiting: approvals take turns like 2.6's questions; the panel lists pending ones
-- [ ] Interactive (non-agent) sessions stay notify-only, as in 2.6
+- [x] `topbar.exe mcp` (`bridge.rs`): run from `main.rs` before Tauri; relays newline JSON-RPC ↔ the per-user pipe
+      `\\.\pipe\topbar-agent-<SID>` (duplex, message mode, user-only DACL). Its first message names the run and its
+      128-bit token (from the generated `mcp.json`'s `env`, deleted when the process exits); anything else is refused.
+      4 MiB cap per message; oversized calls are answered with an error by the bridge
+- [x] `approve` → `agentApproval` (sticky, keyed per request): project · tool · risk, the summary built in Rust (the
+      command, the path relative to the folder, the host), Deny / Allow, and "Allow {git / edits / …} for this run"
+      where offered. Clicking the summary opens the command window on the run. No answer in 10 minutes = deny
+- [x] Remember "for this run": per program for shell commands, one group for edits, per host for fetches; never for
+      `input` or a shell command with an operator (`&`, `|`, `;`, backtick, `$(`, redirects, newlines)
+- [x] Several runs waiting: approvals take turns (D19 rules) and park under the panel and fullscreen; the panel lists
+      pending ones under their run with Deny / Allow
+- [x] Interactive (non-agent) sessions stay notify-only, as in 2.6
+- [x] Verified from outside (2026-10-30, debug build, haiku, `topbar.exe agent-test …` in debug builds only): deny
+      (no file, Claude adapted, "Done"), allow, "allow for this run" (second `touch` answered as `remembered`), compound
+      command not rememberable, turn limit (`failed / maxTurns`), follow-up resuming a stopped run, Stop with
+      `ping -t localhost` under three shells (all six processes gone), TopBar killed mid-run and quit mid-run (no
+      `claude.exe`, bridge or `PING.EXE` left), hotkey → command window in the foreground, captures of the approval
+      activity and the command window. 95 Rust tests pass
 
 **Stage 2.7c: desktop tools, read-only**
 - [ ] `list_windows`, `focused_window` (reuse `apps/`), `screenshot(window | screen)` (downscaled PNG as MCP image
@@ -586,17 +625,26 @@ the stream events, must be checked against the current docs at kick-off.
 approving prompts of interactive terminal sessions from the island (possible later through the `PermissionRequest`
 hook; deliberately not mixed in here).
 
-**Manual check (draft; finalize at kick-off)**
-1. Hotkey opens the command window with focus in the prompt; Esc hides it; the island never takes focus.
-2. "List the 5 largest files in this folder" runs headless: spinner, then `agentFinished`; the answer is in the window.
-3. A task needing a shell command shows an Allow / Deny activity; Deny → Claude adapts; Allow → it runs.
-4. Stop from the panel kills the run and anything it started (e.g. a long `ping -t`).
-5. Limits: a run capped at 2 turns ends with "limit reached".
-6. Two runs at once: approvals take turns; both finish; transcripts stay separate.
-7. Read-only tools: "what windows are open?" asks once, then answers from `list_windows`.
-8. TopBar quits mid-run: the run stops cleanly; no orphaned `claude.exe`.
-9. The audit log lists every tool call and decision.
-10. (2.7d) "Open Notepad and type hello": each action asks; moving the mouse during typing aborts it.
+**Manual check (Phase 2.7a–b)** (run the installed build or `pnpm tauri dev` with
+`$env:RUST_LOG='info,topbar_lib=debug'`; use a test folder and cheap tasks, e.g. model `haiku` in Options)
+1. **Hotkey:** Win+Alt+A from any app opens the command window with the cursor in the prompt; Esc hides it; the island
+   never takes focus (typing in another app afterwards still goes there).
+2. **A read-only task:** "List the 5 largest files in this folder" runs: the pill shows the spinner, the panel row shows
+   the step, `agentFinished` "Done" appears, and the answer is in the command window.
+3. **Approval, Deny:** a task needing a shell command shows the Allow / Deny activity with the command; Deny → Claude
+   adapts and says so; the transcript shows "Denied by you".
+4. **Approval, Allow and "for this run":** Allow runs it; "Allow git for this run" lets the next `git …` through without
+   asking, but a different program (or `git a && rm b`) still asks.
+5. **Stop:** a task running `ping -t localhost` (allow it) → Stop from the panel → the run reads "Stopped" and Task
+   Manager shows no `PING.EXE` or extra `claude.exe`. Repeat with Win+Alt+Escape.
+6. **Limits:** max turns 2 on a multi-step task ends with "Turn limit reached".
+7. **Two runs at once:** both show in the panel; their approvals take turns; transcripts stay separate.
+8. **Panel open / fullscreen:** an approval arriving with the panel open is listed under its run there (answerable);
+   one arriving during a fullscreen video shows after leaving fullscreen.
+9. **Follow-up:** after "Done", type a follow-up in the command window → the same run continues (resumed).
+10. **TopBar quits mid-run:** tray → Quit while a run works → no orphaned `claude.exe`.
+11. **Audit:** `%APPDATA%\dev.wpill.topbar\agent\<runId>.jsonl` lists the start, each tool call, approval and decision.
+12. **Text size 100 / 120 / 150 %:** the approval activity and the command window fit; the island's click area matches.
 
 ### Phase 4a: release readiness
 - [ ] Multi-monitor + per-monitor DPI: re-read geometry on `WM_DISPLAYCHANGE` / `WM_DPICHANGED` and
@@ -648,6 +696,12 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
   minute (`Stop` doesn't fire; the idle notification corrects it). Clicking focuses the window, not the Windows Terminal
   tab. The hook entry records the exe that clicked "Connect" (connect from the installed build, like autostart).
   The PowerShell form of the entry (machines without Git Bash) is untested. Sessions inside WSL aren't seen.
+- Agent (2.7): only steps Claude Code would ask about reach the island; your own allow rules still auto-approve
+  (`agent.userSettings: false` sends everything to the island but drops your hooks and plugins for those runs). Your
+  own MCP servers aren't loaded in agent runs unless `agent.strictMcpConfig` is false. Budgets are Claude Code's
+  estimate and can be overshot by one response; the turn limit can let one more batch of tools run. Claude can't ask
+  questions mid-run (it asks in its final message; answer with a follow-up). The hotkeys are fixed until Phase 4b
+  (edit `settings.json`). Clicking the panel's "agent" row opens the command window; there's no per-step "Details" yet.
 
 ## Distribution
 - `pnpm tauri build` produces `src-tauri/target/release/bundle/nsis/TopBar_0.1.0_x64-setup.exe`:

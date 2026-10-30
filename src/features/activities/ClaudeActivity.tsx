@@ -1,32 +1,34 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { claudeCheckDraw, claudeDotsOut, claudeStatusIn } from "../../island/motion";
 import { ClaudeMark } from "../claude/ClaudeGlyphs";
-import { focusClaudeSession } from "../claude/useClaudeSessions";
 
 export type ClaudeActivityState = "done" | "stopped" | "needsInput";
 
 /**
- * A Claude Code session finished a turn or is waiting for the user: one row, ✻ · project · status, with the
- * state's mark at the right end (a check that draws in, or waiting dots). Interactive: Rust makes the island
- * clickable while the cursor is on it, and a click focuses the session's window (Rust then acknowledges and hides
- * it). The island keeps this element mounted when needs-input turns into done (same key), so only the status and
- * the end mark animate. The orange edge is driven by `data-claude` on `.island` (activities.css).
+ * A Claude Code session (or an agent run) finished a turn or is waiting for the user: one row, ✻ · project ·
+ * status, with the state's mark at the right end (a check that draws in, or waiting dots). Interactive: Rust makes
+ * the island clickable while the cursor is on it; a click focuses the session's window or opens the run (Rust then
+ * acknowledges and hides it). The island keeps this element mounted when needs-input turns into done (same key), so
+ * only the status and the end mark animate. The orange edge is driven by `data-claude` on `.island` (activities.css).
  */
 export function ClaudeActivity({
-  sessionId,
   project,
   state,
+  label,
+  onOpen,
 }: {
-  sessionId: number;
   project: string;
   state: ClaudeActivityState;
+  /** Overrides the "Done" / "Stopped" status text (e.g. "Turn limit reached"). */
+  label?: string;
+  onOpen: () => void;
 }) {
   // Reduced motion: status and check appear in their end state (initial={false}); the dots stop in CSS.
   const still = useReducedMotion() ?? false;
-  const status = state === "done" ? "Done" : state === "stopped" ? "Stopped" : null;
+  const status = state === "needsInput" ? null : (label ?? (state === "done" ? "Done" : "Stopped"));
 
   return (
-    <button className="activity activity--claude" data-state={state} onClick={() => focusClaudeSession(sessionId)}>
+    <button className="activity activity--claude" data-state={state} onClick={onOpen}>
       <ClaudeMark />
       <span className="claude-activity__line">
         <span className="activity__title">{project}</span>

@@ -37,10 +37,14 @@ $env:RUST_LOG='info,topbar_lib=debug'; pnpm tauri dev   # + hover transitions, p
 pnpm tauri build            # release build + NSIS installer (~11 min cold: fat LTO; ~1.5 MB installer)
 cd src-tauri; cargo fmt; cargo clippy --all-targets; cargo test
 pnpm typecheck              # tsc --noEmit
+# Debug builds only: drive agent runs from outside (forwarded to the running TopBar; results in its log)
+.\src-tauri\target\debug\topbar.exe agent-test start <folder> "<prompt>" haiku 4
+.\src-tauri\target\debug\topbar.exe agent-test decide <requestId> allow|deny [run]   # also: send, stop, stop-all, show, hide, quit
 ```
 
-The first `cargo build` compiles ~360 crates (several minutes); later rebuilds of the
-`topbar` crate take 1–2 minutes in debug.
+The first `cargo build` compiles ~370 crates (several minutes); later rebuilds of the
+`topbar` crate take 1–2 minutes in debug. `target\debug` grows by GBs over many rebuilds (it hit ~20 GB and filled
+the drive once); `cargo clean --profile dev` when space runs low.
 
 ## Layout
 
@@ -60,7 +64,14 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
   `claude/` (Claude Code via hooks): `forward.rs` = `topbar.exe hook` (run from `main.rs` before Tauri), `pipe.rs` =
   per-user pipe + server loop, `process.rs` = ancestor chain/liveness, `protocol.rs` + `sessions.rs` + `hooks.rs`
   (settings.json merge) = pure and unit-tested, `focus.rs` = which window to bring forward, `mod.rs` = listener,
-  commands and the tray's Connect/Disconnect dialog.
+  commands and the tray's Connect/Disconnect dialog. It ignores hooks from sessions TopBar itself started (`is_self`).
+  `agent/` (Phase 2.7, headless Claude Code runs): `mod.rs` = managed `Agents`, pipe server + connection threads,
+  approval flow, commands; `run.rs` = command line + spawn (suspended, `CREATE_NO_WINDOW`, Job Object via `job.rs`);
+  `bridge.rs` = `topbar.exe mcp` (run from `main.rs`, relays stdio JSON-RPC ↔ `pipe.rs`); `hotkey.rs`, `folder.rs`
+  (picker + long paths), `installs.rs` (find `claude.exe`, recent folders), `audit.rs` (jsonl trail, run ids),
+  `settings.rs` (`agent` block in settings.json). Pure and unit-tested: `stream.rs` (stream-json), `lifecycle.rs`
+  (run state), `approvals.rs`, `describe.rs` (risk, summaries, remember keys), `mcp.rs`.
+  `window/command.rs` creates the focusable `command` window (`command.html` → `src/command/`).
 - `lib.rs` uses `.build()?.run(|app, event| …)` so `RunEvent::Exit` can stop the media and activity watchers (unregisters their handlers).
 - Plugins (registered in `lib.rs`): `tauri-plugin-single-instance` (must stay first). Don't use
   `tauri-plugin-autostart`: it writes the exe path unquoted, which breaks for paths with spaces.
@@ -73,7 +84,10 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
   `global.css` so they can transition. Use `var(--accent)` for highlights, not a fixed color),
   `features/activities/` (`ActivityView` per kind, `ScreenshotActivity` with the drag/click gesture, `ClaudeActivity`,
   inline SVG `icons`), `features/claude/` (`useClaudeSessions` lives in `Island`, `ClaudeSpinner`/`ClaudeMark`, the
-  panel's `ClaudeSection`; `--claude` is a fixed token like `--charge`).
+  panel's `ClaudeSection`; `--claude` is a fixed token like `--charge`; Claude content uses `--font-claude`,
+  Cascadia Mono), `features/agent/` (`useAgentRuns` lives in `Island`, panel rows `AgentRunItems` in ClaudeSection's
+  `agent` slot; the `agentApproval` view is `features/activities/AgentApproval.tsx`), `command/` (the command window's
+  own page: new task form, run list, transcript, follow-ups).
   The island has three shapes (`data-mode`: `pill` | `activity` | `panel`), all driven by Rust events.
 
 ## Architecture rules
@@ -83,8 +97,8 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
    (`window::set_click_through`). React only animates in response to events and never runs timers to hide things. Never drive expand/collapse from DOM `mouseenter`/`mouseleave`:
    while collapsed the webview gets no mouse events at all.
 2. **One window, never activated.** The island window has `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`.
-   It must never take focus from the user's app. Anything that needs keyboard input
-   (settings, Phase 4b) goes in a *separate*, normal window.
+   It must never take focus from the user's app. Anything that needs keyboard input goes in a *separate*, normal
+   window: the `command` window (Phase 2.7), settings (Phase 4b).
 3. **IPC names live in one place.** Rust: `src-tauri/src/ipc.rs` (event name consts + payload
    structs). TS: `src/lib/ipc.ts` (typed `invoke`/`listen` wrappers). Components never call
    `invoke("...")` with a string literal.
@@ -175,6 +189,21 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
   `target\debug\topbar.exe hook` (shells mangle backslashes in inline JSON, C7), or run
   `claude -p "…" --settings <file with the hook entries>`. Never write the real settings in tests; `hooks.rs` tests
   use a temp folder, and `CLAUDE_CONFIG_DIR` points the tray item at another folder.
+- **Agent runs never weaken permissions.** TopBar always passes `--permission-mode default` and
+  `--permission-prompt-tool mcp__topbar__approve`; never `bypassPermissions` or `--dangerously-skip-permissions`, and
+  never write the user's `~/.claude/settings.json` for a run (per-run files live under `%APPDATA%\dev.wpill.topbar\
+  agent\runs\<runId>\`, deleted when the process exits). The prompt tool's reply is a text block holding
+  `{"behavior":"allow","updatedInput":…}` / `{"behavior":"deny","message":…}`.
+- **Agent processes:** `claude.exe` must start `CREATE_SUSPENDED`, be assigned to its Job Object, then resumed
+  (`job.rs`), or children it starts at once escape Stop. The `claude` on PATH may be an npm shim (no `.exe`): spawn the
+  real exe (`installs.rs`). Pass folders through `folder::long_path`: with an 8.3 cwd Claude Code asks before reading
+  its own files.
+- **Overlapped reads that complete at once** still need `GetOverlappedResult` for the byte count (C8). Both pipes do.
+- **Building a webview window** from a sync command or the main thread deadlocks on Windows: `window::command::show`
+  is called from the hotkey thread and async commands. The hotkeys use `RegisterHotKey(NULL)` on their own thread
+  (`WM_HOTKEY` goes to the thread queue); receiving one is what lets the command window take the foreground.
+- **Testing agent runs:** use `topbar.exe agent-test …` (debug builds only), a scratch folder, `haiku` and low
+  max turns. Don't send synthetic keystrokes while the user is at the machine; they land in whatever has focus.
 - **Windows PowerShell 5.1 can't list GSMTC sessions** (`GetSessions()` comes back empty). Check media state with the
   `topbar_lib=debug` log instead.
 
