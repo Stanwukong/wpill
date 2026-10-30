@@ -201,7 +201,7 @@ it; a click (no movement) opens the file instead.
 *Alternatives:* click-to-open plus a "copy file" button putting `CF_HDROP` on the clipboard (the fallback planned in
 case the drag failed); `tauri-plugin-drag` (same mechanism, an extra dependency for ~20 lines).
 
-### D17: Claude Code activity through hooks, a named pipe and a self-forwarding exe (planned, Phase 2.6)
+### D17: Claude Code activity through hooks, a named pipe and a self-forwarding exe (Phase 2.6)
 *Why:* Claude Code already runs hooks at the moments that matter (`Stop` when a turn finishes,
 `Notification` when it needs a decision) and hands each hook a JSON description on stdin. The cheapest
 reliable bridge is to make `topbar.exe` its own hook command: `topbar.exe hook` reads stdin, writes it to a
@@ -227,6 +227,38 @@ now live in a project agent, `.claude/agents/motion-designer.md`, which CLAUDE.m
 *Alternatives:* a rotating element behind the island (needs a wrapper outside `overflow: hidden` and fights the
 layout animation); a pulsing glow (reads as an alert, not progress); keeping the rules only in CLAUDE.md (they'd be
 mixed into backend guidance and easy to skip).
+
+### D19: "Needs your input" is a sticky notice that steps aside (Phase 2.6)
+*Why:* a permission prompt stays unanswered until you look, so a notice that times out after a few seconds is easy to
+miss, and one that stays up forever would starve every other activity. The queue gained a third behaviour next to
+feedback and notices: a *sticky* notice has no end time and never goes stale, and leaves only when its source withdraws
+it (`Signal::Retract(key)` on the activity channel, sent on the session's next event) or the user acknowledges it by
+clicking it. It steps aside for any other notice and comes back after it, and waiting notices go before it, so a
+screenshot or Bluetooth notice never goes stale behind a question. Opening the panel or a fullscreen app *parks* it
+(back to the front of the line) instead of dropping it, which is the one place a sticky notice differs from the D14
+rules. Sessions share one key each, so a `Stop` turns that session's "needs input" into "done" in place, and several
+sessions take turns instead of stacking. `durationMs` became `null` for sticky notices; React never read it anyway.
+Both Claude activities are *interactive* like the screenshot: clickable only while the cursor is on them (D14), so a
+question sitting at the top of the screen never eats a click meant for a browser tab beneath it.
+*Alternatives:* a long fixed duration (still times out on a slow coffee break, and still blocks other notices while
+up); one combined "2 sessions need you" activity (needs a count payload and loses which project; deferred).
+
+### D20: Shell-form hook entries, async, and only what's needed crosses the pipe (Phase 2.6)
+*Why:* Claude Code's newer exec form (`"command": exe, "args": ["hook"]`) avoids shells entirely, but 2.1.123, still
+the first `claude` on PATH here, doesn't know `args`, drops it, and would run a bare `topbar.exe`: a second TopBar
+instead of the forwarder. So the entry is shell form with an explicit `"shell"` (Git Bash when Claude Code would find
+it, else PowerShell) and a single-quoted path, which survives spaces in both shells. Every hook except `SessionEnd`
+is `async: true`, so Claude Code never waits for TopBar. The price is ordering: background hooks can land out of order,
+so the forwarder stamps the time it started and a session ignores anything older than what it already applied.
+`PostToolUse` is subscribed only because it's the one event that says a permission prompt was answered; `idle_prompt`
+corrects the status after an Esc (where `Stop` never fires) without showing anything. The forwarder parses stdin itself
+and forwards five fields plus its ancestor chain, so prompt, tool output and Claude's answers never reach TopBar. The
+chain (one ToolHelp snapshot, creation times checked against pid reuse) finds both the window to focus (nearest
+ancestor owning an Alt+Tab window; title match on the folder for several VS Code windows) and the `claude.exe` whose
+exit ends the session.
+*Alternatives:* exec form (breaks older Claude Code, see above); synchronous hooks (adds ~100 ms to every tool call);
+forwarding the raw stdin (simpler, but sends whole answers through the pipe for nothing); `GetConsoleWindow` in the
+forwarder (it has no console: Claude Code starts hooks windowless).
 
 ## 5. Challenges & resolutions
 
@@ -295,6 +327,14 @@ count a drop as shared only if the cursor is no longer over the island (`WindowF
 drag then logged `dropped: false` and the activity stayed up.
 *Lesson:* "disable the handler" can mean "hand the event to the next handler in line", not "ignore it".
 
+### C7: Sample hooks reached the forwarder but never the island
+*Symptom:* while testing, piping hand-written hook JSON into `topbar.exe hook` produced nothing in the log, while the
+same envelope written to the pipe from .NET worked. *Diagnosis:* a temporary trace build showed stdin arriving and the
+ancestor chain resolving, then no envelope: the shell had collapsed `C:\\x` in the test string to `C:\x`, an
+invalid JSON escape, so the forwarder (correctly) dropped the input. *Fix:* generate the samples as files with a
+script and pipe those. *Lesson:* test the boundary with bytes you've inspected (`od -c`); a quiet forwarder is the
+design, so "nothing happened" needs a trace build, not guesses.
+
 ### Still open
 - **Foreground-lock rules** in practice: the fallback chain is implemented but not yet exercised
   against elevated or minimized targets (manual test 7).
@@ -327,6 +367,7 @@ drag then logged `dropped: false` and the activity stayed up.
 | 2026-10-30 | Phase 2.6 (Claude Code activity) added to the roadmap after 2.5 (D17), with its kick-off prompt. |
 | 2026-10-30 | Charging activity: orbiting green outline + halo; `motion-designer` agent added for all UI changes (D18). |
 | 2026-10-30 | Phase 2.5 signed off: all 12 manual checks pass (volume, brightness, Bluetooth headphones, charger, Caps Lock, screenshot drag-out, panel and fullscreen behavior). |
+| 2026-10-30 | Phase 2.6 built: hook forwarder + per-user pipe (D17, D20), sticky "needs input" notices (D19), Claude spinner, orange edge and panel section (via the motion-designer agent). Verified from outside and with real Claude Code 2.1.123/2.1.159 sessions; manual checklist pending. |
 
 ## 7. Results & metrics
 

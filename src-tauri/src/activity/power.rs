@@ -24,7 +24,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     PBT_POWERSETTINGCHANGE, WINDOW_EX_STYLE, WINDOW_STYLE, WM_CLOSE, WM_POWERBROADCAST, WNDCLASSW,
 };
 
-use super::Watcher;
+use super::{Signal, Watcher};
 use crate::error::AppResult;
 use crate::ipc::{Activity, PowerActivity, PowerEvent};
 use crate::win32;
@@ -33,7 +33,7 @@ const CLASS: PCWSTR = w!("TopBarPowerWatcher");
 /// Crossing one of these (downwards, on battery) raises a low-battery notice.
 const LOW_THRESHOLDS: [u8; 2] = [20, 10];
 
-pub fn start(out: Sender<Activity>) -> AppResult<Watcher> {
+pub fn start(out: Sender<Signal>) -> AppResult<Watcher> {
     let (hwnd_tx, hwnd_rx) = mpsc::channel::<isize>();
     Watcher::spawn(
         "power-watcher",
@@ -57,7 +57,7 @@ fn stop(hwnd: &Receiver<isize>) {
 
 /// Battery state seen by the window procedure (which runs on this thread only).
 struct State {
-    out: Sender<Activity>,
+    out: Sender<Signal>,
     on_ac: Option<bool>,
     level: Option<u8>,
 }
@@ -96,7 +96,7 @@ impl Drop for PowerNotification {
     }
 }
 
-fn run(out: Sender<Activity>, hwnd_tx: Sender<isize>) -> Result<()> {
+fn run(out: Sender<Signal>, hwnd_tx: Sender<isize>) -> Result<()> {
     STATE.set(Some(State {
         out,
         on_ac: None,
@@ -200,7 +200,7 @@ impl State {
             log::debug!("power: {event:?} at {level}%");
             let _ = self
                 .out
-                .send(Activity::Power(PowerActivity { event, level }));
+                .send(Activity::Power(PowerActivity { event, level }).into());
         }
     }
 }
@@ -239,11 +239,13 @@ mod tests {
         state.on_setting(GUID_BATTERY_PERCENTAGE_REMAINING, 32);
         assert!(rx.try_recv().is_err());
         state.on_setting(GUID_ACDC_POWER_SOURCE, 1);
-        let Ok(Activity::Power(p)) = rx.try_recv() else {
+        let Ok(Signal::Offer(Activity::Power(p))) = rx.try_recv() else {
             panic!("expected an unplugged event");
         };
         assert_eq!((p.event, p.level), (PowerEvent::Unplugged, 32));
         state.on_setting(GUID_BATTERY_PERCENTAGE_REMAINING, 20);
-        assert!(matches!(rx.try_recv(), Ok(Activity::Power(p)) if p.event == PowerEvent::Low));
+        assert!(
+            matches!(rx.try_recv(), Ok(Signal::Offer(Activity::Power(p))) if p.event == PowerEvent::Low)
+        );
     }
 }

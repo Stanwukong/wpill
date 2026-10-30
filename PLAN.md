@@ -10,7 +10,8 @@
 After sign-off, the island also took its colors from the album art (D13).
 **Phase 2.5 is complete (2026-10-30): Live Activities for volume, brightness, Bluetooth audio, power, Caps Lock and
 screenshots, with all 12 manual checks passed.** The charging activity also got an orbiting green outline (D18).
-**Next: Phase 2.6 (Claude Code activity).** See [Roadmap](#roadmap). Kick-off prompt for a new session:
+**Phase 2.6 (Claude Code activity) is built and verified from outside (2026-10-30); waiting on the manual check** in
+[Phase 2.6](#phase-26-claude-code-activity) before sign-off. Kick-off prompt it was built from:
 [prompts/phase-2.6-claude-code.md](prompts/phase-2.6-claude-code.md).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
@@ -209,15 +210,25 @@ Payloads by `kind`: `volume { level, muted, device }`, `brightness { level }`,
 `capsLock { on }`, `screenshot { fileName, thumbnail (PNG data URL, ≤256 px), width, height }`. The screenshot's path
 stays in Rust and is looked up by `id`.
 
+### Phase 2.6
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| event | `activity:show` | `durationMs: number \| null` | `null` for a sticky notice (needs input): shown until Rust withdraws it with `activity:hide`. |
+| event | `claude:sessions` | `{ sessions: ClaudeSession[] }`, most recently updated first | `ClaudeSession { sessionId, project, status: "idle" \| "working" \| "done" \| "needsInput", updatedAtMs }`. `sessionId` is ours (a counter); Claude's id stays in Rust. |
+| command | `get_claude_sessions` | `() → { sessions }` | Initial sync after a webview reload. |
+| command | `claude_focus_session` | `(sessionId) → void` | Sync (main thread). Acknowledges the session's activity, brings its terminal/editor forward, collapses. Errors: `claudeSessionGone`, `claudeWindowNotFound`, `windowGone`, `foregroundDenied`. |
+| command | `claude_hooks_status` / `claude_hooks_install` / `claude_hooks_remove` | `() → { installed }` / `() → void` | For Phase 4b's settings window; the tray calls the same code. Error `claudeSettings` with a readable message. |
+
+Activity kinds: `claudeDone { sessionId, project, failed }` (`failed`: `StopFailure`, an API error) and
+`claudeNeedsInput { sessionId, project }`. Both are interactive (take clicks while hovered).
+
 ### Reserved for later phases (names fixed now so they slot in)
 
 | Phase | Kind | Name |
 |---|---|---|
 | 3 | command | `list_heavy_processes(limit) → ProcessGroup[]` (`{ name, pids, memoryBytes, icon, protected }`) |
 | 3 | command | `end_process_group(name, pids) → EndResult` (per pid: `ok \| accessDenied \| protected \| notFound`) |
-| 2.6 | activity kinds | `claudeDone`, `claudeNeedsInput` (payload: `{ sessionId, project }`) in `activity:show` |
-| 2.6 | event | `claude:sessions` → `{ sessions: { sessionId, project, status: "working" \| "done" \| "needsInput", updatedAtMs }[] }` |
-| 2.6 | command | `claude_focus_session(sessionId)`, `claude_hooks_status() → { installed }`, `claude_hooks_install()`, `claude_hooks_remove()` |
 | 4a | event | `monitor:changed` |
 | 4b | event | `settings:changed` |
 | 4b | command | `get_settings`, `set_settings` |
@@ -393,26 +404,77 @@ Claude Code hook ──stdin JSON──▶ topbar.exe hook (forwarder, exits bef
                                                      └──▶ claude:sessions ──▶ panel section
 ```
 
-- [ ] `topbar.exe hook` forwarder: argument checked in `main.rs` before Tauri; stdin → named pipe; silent
-      exit 0 when TopBar isn't running; never blocks or fails the hook
-- [ ] Pipe listener thread (`src-tauri/src/claude/`): current-user-only pipe, size-capped defensive parsing,
-      session state keyed by `session_id` (working / done / needs input) with expiry
-- [ ] Activities: "<project>: done" on `Stop`; "<project>: needs your input" on `Notification`, at higher
-      priority. Project = `cwd` folder name; never prompt or transcript text
-- [ ] Claude look: Claude Code's orange spinner glyph (· ✢ ✳ ✶ ✻ ✽, frame-stepped in CSS) in the pill and panel while a
-      session works; the island's edges glow Claude orange (`--claude`, charging-ring technique, D18) when a session
-      is done (for the activity's duration) or needs input (until its next event). Built through the motion-designer agent
-- [ ] Panel section: open sessions with status dots; click focuses the session's terminal or VS Code window
-      (best effort: ancestor process chain, then a title match on the folder name)
-- [ ] Tray "Connect Claude Code…": shows the exact `~/.claude/settings.json` entries, asks first, backs up,
-      merges without clobbering existing hooks, quoted exe path; can remove them again
-- [ ] Manual hook JSON documented here for people who prefer to edit settings themselves
-- [ ] Manual test list (in the prompt): finish while in another app, permission prompt, two sessions,
-      VS Code + Windows Terminal, click-to-focus, TopBar not running, hooks removed
+- [x] `topbar.exe hook` forwarder (`claude/forward.rs`): checked in `main.rs` before Tauri; keeps only `session_id`,
+      `cwd`, the event, `notification_type` and `source` (never prompt, tool or assistant text), adds its ancestor
+      process chain, writes one message to the pipe. Stdin read capped at 8 MiB with a 1 s deadline; a busy pipe is
+      retried for up to 1 s; always exits 0 and prints nothing
+- [x] Pipe listener (`claude/pipe.rs`, a `Watcher`): `\\.\pipe\topbar-claude-<user SID>`, DACL for the current user
+      only (`D:P(A;;GA;;;<SID>)`), `PIPE_REJECT_REMOTE_CLIENTS`, `FILE_FLAG_FIRST_PIPE_INSTANCE`, one instance, one
+      message per connection, 16 KiB cap, 500 ms read timeout, overlapped connect/read waited with the stop event
+- [x] Sessions (`claude/sessions.rs`): `idle | working | done | needsInput` keyed by `session_id`; events older than
+      the last applied one are ignored (async hooks arrive out of order); dropped when their `claude.exe` exits
+      (checked every 30 s, pid + creation time) or after 12 h without events
+- [x] Activities: `claudeDone` on `Stop` (or `StopFailure`, "Stopped"), `claudeNeedsInput` on a permission prompt or
+      question, *sticky* until the session's next event (D19). Both interactive: a click focuses the session
+- [x] Claude look (motion-designer agent): Claude Code's spinner (`· ✢ * ✶ ✻ ✽` forwards then back, 120 ms a frame,
+      Segoe UI Symbol, `--claude: #d77757`) left of the clock while a session works and on working rows; the island's
+      edge glows orange while "done" shows and breathes slowly (3 s) while "needs input" shows. Reduced motion: a
+      static `●` and a static edge. Checked in headless Edge renders on the plain and tinted island
+- [x] Panel section "Claude Code" between the media card and the apps: status mark, project, status, how long ago;
+      click focuses (nearest ancestor owning an Alt+Tab window, then a title match on the folder name)
+- [x] Tray "Connect Claude Code…" / "Disconnect Claude Code…": a native message box shows the exact entries and asks;
+      backs up `settings.json`, merges (key order kept), quoted exe path, removes only our entries. Honours
+      `CLAUDE_CONFIG_DIR`. Switch `activities.claude` in `settings.json`
+- [x] Verified from outside (2026-10-30, `RUST_LOG=topbar_lib=debug`): sample hook JSON piped into `topbar.exe hook`
+      (start → prompt → permission → tool → stop, and a 3 MB `Stop`) produced the expected activities, with no prompt
+      or answer text in the log; ~85–150 ms per forwarder run (debug build), exit 0 with TopBar not running, with no
+      stdin and with garbage; 12 forwarders at once all delivered; garbage, a 40 KB message and a silent client
+      written straight to the pipe were dropped without stopping the listener; the pipe's ACL lists only the current
+      user. Real `claude -p` runs on Claude Code 2.1.123 and 2.1.159 with the entries below (via `--settings`, the real
+      `settings.json` untouched) sent SessionStart → prompt → Stop → SessionEnd and showed "hooktest · Done". The
+      release exe (windows subsystem, so no console can flash) reads stdin through Git Bash and delivers in ~200 ms.
+      Captures of the live island (`pnpm tauri dev`): spinner beside the clock while working, "wpill · Needs your
+      input" with the orange edge, back to the spinner once the tool ran, then "wpill · Done"; the foreground window
+      never changed. 67 Rust tests pass
+- [ ] Manual check (below)
 
-Hooks in scope (confirm the exact fields against the current Claude Code docs first): `Stop`, `Notification`,
-`UserPromptSubmit` (working), `SessionStart` / `SessionEnd`. Only sessions that run on this machine and fire
-hooks are covered; claude.ai/code sessions don't run here.
+**Manual hook entries.** Add these to `~/.claude/settings.json` under `"hooks"` (the tray item writes the same thing,
+with the path of the TopBar that wrote it). One group per event, for `SessionStart`, `UserPromptSubmit`, `PostToolUse`,
+`Notification`, `Stop` and `StopFailure`:
+
+```json
+{ "hooks": [ { "type": "command", "command": "'C:/Users/<you>/AppData/Local/TopBar/topbar.exe' hook",
+               "shell": "bash", "async": true, "timeout": 5 } ] }
+```
+
+and for `SessionEnd` the same without `"async": true` (it runs at exit, so it shouldn't be left in the background).
+Without Git Bash, use `"shell": "powershell"` and `"command": "& 'C:\\Users\\<you>\\…\\topbar.exe' hook"`. Keep the
+shell form: Claude Code before 2.1.15x has no `args` exec form and would run a bare `topbar.exe`, starting TopBar.
+
+**Manual check (Phase 2.6)** (run with `$env:RUST_LOG='info,topbar_lib=debug'`; connect from the tray first, then
+restart any open Claude Code sessions)
+1. **Task finishes while you're elsewhere:** give Claude a task, switch to another app. When it finishes the island
+   shows "<project> · Done" with an orange edge for 5 s; the pill shows the spinner left of the clock while it works.
+2. **Permission prompt:** ask for something that needs a permission (e.g. a Bash command not on the allow list), switch
+   away. About 6 s later "<project> · Needs your input" appears with a slowly breathing orange edge and stays. Approve
+   it in the terminal → the activity leaves when the tool finishes (and "Done" follows when the turn ends).
+3. **Click to focus:** while "Needs your input" shows, hover it and click → the session's terminal comes to the front
+   and the activity is gone. Clicks beside the island still reach the app under it.
+4. **Two sessions in different folders:** both show in the panel with their own status; their activities take turns
+   (needs-input first), never two at once.
+5. **VS Code and Windows Terminal:** one session in each. Clicking each panel row brings the right window forward; with
+   two VS Code windows open, the one whose title names the folder.
+6. **Panel open when a session finishes:** keep the panel open → nothing covers it, the row turns "Done". A "needs input"
+   arriving meanwhile shows after the panel closes.
+7. **Esc:** interrupt a running task → the spinner stops about a minute later (idle notification), with no activity.
+8. **Fullscreen:** a question asked while a fullscreen video plays shows after leaving fullscreen.
+9. **TopBar not running:** quit TopBar; Claude Code runs normally with no hook errors.
+10. **Close a terminal mid-task:** its session leaves the panel within ~30 s.
+11. **Hooks removed:** tray → "Disconnect Claude Code…" → only TopBar's entries are gone (compare with the backup next
+    to `settings.json`); the tray label switches back.
+12. **Focus:** typing in another app continues while Claude activities come and go.
+
+Only sessions that run on this machine and fire hooks are covered; claude.ai/code cloud sessions don't run here.
 
 ### Phase 4a: release readiness
 - [ ] Multi-monitor + per-monitor DPI: re-read geometry on `WM_DISPLAYCHANGE` / `WM_DPICHANGED` and
@@ -459,6 +521,11 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
   battery level uses an undocumented device property and is missing for devices that don't report it. Screenshots come
   from the Screenshots folder only: PrtScn to the clipboard (no file) isn't an activity. Switches are edited by hand
   until Phase 4b.
+- Claude Code: needs the hooks in `settings.json` (tray item); open sessions pick them up after a restart. Permission
+  prompts are reported ~6 s late (Claude Code's own timing), and after Esc the session reads "working" for about a
+  minute (`Stop` doesn't fire; the idle notification corrects it). Clicking focuses the window, not the Windows Terminal
+  tab. The hook entry records the exe that clicked "Connect" (connect from the installed build, like autostart).
+  The PowerShell form of the entry (machines without Git Bash) is untested.
 
 ## Distribution
 - `pnpm tauri build` produces `src-tauri/target/release/bundle/nsis/TopBar_0.1.0_x64-setup.exe`:

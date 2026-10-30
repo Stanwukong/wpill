@@ -1,6 +1,7 @@
 mod activity;
 mod apps;
 mod autostart;
+mod claude;
 mod error;
 mod fullscreen;
 mod hover;
@@ -11,6 +12,12 @@ mod win32;
 mod window;
 
 use tauri::{Manager, RunEvent};
+
+/// `topbar.exe hook`: forwards a Claude Code hook to the running TopBar and returns. Called from `main.rs`
+/// before `run()`, so no Tauri, WebView2 or single-instance check is involved.
+pub fn forward_hook() {
+    claude::forward_hook();
+}
 
 pub fn run() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
@@ -24,6 +31,7 @@ pub fn run() {
         .manage(apps::IconCache::default())
         .manage(media::Media::default())
         .manage(activity::Activities::default())
+        .manage(claude::Claude::default())
         .setup(|app| {
             autostart::repair();
             let handle = app.handle().clone();
@@ -31,6 +39,7 @@ pub fn run() {
             hover::spawn(handle.clone(), &island, geometry)?;
             media::spawn(handle.clone(), &app.state::<media::Media>())?;
             activity::spawn(&handle, &app.state::<activity::Activities>());
+            claude::spawn(&handle, &app.state::<activity::Activities>());
             tray::create(&handle)?;
             Ok(())
         })
@@ -47,6 +56,11 @@ pub fn run() {
             media::media_seek,
             activity::activity_drag_screenshot,
             activity::activity_open_screenshot,
+            claude::get_claude_sessions,
+            claude::claude_focus_session,
+            claude::claude_hooks_status,
+            claude::claude_hooks_install,
+            claude::claude_hooks_remove,
         ])
         .build(tauri::generate_context!())
         .expect("error while building TopBar")

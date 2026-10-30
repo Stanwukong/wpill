@@ -19,6 +19,8 @@ pub struct Switches {
     pub power: bool,
     pub caps_lock: bool,
     pub screenshot: bool,
+    /// Claude Code sessions (activities and the panel section).
+    pub claude: bool,
 }
 
 impl Default for Switches {
@@ -30,6 +32,7 @@ impl Default for Switches {
             power: true,
             caps_lock: true,
             screenshot: true,
+            claude: true,
         }
     }
 }
@@ -43,6 +46,7 @@ impl Switches {
             Activity::Power(_) => self.power,
             Activity::CapsLock(_) => self.caps_lock,
             Activity::Screenshot(_) => self.screenshot,
+            Activity::ClaudeDone(_) | Activity::ClaudeNeedsInput(_) => self.claude,
         }
     }
 }

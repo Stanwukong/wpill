@@ -34,7 +34,7 @@ use windows::Win32::System::Com::{
 };
 use windows_collections::IIterable;
 
-use super::Watcher;
+use super::{Signal, Watcher};
 use crate::error::AppResult;
 use crate::ipc::{Activity, BluetoothActivity, VolumeActivity};
 
@@ -51,7 +51,7 @@ enum Msg {
     Shutdown,
 }
 
-pub fn start(out: Sender<Activity>) -> AppResult<Watcher> {
+pub fn start(out: Sender<Signal>) -> AppResult<Watcher> {
     let (tx, rx) = mpsc::channel();
     let stop = tx.clone();
     Watcher::spawn(
@@ -63,7 +63,7 @@ pub fn start(out: Sender<Activity>) -> AppResult<Watcher> {
     )
 }
 
-fn run(out: Sender<Activity>, tx: Sender<Msg>, rx: Receiver<Msg>) {
+fn run(out: Sender<Signal>, tx: Sender<Msg>, rx: Receiver<Msg>) {
     // SAFETY: called once at the top of this thread; balanced by CoUninitialize below.
     let com = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
     match AudioWatcher::new(out, tx) {
@@ -164,7 +164,7 @@ impl Drop for VolumeSubscription {
 }
 
 struct AudioWatcher {
-    out: Sender<Activity>,
+    out: Sender<Signal>,
     tx: Sender<Msg>,
     enumerator: IMMDeviceEnumerator,
     volume: Option<VolumeSubscription>,
@@ -177,7 +177,7 @@ struct AudioWatcher {
 }
 
 impl AudioWatcher {
-    fn new(out: Sender<Activity>, tx: Sender<Msg>) -> Result<Self> {
+    fn new(out: Sender<Signal>, tx: Sender<Msg>) -> Result<Self> {
         // SAFETY: plain COM creation and registration; the guard below owns the registration.
         let (enumerator, devices) = unsafe {
             let enumerator: IMMDeviceEnumerator =
@@ -233,7 +233,7 @@ impl AudioWatcher {
     }
 
     fn send(&self, activity: Activity) {
-        let _ = self.out.send(activity);
+        let _ = self.out.send(activity.into());
     }
 
     fn on_volume(&mut self, level: u8, muted: bool) {

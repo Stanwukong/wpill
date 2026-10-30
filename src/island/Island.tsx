@@ -2,6 +2,9 @@ import { useRef, type CSSProperties } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ActivityView } from "../features/activities/ActivityView";
 import { AppsList } from "../features/apps/AppsList";
+import { ClaudeSpinner } from "../features/claude/ClaudeGlyphs";
+import { ClaudeSection } from "../features/claude/ClaudeSection";
+import { useClaudeSessions } from "../features/claude/useClaudeSessions";
 import { useArtTheme } from "../features/media/artTheme";
 import { MediaCard } from "../features/media/MediaCard";
 import { Equalizer, PillArt } from "../features/media/PillMedia";
@@ -10,6 +13,7 @@ import { Clock } from "./Clock";
 import { ACTIVITY_RADIUS, contentFade, islandSpring, PANEL_RADIUS, PILL_RADIUS } from "./motion";
 import { useIslandState } from "./useIslandState";
 import { usePanelSizeReporter } from "./usePanelSizeReporter";
+import type { ActivityPayload } from "../lib/types";
 import "./island.css";
 
 const RADIUS = { pill: PILL_RADIUS, activity: ACTIVITY_RADIUS, panel: PANEL_RADIUS } as const;
@@ -19,9 +23,14 @@ export function Island() {
   const mode = expanded ? "panel" : activity ? "activity" : "pill";
   // Drives the orbiting charge ring on the island's edge (features/activities/activities.css).
   const charging = activity?.kind === "power" && activity.payload.event === "pluggedIn";
+  // Drives the Claude orange edge (activities.css): steady when done, breathing while it needs input.
+  const claude =
+    activity?.kind === "claudeDone" ? "done" : activity?.kind === "claudeNeedsInput" ? "needsInput" : undefined;
   const ref = useRef<HTMLDivElement>(null);
   usePanelSizeReporter(ref, mode === "pill" ? null : mode);
   const media = useMedia();
+  const claudeSessions = useClaudeSessions();
+  const claudeWorking = claudeSessions.some((s) => s.status === "working");
   const nowPlaying = media.active?.status === "playing" ? media.active : null;
   // Tinted while there is an active session with art (playing or paused); plain black otherwise.
   const theme = useArtTheme(media.active?.artwork ?? null);
@@ -40,14 +49,16 @@ export function Island() {
         data-expanded={expanded}
         data-mode={mode}
         data-charging={charging}
+        data-claude={claude}
         transition={islandSpring}
         style={{ borderRadius: RADIUS[mode] }}
       >
         <AnimatePresence mode="popLayout" initial={false}>
           {mode === "activity" && activity ? (
-            // Keyed by kind: an in-place update (another volume step) re-renders without a crossfade.
+            // Keyed by kind: an in-place update (another volume step) re-renders without a crossfade. Claude's two
+            // kinds share a key per session, so needs-input → done for the same session switches in place.
             <motion.div
-              key={`activity-${activity.kind}`}
+              key={activityKey(activity)}
               className="island__activity"
               layout="position"
               initial={{ opacity: 0, filter: "blur(4px)" }}
@@ -71,6 +82,7 @@ export function Island() {
                 <Clock variant="panel" />
               </header>
               <MediaCard media={media} />
+              <ClaudeSection sessions={claudeSessions} />
               <AppsList />
             </motion.div>
           ) : (
@@ -84,6 +96,7 @@ export function Island() {
               transition={contentFade}
             >
               {nowPlaying && <PillArt session={nowPlaying} />}
+              {claudeWorking && <ClaudeSpinner />}
               <Clock variant="pill" />
               {nowPlaying && <Equalizer />}
             </motion.div>
@@ -92,4 +105,11 @@ export function Island() {
       </motion.div>
     </div>
   );
+}
+
+function activityKey(activity: ActivityPayload): string {
+  if (activity.kind === "claudeDone" || activity.kind === "claudeNeedsInput") {
+    return `activity-claude-${activity.payload.sessionId}`;
+  }
+  return `activity-${activity.kind}`;
 }

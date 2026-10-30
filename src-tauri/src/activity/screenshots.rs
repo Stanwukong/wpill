@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use base64::Engine;
 use windows::core::{Result, HSTRING};
-use windows::Win32::Foundation::{CloseHandle, HANDLE, SIZE, WAIT_OBJECT_0};
+use windows::Win32::Foundation::{SIZE, WAIT_OBJECT_0};
 use windows::Win32::Graphics::Gdi::{
     CreateCompatibleDC, DeleteDC, DeleteObject, GetDIBits, GetObjectW, BITMAP, BITMAPINFO,
     BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP,
@@ -27,16 +27,17 @@ use windows::Win32::Storage::FileSystem::{
 use windows::Win32::System::Com::{
     CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT_MULTITHREADED,
 };
-use windows::Win32::System::Threading::{CreateEventW, SetEvent, WaitForMultipleObjects, INFINITE};
+use windows::Win32::System::Threading::{SetEvent, WaitForMultipleObjects, INFINITE};
 use windows::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
 use windows::Win32::UI::Shell::{
     FOLDERID_Screenshots, IShellItemImageFactory, SHCreateItemFromParsingName,
     SHGetKnownFolderPath, KF_FLAG_CREATE, SIIGBF_RESIZETOFIT,
 };
 
-use super::Watcher;
+use super::{Signal, Watcher};
 use crate::error::AppResult;
 use crate::ipc::{Activity, ScreenshotActivity};
+use crate::win32::Handle;
 
 /// Long side of the thumbnail in px (shown at ~128 CSS px, so crisp up to 200 %).
 const THUMB_PX: i32 = 256;
@@ -46,29 +47,7 @@ const WRITE_WAIT: Duration = Duration::from_secs(3);
 const DUPLICATE_WINDOW: Duration = Duration::from_secs(3);
 const EXTENSIONS: [&str; 3] = ["png", "jpg", "jpeg"];
 
-/// A kernel handle closed on drop. Events are safe to signal from any thread.
-struct Handle(HANDLE);
-
-// SAFETY: kernel handles are process-wide values; SetEvent/CloseHandle are thread-safe.
-unsafe impl Send for Handle {}
-// SAFETY: as above; the only shared operation is SetEvent.
-unsafe impl Sync for Handle {}
-
-impl Handle {
-    fn event() -> Result<Self> {
-        // SAFETY: creates an unnamed manual-reset event, closed on drop.
-        Ok(Self(unsafe { CreateEventW(None, true, false, None)? }))
-    }
-}
-
-impl Drop for Handle {
-    fn drop(&mut self) {
-        // SAFETY: we own this handle.
-        let _ = unsafe { CloseHandle(self.0) };
-    }
-}
-
-pub fn start(out: Sender<Activity>) -> AppResult<Watcher> {
+pub fn start(out: Sender<Signal>) -> AppResult<Watcher> {
     let stop = Arc::new(Handle::event()?);
     let signal = stop.clone();
     Watcher::spawn(
@@ -81,7 +60,7 @@ pub fn start(out: Sender<Activity>) -> AppResult<Watcher> {
     )
 }
 
-fn run(out: &Sender<Activity>, stop: &Handle) {
+fn run(out: &Sender<Signal>, stop: &Handle) {
     // SAFETY: called once at the top of this thread; balanced by CoUninitialize below.
     let com = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
     match watch(out, stop) {
@@ -105,7 +84,7 @@ fn folder() -> Result<PathBuf> {
     }
 }
 
-fn watch(out: &Sender<Activity>, stop: &Handle) -> Result<()> {
+fn watch(out: &Sender<Signal>, stop: &Handle) -> Result<()> {
     let folder = folder()?;
     // SAFETY: opens the directory for change notifications; closed by the guard.
     let dir = Handle(unsafe {
@@ -171,7 +150,7 @@ fn watch(out: &Sender<Activity>, stop: &Handle) -> Result<()> {
             match screenshot(&path) {
                 Ok(activity) => {
                     log::debug!("screenshot saved: {name}");
-                    let _ = out.send(Activity::Screenshot(activity));
+                    let _ = out.send(Activity::Screenshot(activity).into());
                 }
                 Err(e) => log::debug!("screenshot {name} skipped: {e}"),
             }

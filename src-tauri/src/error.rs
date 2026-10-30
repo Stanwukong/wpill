@@ -18,6 +18,12 @@ pub enum AppError {
     MediaRejected,
     #[error("That activity has ended.")]
     ActivityGone,
+    #[error("That Claude Code session has ended.")]
+    ClaudeSessionGone,
+    #[error("Couldn't find the window that session runs in.")]
+    ClaudeWindowNotFound,
+    #[error("{0}")]
+    ClaudeSettings(String),
     #[error(transparent)]
     Win32(#[from] windows::core::Error),
     #[error(transparent)]
@@ -34,6 +40,9 @@ impl AppError {
             Self::MediaSessionGone => "mediaSessionGone",
             Self::MediaRejected => "mediaRejected",
             Self::ActivityGone => "activityGone",
+            Self::ClaudeSessionGone => "claudeSessionGone",
+            Self::ClaudeWindowNotFound => "claudeWindowNotFound",
+            Self::ClaudeSettings(_) => "claudeSettings",
             Self::Win32(_) => "win32",
             Self::Tauri(_) => "tauri",
         }

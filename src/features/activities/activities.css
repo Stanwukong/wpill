@@ -79,6 +79,97 @@
   }
 }
 
+/*
+ * Claude Code: the edge glows Claude orange while a Claude activity shows. An inset ring with a soft inner glow on
+ * `::after` (follows the morphing radius via `border-radius: inherit`), over a steady halo on `.island`.
+ * Done holds steady; needs-input breathes the ring slowly (3 s, ease-in-out) because it can stay up for minutes.
+ * Opacity only, so the loop stays on the compositor; absent unless `data-claude` is set.
+ */
+.island::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1.5px rgba(var(--claude-rgb), 0.85),
+    inset 0 0 14px rgba(var(--claude-rgb), 0.22);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 250ms ease-in;
+}
+
+.island[data-claude]::after {
+  opacity: 1;
+  transition: opacity 400ms ease-out;
+}
+
+/* claude-in fades the ring in (it's listed last, so it wins while it runs); then the breathing takes over. */
+.island[data-claude="needsInput"]::after {
+  animation:
+    claude-breathe 3000ms ease-in-out infinite,
+    claude-in 400ms ease-out;
+}
+
+.island[data-claude] {
+  box-shadow:
+    0 0 0 1px rgba(var(--claude-rgb), 0.2),
+    0 0 22px rgba(var(--claude-rgb), 0.3),
+    0 10px 30px var(--island-shadow);
+}
+
+@keyframes claude-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes claude-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .island[data-claude="needsInput"]::after {
+    animation: none;
+  }
+}
+
+.activity--claude {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.activity--claude:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.activity--claude:active {
+  background: var(--tile-hover);
+}
+
+.activity--claude .activity__text {
+  flex: 1;
+  gap: 1px;
+  line-height: 1.25;
+}
+
+.activity--claude .activity__detail {
+  color: var(--island-fg);
+}
+
+.activity--claude .activity__detail[data-muted="true"] {
+  color: var(--island-muted);
+}
+
 .activity__icon {
   width: 22px;
   height: 22px;

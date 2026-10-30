@@ -1,13 +1,14 @@
-//! Tray icon: version label, launch-at-startup toggle, quit.
+//! Tray icon: version label, launch-at-startup toggle, Claude Code connection, quit.
 
 use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Wry};
 
-use crate::autostart;
+use crate::{autostart, claude};
 
 const TRAY_ID: &str = "main";
 const ID_AUTOSTART: &str = "autostart";
+const ID_CLAUDE: &str = "claude";
 const ID_QUIT: &str = "quit";
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
@@ -28,8 +29,9 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         autostart::is_enabled(),
         None::<&str>,
     )?;
+    let claude = MenuItem::with_id(app, ID_CLAUDE, claude::tray_label(), true, None::<&str>)?;
     let quit = MenuItem::with_id(app, ID_QUIT, "Quit TopBar", true, None::<&str>)?;
-    let items: [&dyn IsMenuItem<Wry>; 4] = [&version, &separator, &autostart, &quit];
+    let items: [&dyn IsMenuItem<Wry>; 5] = [&version, &separator, &autostart, &claude, &quit];
     let menu = Menu::with_items(app, &items)?;
 
     let mut tray = TrayIconBuilder::with_id(TRAY_ID)
@@ -38,6 +40,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(true)
         .on_menu_event(move |app, event| match event.id().as_ref() {
             ID_AUTOSTART => toggle_autostart(&autostart),
+            ID_CLAUDE => claude::toggle_from_tray(claude.clone()),
             ID_QUIT => app.exit(0),
             _ => {}
         });

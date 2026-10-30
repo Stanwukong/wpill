@@ -26,7 +26,7 @@ use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 use crate::error::{AppError, AppResult};
 use crate::ipc::{Activity, ActivityPayload};
 use crate::window;
-pub use queue::Queue;
+pub use queue::{claude_key, Queue};
 use settings::Switches;
 
 #[cfg(test)]
@@ -35,17 +35,32 @@ pub use queue::tests as test_activities;
 /// Bounded wait for every watcher to remove its subscriptions on exit (they stop in parallel).
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_millis(800);
 
-/// A source thread. `stop` asks it to finish; `done` disconnects once it has (and its guards have dropped).
-type Start = fn(Sender<Activity>) -> AppResult<Watcher>;
+/// What sources send the hover poller.
+#[derive(Debug)]
+pub enum Signal {
+    Offer(Activity),
+    /// Withdraws the activity with this key (`queue::claude_key`), waiting or on screen.
+    Retract(String),
+}
 
-struct Watcher {
+impl From<Activity> for Signal {
+    fn from(activity: Activity) -> Self {
+        Self::Offer(activity)
+    }
+}
+
+type Start = fn(Sender<Signal>) -> AppResult<Watcher>;
+
+/// A source thread. `stop` asks it to finish; `done` disconnects once it has (and its guards have dropped).
+/// Other features' sources (e.g. `claude/`) use it too, so `shutdown` stops them with the rest.
+pub struct Watcher {
     name: &'static str,
     stop: Box<dyn FnOnce() + Send>,
     done: Receiver<()>,
 }
 
 impl Watcher {
-    fn spawn(
+    pub fn spawn(
         name: &'static str,
         body: impl FnOnce() + Send + 'static,
         stop: impl FnOnce() + Send + 'static,
@@ -67,9 +82,9 @@ impl Watcher {
 }
 
 struct Inner {
-    tx: Sender<Activity>,
+    tx: Sender<Signal>,
     /// Taken by the hover poller, the only consumer.
-    rx: Option<Receiver<Activity>>,
+    rx: Option<Receiver<Signal>>,
     switches: Switches,
     /// What's on screen, for `get_island_state` and the screenshot commands.
     current: Option<ActivityPayload>,
@@ -103,8 +118,21 @@ impl Activities {
         self.0.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    pub fn take_receiver(&self) -> Option<Receiver<Activity>> {
+    pub fn take_receiver(&self) -> Option<Receiver<Signal>> {
         self.lock().rx.take()
+    }
+
+    /// For sources outside this module; switches still apply to what they offer.
+    pub fn sender(&self) -> Sender<Signal> {
+        self.lock().tx.clone()
+    }
+
+    pub fn add_watcher(&self, watcher: Watcher) {
+        self.lock().watchers.push(watcher);
+    }
+
+    pub fn claude_enabled(&self) -> bool {
+        self.lock().switches.claude
     }
 
     pub fn allows(&self, activity: &Activity) -> bool {

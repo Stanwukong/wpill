@@ -44,19 +44,35 @@ export interface ScreenshotActivity {
   height: number;
 }
 
+export interface ClaudeDoneActivity {
+  /** Ours (matches `ClaudeSession.sessionId`). */
+  sessionId: number;
+  /** The session's working folder name. */
+  project: string;
+  /** The turn ended on an API error. */
+  failed: boolean;
+}
+
+export interface ClaudeNeedsInputActivity {
+  sessionId: number;
+  project: string;
+}
+
 export type Activity =
   | { kind: "volume"; payload: VolumeActivity }
   | { kind: "brightness"; payload: BrightnessActivity }
   | { kind: "bluetooth"; payload: BluetoothActivity }
   | { kind: "power"; payload: PowerActivity }
   | { kind: "capsLock"; payload: CapsLockActivity }
-  | { kind: "screenshot"; payload: ScreenshotActivity };
+  | { kind: "screenshot"; payload: ScreenshotActivity }
+  | { kind: "claudeDone"; payload: ClaudeDoneActivity }
+  | { kind: "claudeNeedsInput"; payload: ClaudeNeedsInputActivity };
 
 /** `activity:show`. The same `id` again means the activity was updated in place (e.g. another volume step). */
 export type ActivityPayload = Activity & {
   id: number;
-  /** Time left; Rust times it, React never hides it on its own. */
-  durationMs: number;
+  /** Time left; Rust times it, React never hides it on its own. `null`: until Rust withdraws it. */
+  durationMs: number | null;
 };
 
 export interface ActivityHidePayload {
@@ -106,6 +122,26 @@ export interface MediaState {
   sessions: MediaSession[];
 }
 
+export type ClaudeStatus = "idle" | "working" | "done" | "needsInput";
+
+export interface ClaudeSession {
+  /** Assigned by Rust, stable for the session's lifetime. */
+  sessionId: number;
+  project: string;
+  status: ClaudeStatus;
+  /** Unix epoch ms of the last status change. */
+  updatedAtMs: number;
+}
+
+export interface ClaudeSessions {
+  /** Most recently updated first. */
+  sessions: ClaudeSession[];
+}
+
+export interface ClaudeHooksStatus {
+  installed: boolean;
+}
+
 export interface AppError {
   kind:
     | "windowGone"
@@ -115,6 +151,9 @@ export interface AppError {
     | "mediaSessionGone"
     | "mediaRejected"
     | "activityGone"
+    | "claudeSessionGone"
+    | "claudeWindowNotFound"
+    | "claudeSettings"
     | "win32"
     | "tauri";
   message: string;

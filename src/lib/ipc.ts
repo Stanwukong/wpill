@@ -6,6 +6,8 @@ import type {
   ActivityHidePayload,
   ActivityPayload,
   AppError,
+  ClaudeHooksStatus,
+  ClaudeSessions,
   IslandState,
   MediaState,
   VisibilityPayload,
@@ -19,6 +21,7 @@ const EVENTS = {
   mediaState: "media:state",
   activityShow: "activity:show",
   activityHide: "activity:hide",
+  claudeSessions: "claude:sessions",
 } as const;
 
 /** Which island shape a reported rect measures. */
@@ -41,6 +44,12 @@ export const commands = {
   /** Call while the mouse button is still down; resolves when the drop or cancel is done. */
   activityDragScreenshot: (id: number) => invoke<void>("activity_drag_screenshot", { id }),
   activityOpenScreenshot: (id: number) => invoke<void>("activity_open_screenshot", { id }),
+  getClaudeSessions: () => invoke<ClaudeSessions>("get_claude_sessions"),
+  /** Brings the session's terminal or editor to the front and acknowledges its activity. */
+  claudeFocusSession: (sessionId: number) => invoke<void>("claude_focus_session", { sessionId }),
+  claudeHooksStatus: () => invoke<ClaudeHooksStatus>("claude_hooks_status"),
+  claudeHooksInstall: () => invoke<void>("claude_hooks_install"),
+  claudeHooksRemove: () => invoke<void>("claude_hooks_remove"),
 };
 
 export const on = {
@@ -54,6 +63,8 @@ export const on = {
     listen<ActivityPayload>(EVENTS.activityShow, (e) => cb(e.payload)),
   activityHide: (cb: (payload: ActivityHidePayload) => void): Promise<UnlistenFn> =>
     listen<ActivityHidePayload>(EVENTS.activityHide, (e) => cb(e.payload)),
+  claudeSessions: (cb: (payload: ClaudeSessions) => void): Promise<UnlistenFn> =>
+    listen<ClaudeSessions>(EVENTS.claudeSessions, (e) => cb(e.payload)),
 };
 
 /** Unsubscribes listeners registered with `on.*` (safe to call before they resolve). */

@@ -19,7 +19,9 @@ Read `CLAUDE.md` first (architecture rules and Windows gotchas apply to you too)
   things that aren't physical, no pulsing for attention unless something needs the user.
 - **Dark island always.** Colors come from tokens in `src/styles/global.css`: `--tint-from`/`--tint-to` (album-art
   gradient), `--accent` (follows the art; use it for highlights), `--island-fg`, `--island-muted`. Semantic colors
-  that must not follow the art (charging green `--charge`, `--danger`) are their own tokens. Design for both the
+  that must not follow the art (charging green `--charge`, Claude Code orange `--claude`, `--danger`) are their own
+  tokens. Edge effects on `.island`: the charge ring uses `::before`, the Claude glow `::after` (driven by
+  `data-charging` / `data-claude`); glyph spinners step a stacked pseudo-element with `steps()` rather than JS. Design for both the
   plain black island and a tinted one.
 
 ## Motion system

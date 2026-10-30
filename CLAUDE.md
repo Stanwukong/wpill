@@ -55,6 +55,12 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
   priority/coalescing, unit-tested; `settings.rs` = switches in `%APPDATA%\dev.wpill.topbar\settings.json`; one thread
   per source: `audio.rs` (volume + Bluetooth), `brightness.rs`, `power.rs`, `screenshots.rs`; `drag.rs`).
   The activity queue is driven by `hover::logic::Machine` (the `Showing` phase), not by the activity module.
+  Sources send `activity::Signal` (`Offer(Activity)` or `Retract(key)`); other features start their threads through
+  the same `activity::Watcher` harness (`Activities::sender`/`add_watcher`) so shutdown stops them too.
+  `claude/` (Claude Code via hooks): `forward.rs` = `topbar.exe hook` (run from `main.rs` before Tauri), `pipe.rs` =
+  per-user pipe + server loop, `process.rs` = ancestor chain/liveness, `protocol.rs` + `sessions.rs` + `hooks.rs`
+  (settings.json merge) = pure and unit-tested, `focus.rs` = which window to bring forward, `mod.rs` = listener,
+  commands and the tray's Connect/Disconnect dialog.
 - `lib.rs` uses `.build()?.run(|app, event| …)` so `RunEvent::Exit` can stop the media and activity watchers (unregisters their handlers).
 - Plugins (registered in `lib.rs`): `tauri-plugin-single-instance` (must stay first). Don't use
   `tauri-plugin-autostart`: it writes the exe path unquoted, which breaks for paths with spaces.
@@ -65,7 +71,9 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
   `features/media/` (`useMedia` lives in `Island` so state survives the panel remounting; `MediaCard`, `PillMedia`, `useProgress`,
   `artTheme` = album-art colors → `--tint-from`/`--tint-to`/`--accent`, set on `.stage`; those are `@property`-registered in
   `global.css` so they can transition. Use `var(--accent)` for highlights, not a fixed color),
-  `features/activities/` (`ActivityView` per kind, `ScreenshotActivity` with the drag/click gesture, inline SVG `icons`).
+  `features/activities/` (`ActivityView` per kind, `ScreenshotActivity` with the drag/click gesture, `ClaudeActivity`,
+  inline SVG `icons`), `features/claude/` (`useClaudeSessions` lives in `Island`, `ClaudeSpinner`/`ClaudeMark`, the
+  panel's `ClaudeSection`; `--claude` is a fixed token like `--charge`).
   The island has three shapes (`data-mode`: `pill` | `activity` | `panel`), all driven by Rust events.
 
 ## Architecture rules
@@ -158,6 +166,15 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
 - **Testing activities from outside without side effects:** toggle Caps Lock with SendInput and toggle it back; volume
   up N then down N; brightness via WMI `WmiSetBrightness` and restore; copy an image into the Screenshots folder (then
   delete it). Read `GWL_EXSTYLE` (`WS_EX_TRANSPARENT`) to check click-through.
+- **The hook forwarder must stay quiet and fast.** `topbar.exe hook` runs before Tauri, never prints, never panics
+  (release is `panic = "abort"`, a non-zero exit shows as a hook error in Claude Code) and bounds every wait. Keep
+  the hook entry in *shell form* with an explicit `shell`: Claude Code before 2.1.15x ignores the `args` exec form
+  and would run a bare `topbar.exe`, launching TopBar. "Connect Claude Code…" records the exe that clicked it (as with
+  autostart), so connect from the installed build.
+- **Testing Claude Code hooks without touching `~/.claude/settings.json`:** pipe hook JSON *files* into
+  `target\debug\topbar.exe hook` (shells mangle backslashes in inline JSON, C7), or run
+  `claude -p "…" --settings <file with the hook entries>`. Never write the real settings in tests; `hooks.rs` tests
+  use a temp folder, and `CLAUDE_CONFIG_DIR` points the tray item at another folder.
 - **Windows PowerShell 5.1 can't list GSMTC sessions** (`GetSessions()` comes back empty). Check media state with the
   `topbar_lib=debug` log instead.
 

@@ -11,7 +11,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use windows::Win32::Foundation::POINT;
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
-use crate::activity::{self, Activities};
+use crate::activity::{self, Activities, Signal};
 use crate::error::AppResult;
 use crate::ipc::{
     events, Activity, ActivityHidePayload, CapsLockActivity, IslandStatePayload, VisibilityPayload,
@@ -107,7 +107,7 @@ fn run(app: AppHandle, geo: Geometry, own: isize) {
                     "fullscreen app in foreground: {fullscreen}; island hidden: {fullscreen}"
                 );
                 if fullscreen {
-                    machine.hide(&mut out);
+                    machine.hide(now, &mut out);
                     flush(&app, &island, &activities, &mut out);
                     if !ignoring {
                         window::set_click_through(win32::from_raw(own), true);
@@ -140,8 +140,11 @@ fn run(app: AppHandle, geo: Geometry, own: isize) {
             }
         };
         if let Some(rx) = &incoming {
-            for activity in rx.try_iter() {
-                offer(&mut machine, activity, &mut out);
+            for signal in rx.try_iter() {
+                match signal {
+                    Signal::Offer(activity) => offer(&mut machine, activity, &mut out),
+                    Signal::Retract(key) => machine.retract(&key, &mut out),
+                }
             }
         }
         let on = activity::caps_lock_on();
@@ -180,7 +183,7 @@ fn run(app: AppHandle, geo: Geometry, own: isize) {
         };
         let before = machine.phase;
         if force {
-            machine.force_collapse(&mut out);
+            machine.force_collapse(now, &mut out);
         } else {
             machine.tick(&sample, &mut out);
         }

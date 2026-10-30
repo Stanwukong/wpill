@@ -9,6 +9,7 @@ pub use icon::IconCache;
 use std::path::Path;
 
 use tauri::{AppHandle, Manager, State};
+use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
 
 use crate::error::{AppError, AppResult};
@@ -48,6 +49,30 @@ pub fn activate_window(island: State<'_, Island>, hwnd: i64) -> AppResult<()> {
     activate::bring_to_front(win32::from_raw(hwnd as isize))?;
     island.request_collapse();
     Ok(())
+}
+
+/// An Alt+Tab window, for other features that need to find one (e.g. a Claude Code session's terminal).
+pub struct TopLevel {
+    pub hwnd: isize,
+    pub pid: u32,
+    pub title: String,
+}
+
+/// Alt+Tab windows in Z-order (most recently active first), excluding `own`.
+pub fn top_level_windows(own: HWND) -> Vec<TopLevel> {
+    enumerate::alt_tab_windows(own)
+        .into_iter()
+        .map(|w| TopLevel {
+            pid: win32::window_pid(win32::from_raw(w.hwnd)),
+            hwnd: w.hwnd,
+            title: w.title,
+        })
+        .collect()
+}
+
+/// The foreground fallback chain from `activate.rs`. Call on the main thread (sync command).
+pub fn bring_to_front(hwnd: HWND) -> AppResult<()> {
+    activate::bring_to_front(hwnd)
 }
 
 fn file_name(path: &str) -> Option<String> {

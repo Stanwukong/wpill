@@ -20,14 +20,14 @@ use windows::Win32::System::Wmi::{
     WBEM_S_TIMEDOUT,
 };
 
-use super::Watcher;
+use super::{Signal, Watcher};
 use crate::error::AppResult;
 use crate::ipc::{Activity, BrightnessActivity};
 
 /// How long one pull waits; bounds how quickly the thread sees the stop flag.
 const PULL_TIMEOUT_MS: i32 = 500;
 
-pub fn start(out: Sender<Activity>) -> AppResult<Watcher> {
+pub fn start(out: Sender<Signal>) -> AppResult<Watcher> {
     let stop = Arc::new(AtomicBool::new(false));
     let flag = stop.clone();
     Watcher::spawn(
@@ -37,7 +37,7 @@ pub fn start(out: Sender<Activity>) -> AppResult<Watcher> {
     )
 }
 
-fn run(out: &Sender<Activity>, stop: &AtomicBool) {
+fn run(out: &Sender<Signal>, stop: &AtomicBool) {
     // SAFETY: called once at the top of this thread; balanced by CoUninitialize below.
     let com = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
     match watch(out, stop) {
@@ -50,7 +50,7 @@ fn run(out: &Sender<Activity>, stop: &AtomicBool) {
     }
 }
 
-fn watch(out: &Sender<Activity>, stop: &AtomicBool) -> Result<()> {
+fn watch(out: &Sender<Signal>, stop: &AtomicBool) -> Result<()> {
     // SAFETY: plain WMI calls; every object is a COM smart pointer released on drop, and the VARIANT is
     // cleared after reading.
     unsafe {
@@ -101,7 +101,7 @@ fn watch(out: &Sender<Activity>, stop: &AtomicBool) -> Result<()> {
             let level = level?.clamp(0, 100) as u8;
             // Each key press can raise the same value twice; only changes are activities.
             if last.replace(level) != Some(level) {
-                let _ = out.send(Activity::Brightness(BrightnessActivity { level }));
+                let _ = out.send(Activity::Brightness(BrightnessActivity { level }).into());
             }
         }
     }

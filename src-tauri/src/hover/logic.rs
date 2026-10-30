@@ -171,7 +171,7 @@ impl Machine {
         if s.in_hot_zone && !suppressed {
             let since = *arm.get_or_insert(s.now);
             if s.now.saturating_duration_since(since) >= ARM_DELAY {
-                self.finish(out);
+                self.park(s.now, out);
                 self.phase = Phase::Expanded;
                 out.push(Output::Expand);
                 return;
@@ -197,9 +197,10 @@ impl Machine {
         };
     }
 
-    /// `request_collapse`: closes the panel or ends the activity, then waits for the cursor to leave the hot zone.
-    pub fn force_collapse(&mut self, out: &mut Vec<Output>) {
-        self.finish(out);
+    /// `request_collapse`: closes the panel or ends the activity (a sticky one comes back), then waits for the
+    /// cursor to leave the hot zone.
+    pub fn force_collapse(&mut self, now: Instant, out: &mut Vec<Output>) {
+        self.park(now, out);
         let (next, transition) = force_collapse(self.phase);
         self.phase = next;
         if transition.is_some() {
@@ -207,13 +208,27 @@ impl Machine {
         }
     }
 
-    /// The island is being hidden (fullscreen app). Waiting notices stay queued and may go stale.
-    pub fn hide(&mut self, out: &mut Vec<Output>) {
+    /// The island is being hidden (fullscreen app). Waiting notices stay queued and may go stale; a sticky
+    /// one on screen goes back in line.
+    pub fn hide(&mut self, now: Instant, out: &mut Vec<Output>) {
         if self.phase.is_expanded() {
             out.push(Output::Collapse);
         }
-        self.finish(out);
+        self.park(now, out);
         self.phase = Phase::Collapsed;
+    }
+
+    /// A source withdrew `key` (e.g. a Claude Code session got its answer): drop it, waiting or showing.
+    pub fn retract(&mut self, key: &str, out: &mut Vec<Output>) {
+        if let Some(id) = self.queue.retract(key) {
+            out.push(Output::Hide(id));
+            if let Phase::Showing {
+                arm, suppressed, ..
+            } = self.phase
+            {
+                self.phase = idle(arm, suppressed);
+            }
+        }
     }
 
     /// Ends activity `id` early (e.g. its screenshot was opened), if it's still the one showing.
@@ -244,6 +259,12 @@ impl Machine {
 
     fn finish(&mut self, out: &mut Vec<Output>) {
         if let Some(id) = self.queue.finish() {
+            out.push(Output::Hide(id));
+        }
+    }
+
+    fn park(&mut self, now: Instant, out: &mut Vec<Output>) {
+        if let Some(id) = self.queue.park(now) {
             out.push(Output::Hide(id));
         }
     }
@@ -300,7 +321,8 @@ pub fn in_panel(geo: &Geometry, panel: PanelRect, x: i32, y: i32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::activity::test_activities::{screenshot, volume};
+    use crate::activity::claude_key;
+    use crate::activity::test_activities::{needs_input, screenshot, volume};
 
     fn sample(now: Instant, in_hot_zone: bool, in_panel: bool) -> Sample {
         Sample {
@@ -460,7 +482,7 @@ mod tests {
         let mut m = Machine::default();
         let id = shown_id(&offer(&mut m, volume(40), t0));
         let mut out = Vec::new();
-        m.force_collapse(&mut out);
+        m.force_collapse(t0, &mut out);
         assert_eq!(out, vec![Output::Hide(id)]);
         assert_eq!(m.phase, Phase::Suppressed);
 
@@ -474,7 +496,7 @@ mod tests {
         assert!(tick(&mut m, sample(t0 + ms(400), true, true)).is_empty());
 
         let mut out = Vec::new();
-        m.hide(&mut out);
+        m.hide(t0, &mut out);
         assert!(matches!(out[..], [Output::Hide(_)]));
         assert_eq!(m.phase, Phase::Collapsed);
         let mut out = Vec::new();
@@ -493,6 +515,45 @@ mod tests {
         m.dismiss(id, &mut out);
         assert_eq!(out, vec![Output::Hide(id)]);
         assert_eq!(m.phase, Phase::Collapsed);
+    }
+
+    #[test]
+    fn needs_input_comes_back_after_the_panel_closes_and_ends_when_retracted() {
+        let t0 = Instant::now();
+        let mut m = Machine::default();
+        let asked = shown_id(&offer(&mut m, needs_input(1), t0));
+        // Never times out.
+        assert!(tick(&mut m, sample(t0 + ms(60_000), false, false)).is_empty());
+        // Dwell opens the panel; the question is parked, not dropped.
+        tick(&mut m, sample(t0 + ms(60_010), true, true));
+        let out = tick(&mut m, sample(t0 + ms(60_010) + ARM_DELAY, true, true));
+        assert_eq!(out, vec![Output::Hide(asked), Output::Expand]);
+        tick(&mut m, sample(t0 + ms(61_000), false, false));
+        let out = tick(&mut m, sample(t0 + ms(61_000) + LEAVE_DELAY, false, false));
+        assert_eq!(out[0], Output::Collapse);
+        let back = shown_id(&out);
+        assert!(m.showing());
+        // Hovering it makes it clickable.
+        tick(&mut m, on_activity(t0 + ms(62_000)));
+        assert!(m.accepts_clicks());
+        let mut out = Vec::new();
+        m.retract(&claude_key(1), &mut out);
+        assert_eq!(out, vec![Output::Hide(back)]);
+        assert!(!m.showing());
+    }
+
+    #[test]
+    fn a_question_asked_during_fullscreen_shows_afterwards_and_dismiss_acknowledges_it() {
+        let t0 = Instant::now();
+        let mut m = Machine::default();
+        let mut out = Vec::new();
+        m.offer(needs_input(1), t0, true, &mut out);
+        assert!(out.is_empty());
+        let id = shown_id(&tick(&mut m, sample(t0 + 30 * 60 * ms(1000), false, false)));
+        let mut out = Vec::new();
+        m.dismiss(id, &mut out);
+        assert_eq!(out, vec![Output::Hide(id)]);
+        assert!(tick(&mut m, sample(t0 + 31 * 60 * ms(1000), false, false)).is_empty());
     }
 
     #[test]

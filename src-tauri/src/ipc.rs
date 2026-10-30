@@ -9,6 +9,7 @@ pub mod events {
     pub const MEDIA_STATE: &str = "media:state";
     pub const ACTIVITY_SHOW: &str = "activity:show";
     pub const ACTIVITY_HIDE: &str = "activity:hide";
+    pub const CLAUDE_SESSIONS: &str = "claude:sessions";
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -34,7 +35,8 @@ pub struct ActivityPayload {
     #[serde(flatten)]
     pub activity: Activity,
     /// Time left at emit; Rust times it (and holds it while an interactive activity is hovered).
-    pub duration_ms: u64,
+    /// `None` for a sticky notice, which stays until its source withdraws it.
+    pub duration_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -53,6 +55,8 @@ pub enum Activity {
     Power(PowerActivity),
     CapsLock(CapsLockActivity),
     Screenshot(ScreenshotActivity),
+    ClaudeDone(ClaudeDoneActivity),
+    ClaudeNeedsInput(ClaudeNeedsInputActivity),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -116,6 +120,61 @@ pub struct ScreenshotActivity {
     /// Stays in Rust: drag/open commands look it up by activity id, so JS never names a path.
     #[serde(skip)]
     pub path: std::path::PathBuf,
+}
+
+/// A Claude Code turn finished (`Stop`), or ended on an API error (`StopFailure`, `failed`).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeDoneActivity {
+    /// Ours (`ClaudeSession::session_id`), not Claude Code's id.
+    pub session_id: u32,
+    /// The session's working folder name.
+    pub project: String,
+    pub failed: bool,
+}
+
+/// A Claude Code session is waiting on a permission prompt or a question. Sticky: it stays until the
+/// session's next event.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeNeedsInputActivity {
+    pub session_id: u32,
+    pub project: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ClaudeStatus {
+    /// Open, no task yet (or a new one after `/clear`).
+    Idle,
+    Working,
+    Done,
+    NeedsInput,
+}
+
+/// `claude:sessions`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeSessionsPayload {
+    /// Most recently updated first.
+    pub sessions: Vec<ClaudeSession>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeSession {
+    /// Ours, stable for the session's lifetime; Claude Code's id stays in Rust.
+    pub session_id: u32,
+    pub project: String,
+    pub status: ClaudeStatus,
+    /// Unix epoch ms of the last status change.
+    pub updated_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeHooksStatus {
+    pub installed: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

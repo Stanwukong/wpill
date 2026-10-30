@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { ActivityPayload, PowerActivity } from "../../lib/types";
+import { ClaudeActivity } from "./ClaudeActivity";
 import { BatteryIcon, CapsLockIcon, HeadphonesIcon, SpeakerIcon, SunIcon } from "./icons";
 import { ScreenshotActivity } from "./ScreenshotActivity";
 import "./activities.css";
@@ -45,6 +46,14 @@ export function ActivityView({ activity }: { activity: ActivityPayload }) {
       return <Power power={activity.payload} />;
     case "screenshot":
       return <ScreenshotActivity id={activity.id} shot={activity.payload} />;
+    case "claudeDone": {
+      const { sessionId, project, failed } = activity.payload;
+      return <ClaudeActivity sessionId={sessionId} project={project} detail={failed ? "Stopped" : "Done"} muted={failed} />;
+    }
+    case "claudeNeedsInput": {
+      const { sessionId, project } = activity.payload;
+      return <ClaudeActivity sessionId={sessionId} project={project} detail="Needs your input" />;
+    }
   }
 }
 

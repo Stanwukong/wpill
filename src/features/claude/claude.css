@@ -1,0 +1,150 @@
+/*
+ * Claude Code's spinner: its Windows-terminal frames (· ✢ * ✶ ✻ ✽, then back) stacked in one pseudo-element and
+ * stepped up a line every 120 ms (1.44 s per cycle) with a transform, so it stays on the compositor. The box is a
+ * fixed size so frames of different widths don't move the layout. Only Segoe UI Symbol has all of these glyphs.
+ */
+.claude-spinner {
+  flex: none;
+  display: inline-block;
+  width: 14px;
+  height: 16px;
+  overflow: hidden;
+  font-family: "Segoe UI Symbol", sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 16px;
+  text-align: center;
+  color: var(--claude);
+}
+
+.claude-spinner::before {
+  content: "\00B7\A\2722\A*\A\2736\A\273B\A\273D\A\273D\A\273B\A\2736\A*\A\2722\A\00B7";
+  display: block;
+  white-space: pre;
+  animation: claude-spin 1440ms steps(12) infinite;
+}
+
+@keyframes claude-spin {
+  to {
+    transform: translateY(-100%);
+  }
+}
+
+/* Claude Code shows a ● in the same place. */
+@media (prefers-reduced-motion: reduce) {
+  .claude-spinner::before {
+    content: "\25CF";
+    font-size: 9px;
+    animation: none;
+  }
+}
+
+/* The ✻ in the icon slot of the Claude activities (the 22 px icon box). */
+.claude-mark {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  font-family: "Segoe UI Symbol", sans-serif;
+  font-size: 19px;
+  line-height: 1;
+  color: var(--claude);
+}
+
+/* Panel section */
+.claude {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 14px;
+}
+
+.claude__heading {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--island-muted);
+}
+
+/* At most four rows; more scroll. */
+.claude__list {
+  list-style: none;
+  margin: 0 -6px;
+  padding: 0;
+  min-height: 30px;
+  max-height: 120px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.claude-row {
+  width: 100%;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  white-space: nowrap;
+  font-size: 12.5px;
+  transition: background-color 120ms ease;
+}
+
+.claude-row:hover {
+  background: var(--tile-hover);
+}
+
+.claude-row:active {
+  background: var(--tile-active);
+}
+
+.claude-row__mark {
+  flex: none;
+  width: 14px;
+  display: grid;
+  place-items: center;
+}
+
+.claude-row__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--island-muted);
+}
+
+.claude-row[data-status="needsInput"] .claude-row__dot {
+  background: var(--claude);
+}
+
+.claude-row__project {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.claude-row__status {
+  flex: none;
+  color: var(--island-muted);
+}
+
+.claude-row[data-status="needsInput"] .claude-row__status {
+  color: var(--claude);
+}
+
+.claude-row__time {
+  flex: none;
+  min-width: 58px;
+  text-align: right;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--island-muted);
+}
