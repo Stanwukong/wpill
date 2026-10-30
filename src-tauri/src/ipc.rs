@@ -202,6 +202,8 @@ pub struct AgentApprovalActivity {
     /// What "allow for this run" would cover ("git", "edits"), or `None` where it isn't offered (`input`
     /// actions, compound shell commands).
     pub remember_as: Option<String>,
+    /// One of TopBar's desktop looks (2.7c): the island shows an eye, and the screen edges glow while it runs.
+    pub desktop: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

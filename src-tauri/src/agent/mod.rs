@@ -5,6 +5,9 @@
 //! - Claude Code reaches TopBar's MCP server through `topbar.exe mcp` (`bridge.rs`) and the agent pipe
 //!   (`pipe.rs`). The `agent-server` thread accepts bridges; each connection proves its run with a token, and its
 //!   `approve` calls (`mcp.rs`) become `agentApproval` activities (`approvals.rs`, `describe.rs`).
+//! - The desktop tools (2.7c, `tools.rs` → `crate::desktop`) look at windows and the screen. Each look is
+//!   approved (Claude Code's prompt, then TopBar's own grant check), runs on its own thread, and lights the
+//!   screen edges (`window::glow`) while it runs.
 //! - Hotkeys (`hotkey.rs`) open the command window or stop everything. Everything is logged (`audit.rs`).
 //!
 //! Rust owns runs, approvals and timeouts; React only renders `agent:runs`, `agent:output` and the activities.
@@ -23,6 +26,7 @@ mod pipe;
 mod run;
 mod settings;
 mod stream;
+mod tools;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -37,14 +41,15 @@ use windows::Win32::Foundation::WAIT_TIMEOUT;
 use windows::Win32::System::Threading::{SetEvent, WaitForSingleObject, INFINITE};
 
 use crate::activity::{approval_key, Activities, Signal, Watcher};
+use crate::desktop;
 use crate::error::{AppError, AppResult};
 use crate::ipc::{
     events, Activity, AgentEntry, AgentEvent, AgentFinishedActivity, AgentOptions,
     AgentOutputPayload, AgentRunsPayload, AgentStarted, AgentStatus, ClaudeInstall,
 };
 use crate::win32::Handle;
-use crate::window;
-use approvals::{Approvals, Asked, Pending, ReplyTo, Request};
+use crate::window::{self, glow};
+use approvals::{Approvals, Asked, Pending, Purpose, ReplyTo, Request};
 use audit::{now_ms, Audit};
 use lifecycle::Run;
 use settings::AgentSettings;
@@ -96,9 +101,20 @@ struct Inner {
 pub struct Agents(Mutex<Inner>);
 
 /// Work to do once the lock is released.
+/// An approved desktop look, run after the lock is released.
+struct LookJob {
+    pipe: Arc<pipe::Pipe>,
+    rpc_id: Value,
+    run_id: String,
+    tool: String,
+    args: Value,
+    pid: Option<u32>,
+}
+
 #[derive(Default)]
 struct After {
     replies: Vec<(Arc<pipe::Pipe>, Value)>,
+    looks: Vec<LookJob>,
     signals: Vec<Signal>,
     outputs: Vec<AgentOutputPayload>,
     runs_changed: bool,
@@ -110,6 +126,9 @@ impl After {
             if let Err(e) = pipe.write(message.to_string().as_bytes()) {
                 log::debug!("agent reply not delivered: {e}");
             }
+        }
+        for job in self.looks {
+            run_look(app, job);
         }
         if let Some(tx) = agents.lock().signals.clone() {
             for signal in self.signals {
@@ -183,8 +202,25 @@ impl Inner {
                 _ => "The user denied this in TopBar. Don't retry it; adapt or explain what you needed.",
             };
             if let Some(conn) = self.conns.get(&p.reply.conn) {
-                let reply = mcp::decision(p.reply.rpc_id.clone(), allow, p.input.clone(), message);
-                after.replies.push((conn.pipe.clone(), reply));
+                let rpc_id = p.reply.rpc_id.clone();
+                match p.purpose {
+                    Purpose::Prompt => {
+                        let reply = mcp::decision(rpc_id, allow, p.input.clone(), message);
+                        after.replies.push((conn.pipe.clone(), reply));
+                    }
+                    // TopBar's own check before a look: allowed means look now, denied is the tool's error.
+                    Purpose::Look if allow => after.looks.push(LookJob {
+                        pipe: conn.pipe.clone(),
+                        rpc_id,
+                        run_id: p.activity.run_id.clone(),
+                        tool: p.tool.clone(),
+                        args: p.input.clone(),
+                        pid: p.target_pid,
+                    }),
+                    Purpose::Look => after
+                        .replies
+                        .push((conn.pipe.clone(), tools::refused(rpc_id, message))),
+                }
             }
             after
                 .signals
@@ -290,6 +326,15 @@ pub fn spawn(app: &AppHandle, activities: &Activities) {
     match start_server(app.clone(), stop.clone()) {
         Ok(watcher) => activities.add_watcher(watcher),
         Err(e) => log::warn!("agent pipe unavailable, approvals won't work: {e}"),
+    }
+    match app
+        .get_webview_window(window::LABEL)
+        .and_then(|w| w.hwnd().ok())
+        .map(glow::spawn)
+    {
+        Some(Ok(watcher)) => activities.add_watcher(watcher),
+        Some(Err(e)) => log::warn!("glow unavailable: {e}"),
+        None => log::warn!("glow unavailable: no island window"),
     }
     match start_timer(app.clone(), stop) {
         Ok(watcher) => activities.add_watcher(watcher),
@@ -404,6 +449,7 @@ fn serve(app: &AppHandle, pipe: Arc<pipe::Pipe>, stop: &Handle) {
                 tool_name,
                 input,
             } => approve(app, conn, rpc_id, tool_name, input),
+            mcp::Action::Look { rpc_id, name, args } => look(app, conn, rpc_id, name, args),
             mcp::Action::Ignore => {}
         }
     }
@@ -417,7 +463,9 @@ fn serve(app: &AppHandle, pipe: Arc<pipe::Pipe>, stop: &Handle) {
     after.run(app, &agents);
 }
 
+/// Claude Code's permission prompt for `tool`.
 fn approve(app: &AppHandle, conn: u64, rpc_id: Value, tool: String, input: Value) {
+    let target = desktop_target(&tool, &input);
     let agents = app.state::<Agents>();
     let mut after = After::default();
     {
@@ -426,73 +474,211 @@ fn approve(app: &AppHandle, conn: u64, rpc_id: Value, tool: String, input: Value
             return;
         };
         let (pipe, run_id) = (c.pipe.clone(), c.run_id.clone());
-        let timeout = Duration::from_secs(inner.settings.approval_timeout_secs.max(10));
-        let Some(slot) = inner.slot(&run_id) else {
-            return;
-        };
-        let request = Request {
-            run_id: run_id.clone(),
-            project: slot.run.project.clone(),
-            cwd: slot.run.cwd.clone(),
-            tool: tool.clone(),
-            input: input.clone(),
-            reply: ReplyTo { conn, rpc_id },
-        };
         inner.audit(
             &run_id,
             "approval",
             json!({ "tool": tool, "input": audit::input_for_log(&input) }),
         );
-        match inner.approvals.ask(request, Instant::now(), timeout) {
-            Asked::Remembered { reply, input } => {
-                after
-                    .replies
-                    .push((pipe, mcp::decision(reply.rpc_id, true, input, "")));
-                inner.audit(
-                    &run_id,
-                    "decision",
-                    json!({ "allow": true, "by": "remembered" }),
-                );
-            }
-            Asked::Waiting(p) => {
-                let a = p.activity.clone();
-                inner.audit(
-                    &run_id,
-                    "asked",
-                    json!({ "requestId": a.request_id, "summary": a.summary,
-                                                      "risk": a.risk }),
-                );
-                if let Some(slot) = inner.slot(&run_id) {
-                    let at = now_ms();
-                    let entry = slot.run.note(
-                        AgentEvent::Approval {
-                            request_id: a.request_id,
-                            tool: a.tool.clone(),
-                            summary: a.summary.clone(),
-                            risk: a.risk,
-                        },
-                        at,
-                    );
-                    slot.run.set_waiting(true, at);
-                    after.outputs.push(AgentOutputPayload {
-                        run_id: run_id.clone(),
-                        entry,
-                    });
-                }
-                log::debug!(
-                    "agent approval {} for {}: {}",
-                    a.request_id,
-                    a.tool,
-                    a.summary
-                );
-                after
-                    .signals
-                    .push(Signal::Offer(Activity::AgentApproval(a)));
-                after.runs_changed = true;
+        let reply = ReplyTo { conn, rpc_id };
+        let asked = Ask {
+            run_id: &run_id,
+            tool: &tool,
+            purpose: Purpose::Prompt,
+            target,
+        };
+        if let Some((reply, input, _)) = ask(&mut inner, asked, input, reply, &mut after) {
+            after
+                .replies
+                .push((pipe, mcp::decision(reply.rpc_id, true, input, "")));
+        }
+    }
+    after.run(app, &agents);
+}
+
+/// One of the desktop tools was called: it runs if its prompt was approved (a grant) or its kind is allowed for
+/// this run; otherwise TopBar asks in the island itself first.
+fn look(app: &AppHandle, conn: u64, rpc_id: Value, name: &'static str, args: Value) {
+    let tool = format!("mcp__{}__{name}", mcp::SERVER_NAME);
+    let target = desktop_target(&tool, &args);
+    let agents = app.state::<Agents>();
+    let mut after = After::default();
+    {
+        let mut inner = agents.lock();
+        let Some(c) = inner.conns.get(&conn) else {
+            return;
+        };
+        let (pipe, run_id) = (c.pipe.clone(), c.run_id.clone());
+        if let Err(why) = tools::parse(name, &args) {
+            after.replies.push((pipe, tools::refused(rpc_id, &why)));
+        } else if let Some(pid) = inner.approvals.take_grant(&run_id, &tool, &args) {
+            after.looks.push(LookJob {
+                pipe,
+                rpc_id,
+                run_id,
+                tool,
+                args,
+                pid,
+            });
+        } else {
+            log::info!("agent look {tool} arrived without an approved prompt; asking in TopBar");
+            let reply = ReplyTo { conn, rpc_id };
+            let asked = Ask {
+                run_id: &run_id,
+                tool: &tool,
+                purpose: Purpose::Look,
+                target,
+            };
+            if let Some((reply, args, pid)) = ask(&mut inner, asked, args, reply, &mut after) {
+                after.looks.push(LookJob {
+                    pipe,
+                    rpc_id: reply.rpc_id,
+                    run_id,
+                    tool,
+                    args,
+                    pid,
+                });
             }
         }
     }
     after.run(app, &agents);
+}
+
+/// The window a desktop look names, resolved before asking: its label for the summary, and its process.
+fn desktop_target(tool: &str, input: &Value) -> (Option<String>, Option<u32>) {
+    if !describe::is_desktop(tool) {
+        return (None, None);
+    }
+    let target = input
+        .get("hwnd")
+        .and_then(|v| v.as_i64().or_else(|| v.as_str()?.trim().parse().ok()))
+        .and_then(desktop::identify);
+    (
+        target.as_ref().map(tools::target_label),
+        target.map(|t| t.pid),
+    )
+}
+
+struct Ask<'a> {
+    run_id: &'a str,
+    tool: &'a str,
+    purpose: Purpose,
+    /// For desktop looks: the window's label and process.
+    target: (Option<String>, Option<u32>),
+}
+
+/// Asks about a request: `Some` (answered at once) when its kind is remembered for the run, else it waits as an
+/// `agentApproval` activity.
+fn ask(
+    inner: &mut Inner,
+    a: Ask<'_>,
+    input: Value,
+    reply: ReplyTo,
+    after: &mut After,
+) -> Option<(ReplyTo, Value, Option<u32>)> {
+    let timeout = Duration::from_secs(inner.settings.approval_timeout_secs.max(10));
+    let slot = inner.slot(a.run_id)?;
+    let request = Request {
+        run_id: a.run_id.to_string(),
+        project: slot.run.project.clone(),
+        cwd: slot.run.cwd.clone(),
+        tool: a.tool.to_string(),
+        input,
+        reply,
+        purpose: a.purpose,
+        target: a.target.0,
+        target_pid: a.target.1,
+    };
+    match inner.approvals.ask(request, Instant::now(), timeout) {
+        Asked::Remembered {
+            reply,
+            input,
+            target_pid,
+        } => {
+            inner.audit(
+                a.run_id,
+                "decision",
+                json!({ "allow": true, "by": "remembered" }),
+            );
+            Some((reply, input, target_pid))
+        }
+        Asked::Waiting(p) => {
+            let activity = p.activity.clone();
+            let by = if a.purpose == Purpose::Look {
+                "topbar"
+            } else {
+                "claudeCode"
+            };
+            inner.audit(
+                a.run_id,
+                "asked",
+                json!({ "requestId": activity.request_id, "summary": activity.summary,
+                        "risk": activity.risk, "by": by }),
+            );
+            if let Some(slot) = inner.slot(a.run_id) {
+                let at = now_ms();
+                let entry = slot.run.note(
+                    AgentEvent::Approval {
+                        request_id: activity.request_id,
+                        tool: activity.tool.clone(),
+                        summary: activity.summary.clone(),
+                        risk: activity.risk,
+                    },
+                    at,
+                );
+                slot.run.set_waiting(true, at);
+                after.outputs.push(AgentOutputPayload {
+                    run_id: a.run_id.to_string(),
+                    entry,
+                });
+            }
+            log::debug!(
+                "agent approval {} for {}: {}",
+                activity.request_id,
+                activity.tool,
+                activity.summary
+            );
+            after
+                .signals
+                .push(Signal::Offer(Activity::AgentApproval(activity)));
+            after.runs_changed = true;
+            None
+        }
+    }
+}
+
+/// Runs an approved look on its own thread with the glow up, then answers the call and logs what was looked at
+/// (never the image or the tree).
+fn run_look(app: &AppHandle, job: LookJob) {
+    let app = app.clone();
+    let spawned = std::thread::Builder::new()
+        .name("agent-look".into())
+        .spawn(move || {
+            let name = tools::short_name(&job.tool).unwrap_or_default();
+            let result = match tools::parse(name, &job.args) {
+                Ok(look) => {
+                    glow::look_started(desktop::monitor_for(&look));
+                    let result = desktop::run(look, job.pid);
+                    glow::look_ended();
+                    result
+                }
+                Err(why) => Err(desktop::LookError::Failed(why)),
+            };
+            let reply = tools::reply(job.rpc_id, &result);
+            let audit = app.state::<Agents>().lock().audit.clone();
+            if let Some(audit) = audit {
+                audit.log(&job.run_id, "look", tools::audit_fields(name, &result));
+            }
+            match &result {
+                Ok(_) => log::debug!("agent look {name} done"),
+                Err(e) => log::info!("agent look {name} failed: {}", e.code()),
+            }
+            if let Err(e) = job.pipe.write(reply.to_string().as_bytes()) {
+                log::debug!("agent look reply not delivered: {e}");
+            }
+        });
+    if let Err(e) = spawned {
+        log::warn!("agent look thread: {e}");
+    }
 }
 
 fn start_timer(app: AppHandle, stop: Arc<Handle>) -> AppResult<Watcher> {
@@ -935,7 +1121,8 @@ pub async fn command_window_hide(app: AppHandle) -> AppResult<()> {
 /// Debug builds only: drive the agent from outside for verification, through a second launch that the
 /// single-instance plugin forwards here. `topbar.exe agent-test start <cwd> <prompt> [model] [maxTurns]`,
 /// `… decide <requestId> allow|deny [run]`, `… send <runId> <text>`, `… stop <runId>`, `… stop-all`,
-/// `… show [runId]`. Results go to the log.
+/// `… show [runId]`, `… look <tool> [argsJson] [imageFile]` (a desktop look without Claude or approvals, glow
+/// included). Results go to the log.
 #[cfg(debug_assertions)]
 pub fn debug_command(app: &AppHandle, args: &[String]) {
     let app = app.clone();
@@ -984,6 +1171,38 @@ pub fn debug_command(app: &AppHandle, args: &[String]) {
             }
             "show" => window::command::show(&app, args.get(1).cloned()).map(|()| "shown".into()),
             "hide" => window::command::hide(&app).map(|()| "hidden".into()),
+            // `look <tool> [argsJson] [imageFile]`: a desktop look without Claude or approvals (glow included).
+            "look" => {
+                let name = arg(1);
+                let args: Value = serde_json::from_str(&arg(2)).unwrap_or(json!({}));
+                let name = tools::NAMES.iter().copied().find(|n| *n == name);
+                match name.map(|n| tools::parse(n, &args)) {
+                    Some(Ok(look)) => {
+                        glow::look_started(desktop::monitor_for(&look));
+                        let result = desktop::run(look, None);
+                        glow::look_ended();
+                        if let (Ok(desktop::Outcome::Image { image, .. }), false) =
+                            (&result, arg(3).is_empty())
+                        {
+                            let _ = std::fs::write(arg(3), &image.bytes);
+                        }
+                        let audit = tools::audit_fields(name.unwrap_or_default(), &result);
+                        let reply = tools::reply(json!(0), &result);
+                        let text: Vec<_> = reply["result"]["content"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|c| c["text"].as_str())
+                            .collect();
+                        Ok(format!(
+                            "{audit}\n{}",
+                            describe::truncate(&text.join("\n"), 3000)
+                        ))
+                    }
+                    Some(Err(e)) => Err(AppError::AgentInvalid(e)),
+                    None => Err(AppError::AgentInvalid("unknown tool".into())),
+                }
+            }
             // A clean quit (tray "Quit TopBar" does the same), to check runs stop with it.
             "quit" => {
                 app.exit(0);

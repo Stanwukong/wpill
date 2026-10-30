@@ -88,7 +88,7 @@ unsafe fn last_visible_active_popup(hwnd: HWND) -> HWND {
 }
 
 /// Cloaked windows: other virtual desktops, suspended UWP frames, etc.
-fn is_cloaked(hwnd: HWND) -> bool {
+pub(super) fn is_cloaked(hwnd: HWND) -> bool {
     let mut cloaked = 0u32;
     // SAFETY: the out-pointer and size describe `cloaked`.
     let ok = unsafe {
@@ -102,7 +102,7 @@ fn is_cloaked(hwnd: HWND) -> bool {
     ok.is_ok() && cloaked != 0
 }
 
-fn window_title(hwnd: HWND) -> Option<String> {
+pub(super) fn window_title(hwnd: HWND) -> Option<String> {
     // SAFETY: buf is sized from the reported length plus the terminator.
     unsafe {
         let len = GetWindowTextLengthW(hwnd);
@@ -118,7 +118,7 @@ fn window_title(hwnd: HWND) -> Option<String> {
 }
 
 /// UWP apps live in a child of an ApplicationFrameHost window; report the child's process instead.
-fn exe_path(hwnd: HWND) -> Option<String> {
+pub(super) fn exe_path(hwnd: HWND) -> Option<String> {
     let pid = win32::window_pid(hwnd);
     let path = process_image_path(pid)?;
     if !path

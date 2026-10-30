@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { commands, errorMessage } from "../lib/ipc";
 import type { AgentApprovalActivity, AgentEntry, AgentEvent, AgentRun } from "../lib/types";
-import { StopGlyph } from "../features/agent/AgentGlyphs";
+import { EyeGlyph, StopGlyph } from "../features/agent/AgentGlyphs";
 import { endLabel, RISK_LABEL, runLabel } from "../features/agent/labels";
 import { decide, isLive, stopRun } from "../features/agent/useAgentRuns";
 import type { Transcript } from "./useTranscripts";
@@ -202,6 +202,7 @@ function PendingCard({ approval }: { approval: AgentApprovalActivity }) {
       <span className="pending__what">
         <span className="pending__tool">{approval.tool}</span>
         <span className="agent-risk" data-risk={approval.risk}>
+          {approval.desktop && <EyeGlyph />}
           {RISK_LABEL[approval.risk]}
         </span>
         <span className="pending__summary" title={approval.summary}>

@@ -115,13 +115,17 @@ fn blocks(m: &Value) -> impl Iterator<Item = &Value> {
         .flatten()
 }
 
-/// A tool result's content: a string, or text blocks (images and the rest are skipped).
+/// A tool result's content: a string, or text blocks. Images become `[image]` (the base64 never reaches the
+/// transcript); other blocks are skipped.
 fn content_text(content: Option<&Value>) -> String {
     match content {
         Some(Value::String(s)) => s.clone(),
         Some(Value::Array(parts)) => parts
             .iter()
-            .filter_map(|p| p.get("text").and_then(Value::as_str))
+            .filter_map(|p| match p.get("type").and_then(Value::as_str) {
+                Some("image") => Some("[image]"),
+                _ => p.get("text").and_then(Value::as_str),
+            })
             .collect::<Vec<_>>()
             .join("\n"),
         _ => String::new(),
@@ -212,7 +216,7 @@ mod tests {
             vec![StreamEvent::ToolResult {
                 id: "t".into(),
                 is_error: false,
-                text: "a\nb".into()
+                text: "a\n[image]\nb".into()
             }]
         );
     }

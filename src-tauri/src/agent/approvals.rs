@@ -2,6 +2,11 @@
 //!
 //! A request either is covered by something remembered for its run (answered at once) or waits as `Pending`
 //! until a click, its deadline, or the end of its run or bridge connection.
+//!
+//! Desktop looks (2.7c) are checked twice. Claude Code's `approve` call is the usual prompt; allowing it leaves a
+//! one-time *grant* for that exact input. When the look's own `tools/call` arrives it must find a grant or a
+//! remembered "for this run"; otherwise (a user allow rule skipped the prompt) TopBar asks itself, with
+//! `Purpose::Look`, so every look is approved in the island whatever Claude Code decided.
 
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
@@ -11,11 +16,21 @@ use serde_json::Value;
 use super::describe;
 use crate::ipc::{AgentApprovalActivity, AgentRisk};
 
+/// Grants kept per run at most (approved prompts whose call never came).
+const MAX_GRANTS: usize = 32;
+
 /// Where the answer goes: the bridge connection and the JSON-RPC id of its `tools/call`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReplyTo {
     pub conn: u64,
     pub rpc_id: Value,
+}
+
+/// What an approval answers: Claude Code's permission prompt, or TopBar's own check before a desktop look.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Purpose {
+    Prompt,
+    Look,
 }
 
 #[derive(Debug, Clone)]
@@ -26,6 +41,10 @@ pub struct Request {
     pub tool: String,
     pub input: Value,
     pub reply: ReplyTo,
+    pub purpose: Purpose,
+    /// For a desktop look at a window: its name ("Chrome · GitHub") and process, seen when asking.
+    pub target: Option<String>,
+    pub target_pid: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +53,9 @@ pub struct Pending {
     /// Sent back as `updatedInput` when allowed (unchanged).
     pub input: Value,
     pub reply: ReplyTo,
+    pub purpose: Purpose,
+    pub tool: String,
+    pub target_pid: Option<u32>,
     key: Option<String>,
     deadline: Instant,
 }
@@ -44,14 +66,24 @@ pub enum Asked {
     Remembered {
         reply: ReplyTo,
         input: Value,
+        target_pid: Option<u32>,
     },
     Waiting(Pending),
+}
+
+#[derive(Debug, Clone)]
+struct Grant {
+    run_id: String,
+    tool: String,
+    input: Value,
+    pid: Option<u32>,
 }
 
 #[derive(Debug, Default)]
 pub struct Approvals {
     pending: Vec<Pending>,
     remembered: HashMap<String, HashSet<String>>,
+    grants: Vec<Grant>,
     next_id: u32,
 }
 
@@ -64,12 +96,22 @@ impl Approvals {
                 .get(&req.run_id)
                 .is_some_and(|keys| keys.contains(key))
             {
+                if req.purpose == Purpose::Prompt {
+                    self.add_grant(&req.run_id, &req.tool, &req.input, req.target_pid);
+                }
                 return Asked::Remembered {
                     reply: req.reply,
                     input: req.input,
+                    target_pid: req.target_pid,
                 };
             }
         }
+        let desktop = describe::is_desktop(&req.tool);
+        let summary = if desktop {
+            describe::desktop_summary(&req.tool, &req.input, req.target.as_deref())
+        } else {
+            describe::summary(&req.tool, &req.input, &req.cwd)
+        };
         self.next_id = self.next_id.wrapping_add(1).max(1);
         let pending = Pending {
             activity: AgentApprovalActivity {
@@ -77,12 +119,16 @@ impl Approvals {
                 run_id: req.run_id,
                 project: req.project,
                 tool: describe::display_tool(&req.tool),
-                summary: describe::summary(&req.tool, &req.input, &req.cwd),
+                summary,
                 risk: describe::risk(&req.tool),
                 remember_as: key.as_deref().map(describe::remember_scope),
+                desktop,
             },
             input: req.input,
             reply: req.reply,
+            purpose: req.purpose,
+            tool: req.tool,
+            target_pid: req.target_pid,
             key,
             deadline: now + timeout,
         };
@@ -106,7 +152,38 @@ impl Approvals {
                     .insert(key.clone());
             }
         }
+        if allow && p.purpose == Purpose::Prompt {
+            let (run, tool, input) = (p.activity.run_id.clone(), p.tool.clone(), p.input.clone());
+            self.add_grant(&run, &tool, &input, p.target_pid);
+        }
         Some(p)
+    }
+
+    /// A desktop look's `tools/call` arrived: uses up the grant its approved prompt left. `Some(pid)` (the
+    /// target's process when it was approved, if any) when there was one.
+    pub fn take_grant(&mut self, run_id: &str, tool: &str, input: &Value) -> Option<Option<u32>> {
+        let i = self
+            .grants
+            .iter()
+            .position(|g| g.run_id == run_id && g.tool == tool && &g.input == input)?;
+        Some(self.grants.remove(i).pid)
+    }
+
+    fn add_grant(&mut self, run_id: &str, tool: &str, input: &Value, pid: Option<u32>) {
+        if !describe::is_desktop(tool) {
+            return;
+        }
+        if self.grants.iter().filter(|g| g.run_id == run_id).count() >= MAX_GRANTS {
+            if let Some(i) = self.grants.iter().position(|g| g.run_id == run_id) {
+                self.grants.remove(i);
+            }
+        }
+        self.grants.push(Grant {
+            run_id: run_id.into(),
+            tool: tool.into(),
+            input: input.clone(),
+            pid,
+        });
     }
 
     /// Requests past their deadline (to deny).
@@ -114,9 +191,10 @@ impl Approvals {
         self.take(|p| now >= p.deadline)
     }
 
-    /// The run ended: its pending requests (to withdraw) and what it remembered.
+    /// The run ended: its pending requests (to withdraw), what it remembered, and its grants.
     pub fn end_run(&mut self, run_id: &str) -> Vec<Pending> {
         self.remembered.remove(run_id);
+        self.grants.retain(|g| g.run_id != run_id);
         self.take(|p| p.activity.run_id == run_id)
     }
 
@@ -164,6 +242,9 @@ mod tests {
                 conn,
                 rpc_id: json!(7),
             },
+            purpose: Purpose::Prompt,
+            target: None,
+            target_pid: None,
         }
     }
 
@@ -183,6 +264,7 @@ mod tests {
         assert_eq!(p.activity.remember_as.as_deref(), Some("git"));
         assert_eq!(p.activity.summary, "git status");
         assert_eq!(p.activity.risk, AgentRisk::Change);
+        assert!(!p.activity.desktop);
         assert!(a.decide(p.activity.request_id, true, true).is_some());
         assert!(matches!(
             a.ask(
@@ -221,6 +303,11 @@ mod tests {
         a.decide(p.activity.request_id, true, false);
         waiting(a.ask(req("r1", "Write", edit(), 1), now, TIMEOUT));
         assert!(a.decide(999, true, false).is_none());
+        assert_eq!(
+            a.take_grant("r1", "Edit", &edit()),
+            None,
+            "grants are for looks only"
+        );
     }
 
     #[test]
@@ -232,6 +319,58 @@ mod tests {
         assert_eq!(p.activity.risk, AgentRisk::Input);
         a.decide(p.activity.request_id, true, true);
         waiting(a.ask(req("r1", "mcp__topbar__click", json!({}), 1), now, TIMEOUT));
+    }
+
+    #[test]
+    fn desktop_looks_need_a_grant_or_a_remembered_kind() {
+        let mut a = Approvals::default();
+        let now = Instant::now();
+        let shot = "mcp__topbar__screenshot";
+        let input = || json!({ "hwnd": 42 });
+        let p = waiting(a.ask(
+            Request {
+                target: Some("Chrome · GitHub".into()),
+                target_pid: Some(9),
+                ..req("r1", shot, input(), 1)
+            },
+            now,
+            TIMEOUT,
+        ));
+        assert!(p.activity.desktop);
+        assert_eq!(p.activity.risk, AgentRisk::Read);
+        assert_eq!(p.activity.summary, "Screenshot of Chrome · GitHub");
+        assert_eq!(p.activity.tool, "desktop · screenshot");
+        assert_eq!(p.activity.remember_as.as_deref(), Some("screenshots"));
+        // No grant before it's allowed, and none after a deny.
+        assert_eq!(a.take_grant("r1", shot, &input()), None);
+        a.decide(p.activity.request_id, true, false);
+        assert_eq!(a.take_grant("r1", shot, &json!({ "hwnd": 43 })), None);
+        assert_eq!(a.take_grant("r1", shot, &input()), Some(Some(9)));
+        assert_eq!(a.take_grant("r1", shot, &input()), None, "used up");
+        let denied = waiting(a.ask(req("r1", shot, input(), 1), now, TIMEOUT));
+        a.decide(denied.activity.request_id, false, false);
+        assert_eq!(a.take_grant("r1", shot, &input()), None);
+
+        // A call without a prompt (a user allow rule) is asked about by TopBar itself; that leaves no grant.
+        let own = waiting(a.ask(
+            Request {
+                purpose: Purpose::Look,
+                ..req("r1", shot, input(), 1)
+            },
+            now,
+            TIMEOUT,
+        ));
+        a.decide(own.activity.request_id, true, true);
+        assert_eq!(a.take_grant("r1", shot, &input()), None);
+        // Remembered for the run: another window's prompt is answered at once and leaves a grant.
+        let remembered = a.ask(req("r1", shot, json!({ "hwnd": 7 }), 1), now, TIMEOUT);
+        assert!(matches!(remembered, Asked::Remembered { .. }));
+        assert_eq!(a.take_grant("r1", shot, &json!({ "hwnd": 7 })), Some(None));
+        // Other kinds still ask; ending the run drops grants.
+        waiting(a.ask(req("r1", "mcp__topbar__ui_tree", input(), 1), now, TIMEOUT));
+        a.ask(req("r1", shot, json!({}), 1), now, TIMEOUT);
+        a.end_run("r1");
+        assert_eq!(a.take_grant("r1", shot, &json!({})), None);
     }
 
     #[test]

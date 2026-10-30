@@ -56,6 +56,8 @@ pub struct TopLevel {
     pub hwnd: isize,
     pub pid: u32,
     pub title: String,
+    /// The app's exe (for UWP apps, the app's own process rather than ApplicationFrameHost).
+    pub exe_path: Option<String>,
 }
 
 /// Alt+Tab windows in Z-order (most recently active first), excluding `own`.
@@ -66,8 +68,24 @@ pub fn top_level_windows(own: HWND) -> Vec<TopLevel> {
             pid: win32::window_pid(win32::from_raw(w.hwnd)),
             hwnd: w.hwnd,
             title: w.title,
+            exe_path: w.exe_path,
         })
         .collect()
+}
+
+/// Whether DWM cloaks `hwnd` (another virtual desktop, a suspended UWP frame).
+pub fn is_cloaked(hwnd: HWND) -> bool {
+    enumerate::is_cloaked(hwnd)
+}
+
+/// `hwnd`'s title and exe path, for a window that may not be in the Alt+Tab list.
+pub fn window_identity(hwnd: HWND) -> (Option<String>, Option<String>) {
+    (enumerate::window_title(hwnd), enumerate::exe_path(hwnd))
+}
+
+/// `C:\…\chrome.exe` → `chrome.exe`.
+pub fn exe_file_name(path: &str) -> Option<String> {
+    file_name(path)
 }
 
 /// The foreground fallback chain from `activate.rs`. Call on the main thread (sync command).

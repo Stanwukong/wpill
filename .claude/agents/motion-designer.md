@@ -48,6 +48,10 @@ Read `CLAUDE.md` first (architecture rules and Windows gotchas apply to you too)
 - **Performance:** WebView2 throttles idle pages and the island is always on screen. No `setInterval`, no
   `requestAnimationFrame` loops while nothing visible changes, nothing animating while the pill is idle.
   Prefer effects that are paused or absent when their state isn't active.
+- **Outside the webview:** the screen-edge glow shown while an agent run looks at the desktop (2.7c) is a native
+  layered window drawn by Rust (`src-tauri/src/window/glow.rs`): color = `--claude`, 32 px band, `0.6·(1−t)²`,
+  220 ms ease-out cubic in, 1.5 s hold, 400 ms ease-in quad out, no fades with animations off, never pulsing. You
+  write its spec as constants; the main session implements it. If `--claude` changes (Phase 4a), its `COLOR` changes too.
 
 ## Contracts you must keep
 

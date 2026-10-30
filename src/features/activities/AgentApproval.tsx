@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { AgentApprovalActivity } from "../../lib/types";
-import { ChevronGlyph } from "../agent/AgentGlyphs";
+import { ChevronGlyph, EyeGlyph } from "../agent/AgentGlyphs";
 import { RISK_LABEL } from "../agent/labels";
 import { decide, openRun } from "../agent/useAgentRuns";
 import { ClaudeMark } from "../claude/ClaudeGlyphs";
@@ -14,7 +14,7 @@ type Choice = "allow" | "deny" | "run";
  * it once answered, so a click only marks the choice as pending. Interactive while hovered (Rust's hit test).
  */
 export function AgentApproval({ approval }: { approval: AgentApprovalActivity }) {
-  const { requestId, runId, project, tool, summary, risk, rememberAs } = approval;
+  const { requestId, runId, project, tool, summary, risk, rememberAs, desktop } = approval;
   const [chosen, setChosen] = useState<Choice | null>(null);
 
   const answer = (choice: Choice) => {
@@ -37,6 +37,7 @@ export function AgentApproval({ approval }: { approval: AgentApprovalActivity })
           <span className="approval__tool">{tool}</span>
         </span>
         <span className="agent-risk" data-risk={risk}>
+          {desktop && <EyeGlyph />}
           {RISK_LABEL[risk]}
         </span>
       </div>

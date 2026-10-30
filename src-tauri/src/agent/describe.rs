@@ -3,6 +3,7 @@
 
 use serde_json::Value;
 
+use super::tools;
 use crate::ipc::AgentRisk;
 
 const MAX_SUMMARY: usize = 160;
@@ -35,19 +36,44 @@ const SHELL_TOOLS: &[&str] = &["Bash", "PowerShell"];
 /// Anything here in a shell command makes it compound: remembering its first word would allow far more.
 const SHELL_OPERATORS: &[&str] = &["&", "|", ";", "`", "$(", ">", "<", "\n", "\r"];
 
-/// Unknown tools (other MCP servers, new built-ins) count as changes.
+/// Unknown tools (other MCP servers, new built-ins) count as changes. TopBar's desktop looks are reads.
 pub fn risk(tool: &str) -> AgentRisk {
     if INPUT_TOOLS.contains(&tool) {
         AgentRisk::Input
-    } else if READ_TOOLS.contains(&tool) {
+    } else if READ_TOOLS.contains(&tool) || is_desktop(tool) {
         AgentRisk::Read
     } else {
         AgentRisk::Change
     }
 }
 
-/// `mcp__github__create_issue` → `github · create_issue`; built-ins stay as they are.
+/// One of TopBar's own desktop looks (2.7c): `list_windows`, `focused_window`, `screenshot`, `ui_tree`.
+pub fn is_desktop(tool: &str) -> bool {
+    tools::short_name(tool).is_some()
+}
+
+/// The approval line for a desktop look; `target` names the window ("Chrome · GitHub").
+pub fn desktop_summary(tool: &str, input: &Value, target: Option<&str>) -> String {
+    let window = target.unwrap_or("a window that has closed");
+    let text = match tools::short_name(tool) {
+        Some(tools::LIST_WINDOWS) => "List open windows".to_string(),
+        Some(tools::FOCUSED_WINDOW) => "See which window is in front".to_string(),
+        Some(tools::SCREENSHOT) if input.get("hwnd").is_none_or(Value::is_null) => {
+            "Screenshot of the whole screen".to_string()
+        }
+        Some(tools::SCREENSHOT) => format!("Screenshot of {window}"),
+        Some(tools::UI_TREE) => format!("Read the UI of {window}"),
+        _ => display_tool(tool),
+    };
+    truncate(&text, MAX_SUMMARY)
+}
+
+/// `mcp__github__create_issue` → `github · create_issue`; built-ins stay as they are. TopBar's desktop tools
+/// read as `desktop · screenshot`.
 pub fn display_tool(tool: &str) -> String {
+    if let Some(name) = tools::short_name(tool) {
+        return format!("desktop · {name}");
+    }
     match tool
         .strip_prefix("mcp__")
         .and_then(|rest| rest.split_once("__"))
@@ -96,6 +122,10 @@ pub fn step_label(tool: &str, input: &Value, cwd: &str) -> String {
         "WebSearch" => "Searching the web".to_string(),
         "Task" | "Agent" => "Delegating".to_string(),
         "TodoWrite" => "Planning".to_string(),
+        "mcp__topbar__list_windows" => "Listing windows".to_string(),
+        "mcp__topbar__focused_window" => "Checking the front window".to_string(),
+        "mcp__topbar__screenshot" => "Taking a screenshot".to_string(),
+        "mcp__topbar__ui_tree" => "Reading a window's UI".to_string(),
         _ => summary(tool, input, cwd),
     };
     truncate(label.trim(), MAX_LABEL)
@@ -124,6 +154,14 @@ pub fn remember_key(tool: &str, input: &Value) -> Option<String> {
     if EDIT_TOOLS.contains(&tool) {
         return Some("edit".into());
     }
+    // One kind per key: a remembered screenshot covers other windows and the screen too, so the glow and the
+    // approval's wording say so ("Allow screenshots for this run").
+    match tools::short_name(tool) {
+        Some(tools::LIST_WINDOWS | tools::FOCUSED_WINDOW) => return Some("desktop:windows".into()),
+        Some(tools::SCREENSHOT) => return Some("desktop:screenshots".into()),
+        Some(tools::UI_TREE) => return Some("desktop:ui".into()),
+        _ => {}
+    }
     if tool == "WebFetch" {
         return Some(format!(
             "WebFetch:{}",
@@ -135,6 +173,12 @@ pub fn remember_key(tool: &str, input: &Value) -> Option<String> {
 
 /// What "for this run" reads as in the island, given a remember key.
 pub fn remember_scope(key: &str) -> String {
+    match key {
+        "desktop:windows" => return "window lists".into(),
+        "desktop:screenshots" => return "screenshots".into(),
+        "desktop:ui" => return "reading UIs".into(),
+        _ => {}
+    }
     match key.split_once(':') {
         Some((_, program)) if !program.is_empty() => program.to_string(),
         _ if key == "edit" => "edits".to_string(),
@@ -212,6 +256,47 @@ mod tests {
         assert_eq!(risk("mcp__github__create_issue"), AgentRisk::Change);
         assert_eq!(risk("SomethingNew"), AgentRisk::Change);
         assert_eq!(risk("mcp__topbar__click"), AgentRisk::Input);
+        assert_eq!(risk("mcp__topbar__screenshot"), AgentRisk::Read);
+        assert_eq!(risk("mcp__topbar__list_windows"), AgentRisk::Read);
+        assert_eq!(risk("mcp__topbar__approve"), AgentRisk::Change);
+        assert_eq!(risk("mcp__other__screenshot"), AgentRisk::Change);
+    }
+
+    #[test]
+    fn desktop_looks() {
+        let shot = "mcp__topbar__screenshot";
+        assert!(is_desktop(shot));
+        assert!(!is_desktop("mcp__topbar__click"));
+        assert_eq!(display_tool(shot), "desktop · screenshot");
+        assert_eq!(
+            desktop_summary(shot, &json!({ "hwnd": 5 }), Some("Chrome · GitHub")),
+            "Screenshot of Chrome · GitHub"
+        );
+        assert_eq!(
+            desktop_summary(shot, &json!({}), None),
+            "Screenshot of the whole screen"
+        );
+        assert_eq!(
+            desktop_summary("mcp__topbar__ui_tree", &json!({ "hwnd": 5 }), None),
+            "Read the UI of a window that has closed"
+        );
+        assert_eq!(
+            desktop_summary("mcp__topbar__focused_window", &json!({}), None),
+            "See which window is in front"
+        );
+        assert_eq!(step_label(shot, &json!({}), CWD), "Taking a screenshot");
+        let key = |tool: &str| remember_key(tool, &json!({ "hwnd": 1 })).unwrap();
+        assert_eq!(
+            key("mcp__topbar__list_windows"),
+            key("mcp__topbar__focused_window")
+        );
+        assert_ne!(key(shot), key("mcp__topbar__ui_tree"));
+        assert_eq!(remember_scope(&key(shot)), "screenshots");
+        assert_eq!(
+            remember_scope(&key("mcp__topbar__list_windows")),
+            "window lists"
+        );
+        assert_eq!(remember_scope(&key("mcp__topbar__ui_tree")), "reading UIs");
     }
 
     #[test]

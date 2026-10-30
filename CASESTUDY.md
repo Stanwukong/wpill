@@ -335,6 +335,41 @@ keeps the same CSS room at 120 % and 150 %.
 *Alternatives:* typing in the island (breaks rule 2 and steals focus); a message-only window for the hotkey (not needed
 without a window target); Anthropic's brand fonts (not licensed for this); bundling an OFL font (no visible gain).
 
+### D25: Desktop looks: four read-only tools, approved twice, cheapest view first (Phase 2.7c)
+*Why:* Claude in a TopBar run can now look at the desktop through four tools on TopBar's own MCP server (D21):
+`list_windows`, `focused_window`, `screenshot`, `ui_tree`. They live in a `desktop/` feature folder so the Win32 stays
+isolated and 2.7d can reuse it. A window is named by its HWND from `list_windows`, checked again on every call
+(alive, not TopBar's, not cloaked, responding, not elevated, screen not locked), and its process id from approval
+time must still match, so a reused HWND can't redirect an approved look. Windows are captured with
+`PrintWindow(PW_RENDERFULLCONTENT)` (works when covered, no capture border). The screen is a `BitBlt` of the primary
+monitor with TopBar's windows marked `WDA_EXCLUDEFROMCAPTURE` only for that moment, so your own screenshots and screen
+shares still see the island. Images go through WIC (part of Windows: no new crate): at most 1568 px on the long edge
+(what the API keeps anyway) and 500 KB (under Claude Code's own 512,000-byte re-compression), PNG first, JPEG when a
+photo or video makes PNG too big. `ui_tree` is a capped text outline (depth, nodes, 60 KB, a 3 s budget) rather
+than JSON: fewer tokens, and the guidance tells Claude to use it before a screenshot. Password fields never carry a
+value. Approvals are risk `read`, remembered per kind ("Allow screenshots for this run"), with summaries naming the
+window. Because a user's allow rule would let a call skip Claude Code's prompt, allowing the prompt leaves a one-time
+grant for that exact input, and a call that arrives without one is asked about by TopBar itself: every look is
+approved in the island whatever Claude Code or the user's settings decide. The audit records what was looked at and
+how big the result was, never the pixels or the tree.
+*Alternatives:* Windows.Graphics.Capture (D3D11 setup, and a yellow border on Windows 11 unless access is requested);
+`WDA_EXCLUDEFROMCAPTURE` permanently on the island (it would vanish from your own screenshots and calls); blacking out
+the island's rect (hides what's under it); the `image` crate (size, when WIC is already there); `readOnlyHint` on the
+tools (Claude Code reads it as "read-only", which a future mode might not ask about); `--allowedTools` per run
+(approves looks before anything happens); JSON trees (2–3× the tokens for the same content).
+
+### D26: A glow on the screen's edges while Claude looks (Phase 2.7c)
+*Why:* the approval says Claude *may* look; the glow says it *is* looking, right now, in peripheral vision. It's a
+native layered window, not a webview: a full-screen transparent WebView2 would cost tens of MB and bring back the
+surface-drop blink of C4. It's painted once per monitor with `UpdateLayeredWindow` (premultiplied BGRA, Claude's
+accent, a 32 px band falling off as `0.6·(1−t)²`, corners combined as light) and faded by stepping its constant alpha
+on a timer that only runs during fades. It's click-through, never activated, kept just below the island, and always
+excluded from capture, so it's never in a screenshot (Claude's or yours). It holds 1.5 s after the last look so a
+50 ms window list still registers, never pulses (a pulse reads as "recording"), and skips fades when Windows'
+animation effects are off. The spec came from the motion-designer agent.
+*Alternatives:* only the island's approval (gone by the time the look runs); a pulsing or red border (alarming);
+four thin edge windows (less overdraw, four times the window management for one effect).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -425,6 +460,17 @@ Two environment problems surfaced while verifying 2.7. The scratch folder came i
 compares paths as text; run folders are now normalised with `GetLongPathNameW`. And the debug `target` folder had
 grown to ~20 GB of stale builds, filling the drive mid-link (`os error 112`); `cargo clean --profile dev` freed 14 GB.
 
+### C10: Proving the island isn't in a screen capture
+*Symptom:* the first whole-screen screenshot from a real run showed no island, but the user was watching a
+fullscreen video, and the island hides itself during fullscreen, so the image proved nothing. *Resolution:* a
+debug-only `agent-test look <tool>` runs a look directly (no Claude, no approval, glow included) and saves the image;
+a small script waited until the island window was visible again and took the capture then. The pill wasn't in it.
+The glow, being excluded from capture, can't be screenshotted at all; it was checked through its window instead
+(visible over 1920×1080 with display affinity 17 during a look, hidden ~2.3 s later). Extracting that first image
+also showed that Claude Code keeps every tool image in its own session transcript under `~/.claude/projects`,
+which is now a documented limitation. *Lesson:* check the precondition (is the thing you expect to be hidden
+actually on screen?) before trusting an absence.
+
 ### Still open
 - **Foreground-lock rules** in practice: the fallback chain is implemented but not yet exercised
   against elevated or minimized targets (manual test 7).
@@ -462,6 +508,7 @@ grown to ~20 GB of stale builds, filling the drive mid-link (`os error 112`); `c
 | 2026-10-30 | Phase 2.7 (local automation agent) planned and placed next on the roadmap (D21), with its kick-off prompt. |
 | 2026-10-30 | Phase 2.7a–b built: headless runs in Job Objects (D22), approvals in the island through `topbar.exe mcp` and a token-checked pipe (D23), the command window and the Cascadia Mono refresh (D24, via the motion-designer agent). Verified from outside with haiku runs (deny, allow, allow for this run, turn limit, follow-up resume, Stop with `ping -t`, TopBar killed and quit mid-run); manual checklist pending. |
 | 2026-10-30 | Phase 2.7a–b signed off: all 12 manual checks pass (hotkey, read-only task, deny, allow and "for this run", Stop and the stop hotkey, limits, two runs, panel and fullscreen, follow-up, quit mid-run, audit, text sizes). Stage 2.7c kick-off prompt written. |
+| 2026-10-30 | Stage 2.7c built: read-only desktop tools with a second, TopBar-side approval check (D25), a glow on the screen's edges while Claude looks (D26), an eye in the approval's `read` badge (motion-designer). Verified from outside with haiku runs and direct looks (C10); manual checklist pending. |
 
 ## 7. Results & metrics
 

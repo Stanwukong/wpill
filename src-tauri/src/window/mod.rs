@@ -1,6 +1,7 @@
 //! Creates and positions the island window and owns its Win32 styles.
 
 pub mod command;
+pub mod glow;
 
 use tauri::{
     AppHandle, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder,

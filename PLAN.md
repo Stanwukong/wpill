@@ -14,8 +14,11 @@ screenshots, with all 12 manual checks passed.** The charging activity also got 
 an orange edge, panel section, click to focus, tray Connect/Disconnect), with all 12 manual checks passed.**
 **Phase 2.7a–b are complete (2026-10-30): headless agent runs from a command window (Win+Alt+A), progress in the
 island, approvals (Allow / Deny) in the island, Cascadia Mono for Claude content, with all 12 manual checks passed.**
-See [Phase 2.7](#phase-27-local-automation-agent). **Next: stage 2.7c (read-only desktop tools)**, kick-off prompt
-[prompts/phase-2.7c-desktop-tools.md](prompts/phase-2.7c-desktop-tools.md).
+**Phase 2.7c is built and verified from outside (2026-10-30): read-only desktop tools (`list_windows`,
+`focused_window`, `screenshot`, `ui_tree`), each approved in the island with an eye in the `read` badge, and a glow on
+the screen's edges while Claude looks.** Waiting for your manual check (below).
+See [Phase 2.7](#phase-27-local-automation-agent). **Next: sign off 2.7c, use it for a while, then 2.7d** (desktop
+actions; its kick-off prompt is written after sign-off).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -248,6 +251,17 @@ stopped`. Activity kinds: `agentApproval { requestId, runId, project, tool, summ
 rememberAs: string | null }` (sticky, interactive) and `agentFinished { runId, project, status, reason }` (5 s notice,
 not shown after Stop). `rememberAs` ("git", "edits") replaces the planned `canRemember` flag so the island can say what
 "for this run" covers.
+
+### Phase 2.7c
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| activity field | `agentApproval.desktop` | `boolean` | One of TopBar's desktop looks: the risk badge shows an eye. `tool` reads `desktop · screenshot`; `rememberAs` is `window lists`, `screenshots` or `reading UIs`. |
+| MCP tool | `list_windows` | `{}` → text `{ windows: [{ hwnd, app, title, bounds, minimized, focused }] }` | Alt+Tab windows front to back, physical px, never TopBar's own. Minimized windows have empty bounds. |
+| MCP tool | `focused_window` | `{}` → text `{ window: … \| null, note? }` | `null` + note when TopBar's own window is in front. |
+| MCP tool | `screenshot` | `{ hwnd? }` → image block + text `{ source, width, height, origin, scale, format }` | No hwnd: the primary monitor. ≤1568 px long edge, ≤500 KB (PNG, else JPEG q80/q60). |
+| MCP tool | `ui_tree` | `{ hwnd, maxDepth? (12, ≤25), maxNodes? (400, ≤1000) }` → text outline | `button "Save" #id @x,y wxh flags`, ≤60 KB, says when it was cut. Password fields: no value. |
+| errors | (all four) | `isError` text `code: advice` | `windowGone`, `topbarWindow`, `notOnThisDesktop`, `minimized`, `notResponding`, `elevated`, `screenLocked`, `failed`. |
 
 ### Reserved for later phases (names fixed now so they slot in)
 
@@ -606,12 +620,70 @@ hotkey ─▶ command window (focusable, separate) ── agent_start ─▶ Rus
       activity and the command window. 95 Rust tests pass
 - [x] Manual check (below): all 12 pass, 2026-10-30
 
-**Stage 2.7c: desktop tools, read-only** (next). Kick-off prompt:
-[prompts/phase-2.7c-desktop-tools.md](prompts/phase-2.7c-desktop-tools.md)
-- [ ] `list_windows`, `focused_window` (reuse `apps/`), `screenshot(window | screen)` (downscaled PNG as MCP image
-      content; never of the island itself), `ui_tree(window)` via UI Automation (names, roles, values, bounding boxes,
-      depth and size capped; password fields reported without values)
-- [ ] All read-only tools still ask once per run (risk `read`), so you know when Claude is looking at your screen
+**Stage 2.7c: desktop tools, read-only** (built 2026-10-30). Kick-off prompt:
+[prompts/phase-2.7c-desktop-tools.md](prompts/phase-2.7c-desktop-tools.md). Decisions: CASESTUDY D25, D26.
+
+*Research at kick-off (Claude Code 2.1.159's bundle, checked live on 2.1.314):* MCP image blocks (`image/png`,
+`jpeg`, `gif`, `webp`) reach the model as images, billed as image tokens (~w×h/750). Claude Code resizes them to fit
+2000×2000 and re-compresses anything over 512,000 bytes itself. A tool result over `MAX_MCP_OUTPUT_TOKENS` (25,000;
+an image counts as 1,600) is saved to a file or cut. MCP tools return "MCPTool requires permission", so in `default`
+mode they go to `--permission-prompt-tool`; a user allow rule skips that, hence TopBar's own grant check.
+`readOnlyHint` makes Claude Code treat a tool as read-only and parallel-safe, so TopBar doesn't set it.
+`--allowedTools` isn't used: it would approve looks before anything happens. Claude Code loads MCP tools lazily
+(`ToolSearch` → `select:mcp__topbar__…`) before the first call.
+
+- [x] `desktop/` feature folder (Win32 isolated): `windows.rs` (the Alt+Tab list from `apps/`, target checks),
+      `capture.rs` (`PrintWindow(PW_RENDERFULLCONTENT)` for a window, covered or not; `BitBlt` of the primary monitor
+      with TopBar's windows set to `WDA_EXCLUDEFROMCAPTURE` only for that moment), `encode.rs` (WIC Fant scaling,
+      PNG, else JPEG), `uia.rs` (control view walk, one cache request per element, 2 s UIA timeouts, 3 s budget, on a
+      per-look MTA thread with an 8 s limit). Pure and tested: `logic.rs`, `tree.rs`
+- [x] Four MCP tools (`agent/tools.rs`): `list_windows`, `focused_window`, `screenshot`, `ui_tree` (IPC table above).
+      Refused: closed windows, TopBar's own, other virtual desktops (cloaked), minimized (screenshot), hung, elevated,
+      and everything while the lock screen or a UAC prompt is up. Password fields never carry a value
+- [x] Approvals: risk `read`; summaries "List open windows", "Screenshot of Chrome · GitHub", "Screenshot of the whole
+      screen", "Read the UI of Notepad · notes.txt"; step labels "Taking a screenshot" etc.; "for this run" per kind
+      (window lists = `list_windows` + `focused_window`, screenshots, reading UIs). Allowing a prompt leaves a one-time
+      grant for that input; a call without one (a user allow rule) is asked about by TopBar itself; the window's
+      process is checked again at look time
+- [x] Screen-edge glow (`window/glow.rs`): native layered window over the looked-at monitor, never captured, below
+      the island; Claude's accent, 32 px band, `0.6·(1−t)²`, 220 ms in, 1.5 s hold, 400 ms out; no fades with
+      animations off (motion-designer spec)
+- [x] Eye glyph in the `read` badge for desktop looks (island approval and the command window's pending card;
+      motion-designer); transcript shows `[image]` for images; audit `look` entries name the target and size, never
+      the image or tree; guidance in `--append-system-prompt` (prefer shell/files, `ui_tree` before `screenshot`, say
+      what you're looking for)
+- [x] Verified from outside (2026-10-30, debug build, haiku on 2.1.314, `agent-test` and the new
+      `agent-test look …`): "what windows are open" (approved in the island, 4 windows, 1¢); "what does Notepad say"
+      (`ui_tree`, 102 elements in 0.75 s, text read exactly); whole-screen screenshot (1568×882 JPEG, 89 KB);
+      Notepad covered by a fullscreen video captured cleanly (460×517 PNG, 12 KB); "Allow screenshots for this run"
+      (second shot `remembered`); Deny on `ui_tree` and `list_windows` (Claude stopped, no `look` entries); a
+      project allow rule for `screenshot` (Claude Code skipped its prompt, TopBar asked, `by: topbar`, denied); closed
+      hwnd → `windowGone`; minimized → `minimized`; elevated Task Manager → `elevated` for both tools; the glow window
+      covering 1920×1080 with affinity 17, hidden ~2.3 s after a look; a screen capture with the island showing (no
+      pill in the image). Largest image 105 KB, far under the 4 MiB pipe cap. 115 Rust tests pass
+- [ ] Manual check (below)
+
+**Manual check (Phase 2.7c)** (`pnpm tauri dev` with `$env:RUST_LOG='info,topbar_lib=debug'`, model `haiku`, a scratch
+folder)
+1. **Window list:** "What windows are open?" asks "List open windows" with an eye in the badge; the answer lists your
+   windows and never TopBar's command window.
+2. **Glow:** while any look runs, the screen's edges glow softly in Claude's color, under the island, and fade about
+   1.5 s after; it never steals focus or clicks, and isn't in your own screenshots (Win+Shift+S during a look).
+3. **UI tree:** "What does the Notepad window say?" asks "Read the UI of Notepad · …" and answers with the text.
+4. **Password:** a sign-in form with a typed password (e.g. a browser page) read with `ui_tree`: the field shows as
+   `password` with no value.
+5. **Screenshot of a window:** "Screenshot the Spotify window and describe it" works while Spotify is covered.
+6. **Whole screen with the island open:** hover the island open (or have an activity up) during "screenshot the whole
+   screen, what's at the top center?": Claude doesn't see the island, the command window or the glow.
+7. **Deny:** deny each kind once; Claude adapts and the audit has no `look` entry.
+8. **For this run:** "Allow screenshots for this run", then a second screenshot (other window or the screen) runs
+   without asking; a `ui_tree` still asks.
+9. **Gone / minimized / elevated:** close a window between list and call (`windowGone`); minimized window screenshot
+   (`minimized`); an app run as administrator (`elevated`).
+10. **Locked:** start a run that waits a few seconds then screenshots (e.g. after `sleep 10`), lock with Win+L: the
+    look fails with `screenLocked`, nothing is captured.
+11. **Audit:** the run's `.jsonl` has `look` lines with target, size and format, and no image data.
+12. **Text size 100 / 120 / 150 %:** the eye sits in the badge without changing the approval's size.
 
 **Stage 2.7d: desktop actions** (only after 2.7a–c have been used for a while)
 - [ ] `focus_window` (reuse `activate.rs`), `invoke(element)` / `set_value(element)` through UI Automation first,
@@ -707,6 +779,12 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
   estimate and can be overshot by one response; the turn limit can let one more batch of tools run. Claude can't ask
   questions mid-run (it asks in its final message; answer with a follow-up). The hotkeys are fixed until Phase 4b
   (edit `settings.json`). Clicking the panel's "agent" row opens the command window; there's no per-step "Details" yet.
+- Desktop looks (2.7c): Claude Code keeps every image a tool returns in its own session transcript
+  (`~/.claude/projects/<folder>/<session>.jsonl`), so screenshots persist there outside TopBar's control (TopBar's audit
+  never stores them). Screen capture is the primary monitor only. Elevated windows are refused for both tools (UIPI;
+  a whole-screen screenshot still shows them). Protected video comes out black. Big browser pages can hit the `ui_tree`
+  time or node cap (it says so). "Allow screenshots for this run" covers every window and the screen, not just the
+  one asked about. Excluding the island during a screen capture relies on `WDA_EXCLUDEFROMCAPTURE` (Windows 10 2004+).
 
 ## Distribution
 - `pnpm tauri build` produces `src-tauri/target/release/bundle/nsis/TopBar_0.1.0_x64-setup.exe`:

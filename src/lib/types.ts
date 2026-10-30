@@ -74,6 +74,8 @@ export interface AgentApprovalActivity {
   risk: AgentRisk;
   /** What "allow for this run" covers ("git", "edits"); `null` where it isn't offered. */
   rememberAs: string | null;
+  /** One of TopBar's desktop tools (Claude looking at the screen: windows, screenshot, UI tree). */
+  desktop: boolean;
 }
 
 export interface AgentFinishedActivity {

@@ -140,6 +140,14 @@
   color: var(--island-muted);
 }
 
+/* Desktop looks lead the label with an eye (inline, so the badge keeps its text baseline). */
+.agent-risk__eye {
+  width: 12px;
+  height: 12px;
+  margin-right: 3px;
+  vertical-align: -2.5px;
+}
+
 .agent-risk[data-risk="change"] {
   color: rgba(245, 245, 247, 0.72);
 }

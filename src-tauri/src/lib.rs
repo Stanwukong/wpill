@@ -3,6 +3,7 @@ mod agent;
 mod apps;
 mod autostart;
 mod claude;
+mod desktop;
 mod error;
 mod fullscreen;
 mod hover;

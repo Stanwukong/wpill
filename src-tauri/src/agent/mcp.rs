@@ -1,6 +1,6 @@
 //! TopBar's MCP server, message by message: JSON-RPC 2.0 over the bridge (one message per pipe message).
-//! Pure; unit-tested. Stage 2.7b has one tool, `approve`, which Claude Code calls through
-//! `--permission-prompt-tool mcp__topbar__approve`. Its input is `{ tool_name, input, tool_use_id }` and its
+//! Pure; unit-tested. `approve` is what Claude Code calls through `--permission-prompt-tool mcp__topbar__approve`;
+//! the desktop tools (2.7c, `tools.rs`) are what Claude itself calls. Its input is `{ tool_name, input, tool_use_id }` and its
 //! reply is a text block holding `{"behavior":"allow","updatedInput":…}` or `{"behavior":"deny","message":…}`
 //! (checked against 2.1.123 and 2.1.312; the docs don't spell it out).
 
@@ -32,6 +32,12 @@ pub enum Action {
         tool_name: String,
         input: Value,
     },
+    /// One of the desktop tools (`tools.rs`): check its approval, then look.
+    Look {
+        rpc_id: Value,
+        name: &'static str,
+        args: Value,
+    },
     /// A notification or response: nothing to send.
     Ignore,
 }
@@ -61,7 +67,11 @@ pub fn handle(msg: &Value) -> Action {
             ))
         }
         "ping" => Action::Reply(result(id, json!({}))),
-        "tools/list" => Action::Reply(result(id, json!({ "tools": [approve_tool()] }))),
+        "tools/list" => {
+            let mut tools = vec![approve_tool()];
+            tools.extend(super::tools::definitions());
+            Action::Reply(result(id, json!({ "tools": tools })))
+        }
         "tools/call" => {
             let name = params.get("name").and_then(Value::as_str);
             let args = params.get("arguments");
@@ -80,6 +90,15 @@ pub fn handle(msg: &Value) -> Action {
                 (Some(APPROVE_TOOL), None) => {
                     Action::Reply(error(id, -32602, "approve needs tool_name and input"))
                 }
+                (Some(name), _) if super::tools::NAMES.contains(&name) => Action::Look {
+                    rpc_id: id,
+                    name: super::tools::NAMES
+                        .iter()
+                        .copied()
+                        .find(|n| *n == name)
+                        .unwrap_or_default(),
+                    args: args.cloned().unwrap_or(json!({})),
+                },
                 _ => Action::Reply(error(id, -32602, "unknown tool")),
             }
         }
@@ -152,6 +171,7 @@ mod tests {
             panic!()
         };
         assert_eq!(r["result"]["tools"][0]["name"], "approve");
+        assert_eq!(r["result"]["tools"][3]["name"], "screenshot");
 
         let note = json!({ "jsonrpc": "2.0", "method": "notifications/initialized" });
         assert_eq!(handle(&note), Action::Ignore);
@@ -190,6 +210,17 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<Value>(text).unwrap(),
             json!({ "behavior": "deny", "message": "no" })
+        );
+
+        let look = json!({ "jsonrpc": "2.0", "id": 4, "method": "tools/call",
+            "params": { "name": "ui_tree", "arguments": { "hwnd": 5 } } });
+        assert_eq!(
+            handle(&look),
+            Action::Look {
+                rpc_id: json!(4),
+                name: "ui_tree",
+                args: json!({ "hwnd": 5 }),
+            }
         );
 
         let other = json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call",

@@ -55,6 +55,7 @@ mod tests {
             hwnd,
             pid,
             title: title.into(),
+            exe_path: None,
         }
     }
 

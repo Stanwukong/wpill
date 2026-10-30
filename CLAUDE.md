@@ -40,6 +40,7 @@ pnpm typecheck              # tsc --noEmit
 # Debug builds only: drive agent runs from outside (forwarded to the running TopBar; results in its log)
 .\src-tauri\target\debug\topbar.exe agent-test start <folder> "<prompt>" haiku 4
 .\src-tauri\target\debug\topbar.exe agent-test decide <requestId> allow|deny [run]   # also: send, stop, stop-all, show, hide, quit
+.\src-tauri\target\debug\topbar.exe agent-test look screenshot '{"hwnd":123}' C:\tmp\shot.png   # a desktop look without Claude (also list_windows, focused_window, ui_tree)
 ```
 
 The first `cargo build` compiles ~370 crates (several minutes); later rebuilds of the
@@ -72,6 +73,11 @@ the drive once); `cargo clean --profile dev` when space runs low.
   `settings.rs` (`agent` block in settings.json). Pure and unit-tested: `stream.rs` (stream-json), `lifecycle.rs`
   (run state), `approvals.rs`, `describe.rs` (risk, summaries, remember keys), `mcp.rs`.
   `window/command.rs` creates the focusable `command` window (`command.html` → `src/command/`).
+  `desktop/` (Phase 2.7c, what agent runs may look at; read-only): `mod.rs` = `run(Look)` on a per-look MTA thread,
+  `windows.rs` (Alt+Tab list from `apps/`, target checks: gone, ours, cloaked, hung, elevated, locked), `capture.rs`
+  (PrintWindow / BitBlt + capture exclusion), `encode.rs` (WIC), `uia.rs`; pure and tested: `logic.rs`, `tree.rs`.
+  `agent/tools.rs` = the four MCP tools' definitions, arguments and replies (pure); `agent/approvals.rs` also holds the
+  one-time look grants. `window/glow.rs` = the native screen-edge glow window (own thread, `look_started`/`look_ended`).
 - `lib.rs` uses `.build()?.run(|app, event| …)` so `RunEvent::Exit` can stop the media and activity watchers (unregisters their handlers).
 - Plugins (registered in `lib.rs`): `tauri-plugin-single-instance` (must stay first). Don't use
   `tauri-plugin-autostart`: it writes the exe path unquoted, which breaks for paths with spaces.
@@ -103,7 +109,7 @@ the drive once); `cargo clean --profile dev` when space runs low.
    structs). TS: `src/lib/ipc.ts` (typed `invoke`/`listen` wrappers). Components never call
    `invoke("...")` with a string literal.
 4. **Win32 is isolated.** All `unsafe` Win32/WinRT code lives in feature modules under
-   `src-tauri/src/` (`window/`, `hover/`, `apps/`, `fullscreen.rs`, `media/`, `activity/`, later
+   `src-tauri/src/` (`window/`, `hover/`, `apps/`, `fullscreen.rs`, `media/`, `activity/`, `desktop/`, later
    `processes/`, `thumbnails/`). Each `unsafe` block gets a one-line `// SAFETY:` comment.
    Commands are thin wrappers that return `Result<T, AppError>`.
 5. **Payloads are camelCase.** Rust DTOs use `#[serde(rename_all = "camelCase")]`; TS types in
@@ -202,6 +208,16 @@ the drive once); `cargo clean --profile dev` when space runs low.
 - **Building a webview window** from a sync command or the main thread deadlocks on Windows: `window::command::show`
   is called from the hotkey thread and async commands. The hotkeys use `RegisterHotKey(NULL)` on their own thread
   (`WM_HOTKEY` goes to the thread queue); receiving one is what lets the command window take the foreground.
+- **Desktop looks never capture TopBar.** Every window of our own process is refused by pid (island, command window,
+  glow). For a screen capture, `capture.rs` sets `WDA_EXCLUDEFROMCAPTURE` on our visible windows, `DwmFlush`es twice,
+  captures, and restores `WDA_NONE`; don't make it permanent on the island (it would vanish from the user's own
+  screenshots). The glow is always excluded, so it can't be screenshotted: check it through its window
+  (`IsWindowVisible`, `GetWindowDisplayAffinity` = 17). The island hides during fullscreen, so test exclusion with it
+  visible. Never return a password field's value (`tree.rs` drops it even if a walk collected one).
+- **Images for Claude** stay ≤1568 px long edge and ≤500 KB (Claude Code re-compresses over 512,000 bytes and cuts
+  results over `MAX_MCP_OUTPUT_TOKENS`), and replies must stay well under the agent pipe's 4 MiB cap (an oversized reply
+  is dropped and Claude Code waits). Claude Code stores tool images in its session transcripts under `~/.claude/projects`.
+- **The Win32 `VARIANT` has no `Drop`:** `VariantClear` what UIA's `GetCachedPropertyValue` returns.
 - **Testing agent runs:** use `topbar.exe agent-test …` (debug builds only), a scratch folder, `haiku` and low
   max turns. Don't send synthetic keystrokes while the user is at the machine; they land in whatever has focus.
 - **Windows PowerShell 5.1 can't list GSMTC sessions** (`GetSessions()` comes back empty). Check media state with the
