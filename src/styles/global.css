@@ -18,6 +18,13 @@
   initial-value: #30d158;
 }
 
+/* Position of the light orbiting the island while charging (features/activities/activities.css). */
+@property --orbit {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
 :root {
   color-scheme: dark;
   /* The island is always dark, like the hardware it imitates. */
@@ -28,6 +35,9 @@
   --tile-hover: rgba(255, 255, 255, 0.09);
   --tile-active: rgba(255, 255, 255, 0.14);
   --danger: #ff6b6b;
+  /* Charging is always green, whatever the album-art accent is. */
+  --charge: #30d158;
+  --charge-rgb: 48, 209, 88;
 
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   font-size: 14px;

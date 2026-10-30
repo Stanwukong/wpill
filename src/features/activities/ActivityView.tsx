@@ -59,7 +59,7 @@ function Power({ power }: { power: PowerActivity }) {
     <Row
       icon={<BatteryIcon level={power.level} charging={power.event === "pluggedIn"} />}
       title={POWER_TITLES[power.event]}
-      alert={power.event === "low"}
+      tone={power.event === "low" ? "alert" : power.event === "pluggedIn" ? "charge" : undefined}
     >
       <span className="activity__value">{power.level}%</span>
     </Row>
@@ -71,16 +71,17 @@ function Row({
   title,
   children,
   dim = false,
-  alert = false,
+  tone,
 }: {
   icon: ReactNode;
   title: string;
   children: ReactNode;
   dim?: boolean;
-  alert?: boolean;
+  /** Semantic color for the icon (and text): low battery, or charging. */
+  tone?: "alert" | "charge";
 }) {
   return (
-    <div className="activity" data-dim={dim} data-alert={alert}>
+    <div className="activity" data-dim={dim} data-tone={tone}>
       {icon}
       <span className="activity__title">{title}</span>
       {children}

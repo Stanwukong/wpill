@@ -166,7 +166,12 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
 - Rust: `cargo fmt`, clippy clean, `thiserror` for `AppError`, `log` macros (no `println!`).
 - TS: strict mode, function components + hooks, no default exports except `App`.
 - Animation: Framer Motion `layout` + spring transitions. Keep timing constants in
-  `src/island/motion.ts`.
+  `src/island/motion.ts`. Ambient loops (e.g. the charging ring) are CSS keyframes on `@property` values,
+  paused unless their state is showing, with a `prefers-reduced-motion` fallback.
+- **UI changes go through the `motion-designer` agent** ([.claude/agents/motion-designer.md](.claude/agents/motion-designer.md)):
+  any change to components, CSS, icons or motion in `src/`. It holds the visual and motion rules (minimal, native,
+  token-based colors, Rust-owned state) and how to verify visuals (headless Edge renders or captures of the real island).
+  Keep that file current when the motion system changes.
 - Commits: small, imperative subject line; reference the phase (e.g. `phase1: alt-tab filter`).
 - **Branches: do not create new branches unless explicitly asked to. All work is committed and
   pushed to `main`.**

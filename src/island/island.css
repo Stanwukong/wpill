@@ -24,6 +24,8 @@
   box-shadow:
     0 0 0 1px var(--island-border),
     0 10px 30px var(--island-shadow);
+  /* State halos (e.g. charging) fade rather than snap. */
+  transition: box-shadow 400ms ease-out;
 }
 
 /* PANEL_WIDTH_PX, shrunk to fit when Windows text size zooms the webview (the window size is fixed in physical px). */

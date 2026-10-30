@@ -264,7 +264,7 @@ meaning; new phases slot in between.
 | 1 | **1.5 Shell basics** | Tray icon, quit, launch at startup | ~1 hour. Testers need to quit and autostart before anything is shared. |
 | 2 | **2 Media card** | Now playing + controls, media state in the collapsed pill | Makes the island feel alive; the planned next phase. |
 | 3 | **2.5 Live Activities** | Island auto-expands for system events | The defining Dynamic Island behavior; reuses Phase 2's pill plumbing. |
-| 4 | **2.6 Claude Code activity** | Island shows when a local Claude Code session finishes or needs a decision | Added 2026-10-30 (D14). Small once 2.5's activity queue exists; high daily value while working with Claude Code. |
+| 4 | **2.6 Claude Code activity** | Island shows when a local Claude Code session finishes or needs a decision | Added 2026-10-30 (D17). Small once 2.5's activity queue exists; high daily value while working with Claude Code. |
 | 5 | **4a Release readiness** | Multi-monitor + per-monitor DPI, code signing, v0.2 release | Docking/undocking breaks placement today; unsigned installers trigger SmartScreen. |
 | 6 | **3 Memory-heavy apps** | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
 | 7 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
@@ -345,6 +345,8 @@ Kick-off prompt: [prompts/phase-2.5-live-activities.md](prompts/phase-2.5-live-a
 - [x] Screenshot: overlapped `ReadDirectoryChangesW` on the Screenshots known folder, shell thumbnail; hovering holds it
       and makes it clickable; drag out with `SHDoDragDrop`, click to open (D16)
 - [x] Switches in `%APPDATA%\dev.wpill.topbar\settings.json` (`activities.volume`, …, read at launch; UI in Phase 4b)
+- [x] Charging look (D18): green glowing outline with a light orbiting it every 2.4 s, soft green halo, bolt and
+      level in green; static ring under reduced motion. Checked by rendering the built CSS in headless Edge
 - [x] Verified from outside (2026-10-30, `RUST_LOG=topbar_lib=debug`, SendInput + screen captures + `GWL_EXSTYLE`):
       Caps Lock toggled and restored → "Caps Lock · On" activity, island stayed click-through, foreground unchanged;
       2× volume up + 2× down (restored) → one activity updated in place; WMI brightness 100 → 90 → 100 → activity at 90;
@@ -360,7 +362,8 @@ Kick-off prompt: [prompts/phase-2.5-live-activities.md](prompts/phase-2.5-live-a
 2. **Brightness keys:** same, with the sun icon. Adaptive brightness changes may also show it (known limitation).
 3. **Bluetooth headphones:** connect → "WUF-W35 · Connected" (with "· N%" if it reports battery, possibly appearing a
    moment later). Disconnect → "Disconnected". One activity each, not one per audio profile.
-4. **Charger:** unplug → "On battery · N%"; plug in → "Charging · N%" with a bolt.
+4. **Charger:** unplug → "On battery · N%"; plug in → "Charging · N%" with a green bolt, the outline glows green and a
+   light orbits it smoothly (no stutter) until the activity leaves, when the ring fades out with it.
 5. **Caps Lock:** on → "Caps Lock On" in the accent color; off → "Off".
 6. **Screenshot:** Win+PrtScn → "Screenshot saved" with the thumbnail. Hover it: it stays up. Drag the thumbnail into an
    Explorer folder, a chat or an email → the file is copied there and the activity ends. Take another and click the

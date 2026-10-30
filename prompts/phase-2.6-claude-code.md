@@ -1,7 +1,7 @@
 Start Phase 2.6 (Claude Code activity) of TopBar.
 
 Read PLAN.md first: Current status, Roadmap, "Phase 2.6: Claude Code activity", the IPC contract and
-Known limitations. Then read the CASESTUDY.md decision log, especially D11 (watcher thread pattern), D14
+Known limitations. Then read the CASESTUDY.md decision log, especially D11 (watcher thread pattern), D17
 (why a named pipe and a `topbar.exe hook` forwarder) and whatever Phase 2.5 recorded about the activity
 queue. CLAUDE.md is loaded; follow its rules. Phase 2.5 must be signed off first; if it isn't, stop and tell me.
 

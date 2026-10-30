@@ -17,6 +17,8 @@ const RADIUS = { pill: PILL_RADIUS, activity: ACTIVITY_RADIUS, panel: PANEL_RADI
 export function Island() {
   const { expanded, hidden, activity } = useIslandState();
   const mode = expanded ? "panel" : activity ? "activity" : "pill";
+  // Drives the orbiting charge ring on the island's edge (features/activities/activities.css).
+  const charging = activity?.kind === "power" && activity.payload.event === "pluggedIn";
   const ref = useRef<HTMLDivElement>(null);
   usePanelSizeReporter(ref, mode === "pill" ? null : mode);
   const media = useMedia();
@@ -37,6 +39,7 @@ export function Island() {
         className="island"
         data-expanded={expanded}
         data-mode={mode}
+        data-charging={charging}
         transition={islandSpring}
         style={{ borderRadius: RADIUS[mode] }}
       >

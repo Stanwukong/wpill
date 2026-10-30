@@ -201,7 +201,7 @@ it; a click (no movement) opens the file instead.
 *Alternatives:* click-to-open plus a "copy file" button putting `CF_HDROP` on the clipboard (the fallback planned in
 case the drag failed); `tauri-plugin-drag` (same mechanism, an extra dependency for ~20 lines).
 
-### D14: Claude Code activity through hooks, a named pipe and a self-forwarding exe (planned, Phase 2.6)
+### D17: Claude Code activity through hooks, a named pipe and a self-forwarding exe (planned, Phase 2.6)
 *Why:* Claude Code already runs hooks at the moments that matter (`Stop` when a turn finishes,
 `Notification` when it needs a decision) and hands each hook a JSON description on stdin. The cheapest
 reliable bridge is to make `topbar.exe` its own hook command: `topbar.exe hook` reads stdin, writes it to a
@@ -213,6 +213,20 @@ another activity source for 2.5's queue.
 the command line); a localhost HTTP server (opens a port any local process can find); a PowerShell or `curl`
 hook script (slow to start, and an extra file to install); watching transcript files (fragile, and reads
 far more than needed).
+
+### D18: Charging gets an orbiting green outline; UI work goes through a motion-designer agent (Phase 2.5 polish)
+*Why:* plugging in is the one activity that's about something *happening* (energy flowing in), so it earns motion
+where the others don't. The island's outline glows green and a comet of light orbits it once every 2.4 s, over a
+soft green halo. It's a conic gradient on `.island::before`, masked to a 2 px ring with `border-radius: inherit`, so
+it follows the island through the Framer morph without extra DOM. The angle is a registered `@property` animated
+by CSS (no JS timers), and the animation is paused unless `data-charging` is set. Green is its own token
+(`--charge`), not `--accent`, because charging should read the same whatever album art is playing. Reduced
+motion gets a static ring. Visuals that can't be triggered from outside are checked by rendering the built CSS in
+headless Edge. To keep later UI changes consistent, the motion and visual rules (and that verification method)
+now live in a project agent, `.claude/agents/motion-designer.md`, which CLAUDE.md routes all UI changes through.
+*Alternatives:* a rotating element behind the island (needs a wrapper outside `overflow: hidden` and fights the
+layout animation); a pulsing glow (reads as an alert, not progress); keeping the rules only in CLAUDE.md (they'd be
+mixed into backend guidance and easy to skip).
 
 ## 5. Challenges & resolutions
 
@@ -310,7 +324,8 @@ drag then logged `dropped: false` and the activity stayed up.
 | 2026-10-30 | Island background themed from the album art (D13). |
 | 2026-10-30 | Phase 2.5 kick-off prompt written (`prompts/`), so each phase can start in a fresh session. |
 | 2026-10-30 | Phase 2.5 built: activity queue as a hover phase (D14), six sources on four watcher threads plus the poller (D15), screenshot drag-out (D16, C6). Verified from outside; manual checklist pending. |
-| 2026-10-30 | Phase 2.6 (Claude Code activity) added to the roadmap after 2.5 (D14), with its kick-off prompt. |
+| 2026-10-30 | Phase 2.6 (Claude Code activity) added to the roadmap after 2.5 (D17), with its kick-off prompt. |
+| 2026-10-30 | Charging activity: orbiting green outline + halo; `motion-designer` agent added for all UI changes (D18). |
 
 ## 7. Results & metrics
 

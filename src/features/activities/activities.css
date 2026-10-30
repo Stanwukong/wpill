@@ -13,8 +13,70 @@
   color: var(--island-muted);
 }
 
-.activity[data-alert="true"] {
+.activity[data-tone="alert"] {
   color: var(--danger);
+}
+
+.activity[data-tone="charge"] .activity__icon,
+.activity[data-tone="charge"] .activity__value {
+  color: var(--charge);
+}
+
+/*
+ * Charging: the island's outline glows green and a comet of light orbits it (a turn every 2.4 s), over a soft
+ * halo. The ring is a conic gradient over a faint base ring, masked to a 2 px border, so it follows the island's
+ * radius through the Framer morph. Paused and invisible unless the charging activity is showing.
+ */
+.island::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 2px;
+  border-radius: inherit;
+  background:
+    conic-gradient(
+      from var(--orbit),
+      transparent 0turn 0.4turn,
+      rgba(var(--charge-rgb), 0.45) 0.75turn,
+      var(--charge) 0.96turn,
+      #c8ffd6 0.995turn,
+      transparent 1turn
+    ),
+    rgba(var(--charge-rgb), 0.28);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  pointer-events: none;
+  animation: orbit 2400ms linear infinite paused;
+  transition: opacity 250ms ease-in;
+}
+
+.island[data-charging="true"]::before {
+  opacity: 1;
+  animation-play-state: running;
+  transition: opacity 400ms ease-out;
+}
+
+.island[data-charging="true"] {
+  box-shadow:
+    0 0 0 1px rgba(var(--charge-rgb), 0.2),
+    0 0 24px rgba(var(--charge-rgb), 0.34),
+    0 10px 30px var(--island-shadow);
+}
+
+@keyframes orbit {
+  to {
+    --orbit: 1turn;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .island::before {
+    animation: none;
+    background: rgba(var(--charge-rgb), 0.6);
+  }
 }
 
 .activity__icon {
