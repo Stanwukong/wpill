@@ -6,8 +6,8 @@
 
 **Phase 1 is complete (2026-10-28): built, smoke-tested, and all 11 manual tests passed.**
 **Phase 1.5 is complete (2026-10-30): tray menu, launch at startup and single instance, with all manual checks passed.**
-**Phase 2 (media card) is built (2026-10-30); it needs the manual media checklist below.**
-Next after sign-off: Phase 2.5 (Live Activities). See [Roadmap](#roadmap).
+**Phase 2 is complete (2026-10-30): media card, pill art + equalizer and session switcher, with all 10 manual checks passed.**
+**Next: Phase 2.5 (Live Activities).** See [Roadmap](#roadmap).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -270,7 +270,7 @@ meaning; new phases slot in between.
 4b. Disable TopBar *in Task Manager*, then open the tray menu: the checkbox shows unticked. Ticking it re-enables it.
 5. Launching TopBar again while it's running doesn't create a second island.
 
-### Phase 2: media card (built 2026-10-30; awaiting the manual media check)
+### Phase 2: media card (complete 2026-10-30)
 - [x] Rust `media/`: a `media-watcher` thread (MTA) owns the GSMTC manager and subscribes to `CurrentSessionChanged`,
       `SessionsChanged`, and per session `MediaPropertiesChanged`, `PlaybackInfoChanged`, `TimelinePropertiesChanged`.
       Handlers only forward a message; bursts are batched (50 ms) and `media:state` is emitted only on real changes
@@ -284,7 +284,7 @@ meaning; new phases slot in between.
       with app chips as a switcher. A manual pick lasts until a different session becomes most recent.
 - [x] Verified from outside (2026-10-30): Spotify session detected at startup with art, title and artist; pressing play in
       Spotify produced one `media:state` and the pill switched to art + equalizer; no extra emits during steady playback
-- [ ] Manual check (below)
+- [x] Manual check (below): all 10 pass, 2026-10-30 (Spotify, YouTube in a browser, two sessions, nothing playing, text sizes)
 
 **Manual check (Phase 2)** (run with `$env:RUST_LOG='info,topbar_lib=debug'` to see `media:state` lines)
 1. **Nothing playing** (close Spotify, no media tabs): the pill is the plain clock; the panel has no media card.

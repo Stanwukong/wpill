@@ -199,8 +199,8 @@ the same exe on launch, so already-installed users get fixed.
   media card (art, title, progress) and the pill's art + equalizer against a live Spotify session.
 - **GSMTC from PowerShell 5.1 is misleading:** a script using `GetSessions()` listed nothing while Spotify had
   a session (Windows PowerShell doesn't enumerate the projected `IVectorView`). Trust the debug log instead.
-- **Media session identity:** matching sessions by `IUnknown` pointer held up with Spotify; still to be
-  confirmed with several browser tabs (manual check 6).
+- **Media session identity:** matching sessions by `IUnknown` pointer held up with Spotify and a
+  browser at the same time (manual check 6, 2026-10-30).
 
 ## 6. Timeline
 
@@ -214,6 +214,7 @@ the same exe on launch, so already-installed users get fixed.
 | 2026-10-28 | Replaced `tauri-plugin-autostart` with `autostart.rs` (quoted Run path; C5). |
 | 2026-10-30 | Phase 1.5 signed off: tray, startup launch, Task Manager toggle and single instance all pass by hand. |
 | 2026-10-30 | Phase 2 built: GSMTC media watcher (D11), filtered `media:state` (D12), media card with seekable progress, pill art + equalizer, session switcher. |
+| 2026-10-30 | Phase 2 signed off: all 10 manual media checks pass (Spotify, YouTube, two sessions, nothing playing, text sizes). |
 
 ## 7. Results & metrics
 
