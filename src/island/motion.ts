@@ -7,6 +7,7 @@ export const PANEL_WIDTH_PX = 640;
 
 export const PILL_RADIUS = 18;
 export const PANEL_RADIUS = 28;
+export const ACTIVITY_RADIUS = 22;
 
 /** Pill ⇄ panel morph. */
 export const islandSpring: Transition = { type: "spring", stiffness: 420, damping: 34, mass: 0.9 };

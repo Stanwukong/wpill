@@ -16,6 +16,8 @@ pub enum AppError {
     MediaSessionGone,
     #[error("The app didn't accept that media command.")]
     MediaRejected,
+    #[error("That activity has ended.")]
+    ActivityGone,
     #[error(transparent)]
     Win32(#[from] windows::core::Error),
     #[error(transparent)]
@@ -31,6 +33,7 @@ impl AppError {
             Self::NoMonitor => "noMonitor",
             Self::MediaSessionGone => "mediaSessionGone",
             Self::MediaRejected => "mediaRejected",
+            Self::ActivityGone => "activityGone",
             Self::Win32(_) => "win32",
             Self::Tauri(_) => "tauri",
         }

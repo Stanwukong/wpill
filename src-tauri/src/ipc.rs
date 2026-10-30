@@ -7,6 +7,8 @@ pub mod events {
     pub const HOVER_LEAVE: &str = "island:hover-leave";
     pub const VISIBILITY: &str = "island:visibility";
     pub const MEDIA_STATE: &str = "media:state";
+    pub const ACTIVITY_SHOW: &str = "activity:show";
+    pub const ACTIVITY_HIDE: &str = "activity:hide";
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -16,11 +18,104 @@ pub struct VisibilityPayload {
     pub reason: Option<&'static str>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IslandStatePayload {
     pub expanded: bool,
     pub hidden: bool,
+    pub activity: Option<ActivityPayload>,
+}
+
+/// `activity:show`. Re-sent with the same `id` when a burst (e.g. volume key presses) updates it in place.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityPayload {
+    pub id: u32,
+    #[serde(flatten)]
+    pub activity: Activity,
+    /// Time left at emit; Rust times it (and holds it while an interactive activity is hovered).
+    pub duration_ms: u64,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityHidePayload {
+    pub id: u32,
+}
+
+/// Serialized as `{ kind, payload }`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "payload", rename_all = "camelCase")]
+pub enum Activity {
+    Volume(VolumeActivity),
+    Brightness(BrightnessActivity),
+    Bluetooth(BluetoothActivity),
+    Power(PowerActivity),
+    CapsLock(CapsLockActivity),
+    Screenshot(ScreenshotActivity),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VolumeActivity {
+    /// 0–100.
+    pub level: u8,
+    pub muted: bool,
+    pub device: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrightnessActivity {
+    /// 0–100.
+    pub level: u8,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BluetoothActivity {
+    pub name: String,
+    pub connected: bool,
+    /// 0–100, when the device reports it.
+    pub battery: Option<u8>,
+    /// Device container id; one headset's A2DP and hands-free endpoints share it.
+    #[serde(skip)]
+    pub container: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PowerEvent {
+    PluggedIn,
+    Unplugged,
+    Low,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PowerActivity {
+    pub event: PowerEvent,
+    /// Battery percentage, 0–100.
+    pub level: u8,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CapsLockActivity {
+    pub on: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScreenshotActivity {
+    pub file_name: String,
+    /// PNG data URL, about 256 px on its long side.
+    pub thumbnail: String,
+    pub width: u32,
+    pub height: u32,
+    /// Stays in Rust: drag/open commands look it up by activity id, so JS never names a path.
+    #[serde(skip)]
+    pub path: std::path::PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize)]

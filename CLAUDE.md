@@ -33,7 +33,7 @@ window previews).
 .\scripts\check-env.ps1     # verify toolchain (Rust/MSVC/Node/WebView2)
 pnpm install
 pnpm tauri dev              # run the app (Vite HMR for React; Rust rebuilds + relaunches on save)
-$env:RUST_LOG='info,topbar_lib=debug'; pnpm tauri dev   # + hover transitions, panel-rect and media:state logs
+$env:RUST_LOG='info,topbar_lib=debug'; pnpm tauri dev   # + hover transitions, panel-rect, media:state and activity:show logs
 pnpm tauri build            # release build + NSIS installer (~11 min cold: fat LTO; ~1.5 MB installer)
 cd src-tauri; cargo fmt; cargo clippy --all-targets; cargo test
 pnpm typecheck              # tsc --noEmit
@@ -50,8 +50,12 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
   `fullscreen.rs`, `apps/` (`enumerate.rs`, `icon.rs`, `activate.rs`), `tray.rs` (tray menu),
   `autostart.rs` (Run-key entry, quoted path, respects Task Manager's enable flag),
   `media/` (`mod.rs` = managed state + commands, `watcher.rs` = GSMTC thread + subscriptions,
-  `snapshot.rs`, `artwork.rs`, `logic.rs` = pure helpers, unit-tested).
-- `lib.rs` uses `.build()?.run(|app, event| …)` so `RunEvent::Exit` can stop the media watcher (unregisters its WinRT handlers).
+  `snapshot.rs`, `artwork.rs`, `logic.rs` = pure helpers, unit-tested),
+  `activity/` (`mod.rs` = managed `Activities`, `Watcher` harness, Caps Lock read, drag/open commands; `queue.rs` = pure
+  priority/coalescing, unit-tested; `settings.rs` = switches in `%APPDATA%\dev.wpill.topbar\settings.json`; one thread
+  per source: `audio.rs` (volume + Bluetooth), `brightness.rs`, `power.rs`, `screenshots.rs`; `drag.rs`).
+  The activity queue is driven by `hover::logic::Machine` (the `Showing` phase), not by the activity module.
+- `lib.rs` uses `.build()?.run(|app, event| …)` so `RunEvent::Exit` can stop the media and activity watchers (unregisters their handlers).
 - Plugins (registered in `lib.rs`): `tauri-plugin-single-instance` (must stay first). Don't use
   `tauri-plugin-autostart`: it writes the exe path unquoted, which breaks for paths with spaces.
 - `prompts/`: kick-off prompts for starting a phase in a fresh session (one per phase, linked from PLAN.md;
@@ -60,13 +64,15 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
 - `src/`: `lib/ipc.ts` + `lib/types.ts`, `island/` (Island, Clock, hooks, `motion.ts`), `features/apps/`,
   `features/media/` (`useMedia` lives in `Island` so state survives the panel remounting; `MediaCard`, `PillMedia`, `useProgress`,
   `artTheme` = album-art colors → `--tint-from`/`--tint-to`/`--accent`, set on `.stage`; those are `@property`-registered in
-  `global.css` so they can transition. Use `var(--accent)` for highlights, not a fixed color).
+  `global.css` so they can transition. Use `var(--accent)` for highlights, not a fixed color),
+  `features/activities/` (`ActivityView` per kind, `ScreenshotActivity` with the drag/click gesture, inline SVG `icons`).
+  The island has three shapes (`data-mode`: `pill` | `activity` | `panel`), all driven by Rust events.
 
 ## Architecture rules
 
 1. **Rust owns window and hover state.** The cursor poller in `src-tauri/src/hover/` decides
-   expanded vs collapsed and toggles click-through (`window::set_click_through`). React only animates in
-   response to events. Never drive expand/collapse from DOM `mouseenter`/`mouseleave`:
+   expanded vs collapsed vs showing an activity, times activities, and toggles click-through
+   (`window::set_click_through`). React only animates in response to events and never runs timers to hide things. Never drive expand/collapse from DOM `mouseenter`/`mouseleave`:
    while collapsed the webview gets no mouse events at all.
 2. **One window, never activated.** The island window has `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`.
    It must never take focus from the user's app. Anything that needs keyboard input
@@ -75,7 +81,7 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
    structs). TS: `src/lib/ipc.ts` (typed `invoke`/`listen` wrappers). Components never call
    `invoke("...")` with a string literal.
 4. **Win32 is isolated.** All `unsafe` Win32/WinRT code lives in feature modules under
-   `src-tauri/src/` (`window/`, `hover/`, `apps/`, `fullscreen.rs`, `media/`, later
+   `src-tauri/src/` (`window/`, `hover/`, `apps/`, `fullscreen.rs`, `media/`, `activity/`, later
    `processes/`, `thumbnails/`). Each `unsafe` block gets a one-line `// SAFETY:` comment.
    Commands are thin wrappers that return `Result<T, AppError>`.
 5. **Payloads are camelCase.** Rust DTOs use `#[serde(rename_all = "camelCase")]`; TS types in
@@ -138,6 +144,20 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
 - **Media apps fire events in bursts and in odd orders.** Spotify often sends a track's title before its thumbnail,
   so artwork misses are not cached and are retried. Timeline events are emitted to React only when they disagree
   with its interpolation (`logic::worth_emitting`); keep `positionAt` in `useProgress.ts` in step with `expected_position`.
+- **`#[implement]` needs `windows-core` as a direct dependency** (the macro expands to `windows_core::` paths). Keep it
+  on the same minor as `windows`. `CreateFileW` and `CreateEventW` are gated behind the `Win32_Security` feature.
+- **Core Audio callbacks** (`IMMNotificationClient`, `IAudioEndpointVolumeCallback`) run on system threads and must not
+  call back into the device API: forward a message to `audio-watcher`, like GSMTC handlers.
+- **Power notifications need a window.** `power.rs` owns a message-only window (`HWND_MESSAGE`) on its own thread. Never
+  register anything against the island's HWND.
+- **Screenshot drag-out** must be a *sync* command (main thread: OLE STA, owns the island) started while the mouse button
+  is still down. Don't call `disable_drag_drop_handler()` on the island: WebView2's own drop target then accepts files
+  dropped on it (C6). Tauri's handler intercepts them harmlessly.
+- **Activities and hit tests:** only interactive activities (the screenshot) take clicks, and only while hovered.
+  `set_panel_rect` reports carry a `mode`; reports for the shape Rust isn't showing are ignored.
+- **Testing activities from outside without side effects:** toggle Caps Lock with SendInput and toggle it back; volume
+  up N then down N; brightness via WMI `WmiSetBrightness` and restore; copy an image into the Screenshots folder (then
+  delete it). Read `GWL_EXSTYLE` (`WS_EX_TRANSPARENT`) to check click-through.
 - **Windows PowerShell 5.1 can't list GSMTC sessions** (`GetSessions()` comes back empty). Check media state with the
   `topbar_lib=debug` log instead.
 

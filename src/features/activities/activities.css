@@ -1,0 +1,110 @@
+/* Compact activity layouts. Colors come from the island theme (--accent follows the album art). */
+.activity {
+  height: 44px;
+  padding: 0 16px 0 14px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.activity[data-dim="true"] .activity__icon {
+  color: var(--island-muted);
+}
+
+.activity[data-alert="true"] {
+  color: var(--danger);
+}
+
+.activity__icon {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+
+.activity__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.activity__detail {
+  font-size: 12px;
+  color: var(--island-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.activity__value {
+  min-width: 30px;
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.activity__state {
+  font-weight: 600;
+  color: var(--island-muted);
+}
+
+.activity__state[data-on="true"] {
+  color: var(--accent);
+}
+
+.activity__meter {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.activity__caption {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--island-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.activity__track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+
+/* Steps update in place, so a short transition reads as the bar moving. */
+.activity__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 120ms ease-out;
+}
+
+.activity--screenshot {
+  height: 92px;
+  padding: 10px 16px 10px 10px;
+  gap: 14px;
+  cursor: grab;
+}
+
+.activity__thumb {
+  width: 128px;
+  height: 72px;
+  flex: none;
+  object-fit: cover;
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px var(--island-border);
+  pointer-events: none;
+}
+
+.activity__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

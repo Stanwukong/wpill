@@ -25,6 +25,8 @@ windows-registry = "0.6"
 # Not re-exported by `windows`; same versions it already pulls in (IAsyncOperation, IVectorView).
 windows-future = "0.3"
 windows-collections = "0.3"
+# `#[implement]` (COM callbacks in Rust) expands to `windows_core::` paths, so it must be a direct dependency.
+windows-core = "0.62"
 
 [profile.release]
 codegen-units = 1
@@ -38,15 +40,31 @@ strip = true
 [dependencies.windows]
 version = "0.62"
 features = [
+  "Devices_Enumeration",
   "Media_Control",
   "Storage_Streams",
+  "Win32_Devices_FunctionDiscovery",
   "Win32_Foundation",
   "Win32_Graphics_Dwm",
   "Win32_Graphics_Gdi",
+  "Win32_Media_Audio",
+  "Win32_Media_Audio_Endpoints",
+  "Win32_Security",
   "Win32_Storage_FileSystem",
   "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_IO",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Ole",
+  "Win32_System_Power",
+  "Win32_System_Rpc",
+  "Win32_System_SystemServices",
   "Win32_System_Threading",
+  "Win32_System_Variant",
+  "Win32_System_Wmi",
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_Shell",
+  "Win32_UI_Shell_Common",
+  "Win32_UI_Shell_PropertiesSystem",
   "Win32_UI_WindowsAndMessaging",
 ]

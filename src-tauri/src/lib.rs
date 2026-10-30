@@ -1,3 +1,4 @@
+mod activity;
 mod apps;
 mod autostart;
 mod error;
@@ -22,12 +23,14 @@ pub fn run() {
         .manage(hover::Island::default())
         .manage(apps::IconCache::default())
         .manage(media::Media::default())
+        .manage(activity::Activities::default())
         .setup(|app| {
             autostart::repair();
             let handle = app.handle().clone();
             let (island, geometry) = window::create(&handle)?;
             hover::spawn(handle.clone(), &island, geometry)?;
             media::spawn(handle.clone(), &app.state::<media::Media>())?;
+            activity::spawn(&handle, &app.state::<activity::Activities>());
             tray::create(&handle)?;
             Ok(())
         })
@@ -42,12 +45,15 @@ pub fn run() {
             media::media_next,
             media::media_prev,
             media::media_seek,
+            activity::activity_drag_screenshot,
+            activity::activity_open_screenshot,
         ])
         .build(tauri::generate_context!())
         .expect("error while building TopBar")
         .run(|app, event| {
             if let RunEvent::Exit = event {
                 app.state::<media::Media>().shutdown();
+                app.state::<activity::Activities>().shutdown();
             }
         });
 }

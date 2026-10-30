@@ -8,8 +8,8 @@
 **Phase 1.5 is complete (2026-10-30): tray menu, launch at startup and single instance, with all manual checks passed.**
 **Phase 2 is complete (2026-10-30): media card, pill art + equalizer and session switcher, with all 10 manual checks passed.**
 After sign-off, the island also took its colors from the album art (D13).
-**Next: Phase 2.5 (Live Activities).** See [Roadmap](#roadmap). Kick-off prompt for a new session:
-[prompts/phase-2.5-live-activities.md](prompts/phase-2.5-live-activities.md).
+**Phase 2.5 is built (2026-10-30): Live Activities for volume, brightness, Bluetooth audio, power, Caps Lock and
+screenshots. Verified from outside (below); the manual checklist is pending.** Then Phase 4a. See [Roadmap](#roadmap).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -152,6 +152,8 @@ wpill/
       │  └─ activate.rs          # SetForegroundWindow fallback chain
       ├─ media/                  # Phase 2: mod (state + commands), watcher (thread + subscriptions),
       │                          #   snapshot (session → DTO), artwork (thumbnail → data URL), logic (pure, tested)
+      ├─ activity/               # Phase 2.5: mod (state, watcher harness, commands), queue (pure, tested),
+      │                          #   settings (switches), audio, brightness, power, screenshots (one thread each), drag
       ├─ processes/              # Phase 3
       └─ tray.rs settings.rs thumbnails/   # Phase 4
 ```
@@ -189,13 +191,28 @@ positionMs, durationMs|null, updatedAtMs, playbackRate, canPlay, canPause, canNe
 `LastUpdatedTime`); React interpolates `positionMs + (now − updatedAtMs) × playbackRate` while playing.
 Command errors: `mediaSessionGone` (session ended), `mediaRejected` (the app returned `false`).
 
+### Phase 2.5
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| event | `activity:show` | `{ id, kind, payload, durationMs }` | Re-sent with the same `id` when a burst updates it in place. `durationMs` is the time left; Rust times it. |
+| event | `activity:hide` | `{ id }` | Timed out, replaced, or the panel opened over it. Needed because Rust holds hovered activities. |
+| command | `set_panel_rect` | `(width, bottom, mode: "panel" \| "activity")` | Gained `mode`; Rust ignores reports for the shape it isn't showing. |
+| command | `get_island_state` | `() → { expanded, hidden, activity }` | Gained `activity` (the payload on screen, or `null`). |
+| command | `activity_drag_screenshot` | `(id) → void` | Sync (main thread); call while the button is down. Resolves after the drop. |
+| command | `activity_open_screenshot` | `(id) → void` | Opens in the default viewer and ends the activity. Error `activityGone` if `id` isn't showing. |
+
+Payloads by `kind`: `volume { level, muted, device }`, `brightness { level }`,
+`bluetooth { name, connected, battery|null }`, `power { event: "pluggedIn"|"unplugged"|"low", level }`,
+`capsLock { on }`, `screenshot { fileName, thumbnail (PNG data URL, ≤256 px), width, height }`. The screenshot's path
+stays in Rust and is looked up by `id`.
+
 ### Reserved for later phases (names fixed now so they slot in)
 
 | Phase | Kind | Name |
 |---|---|---|
 | 3 | command | `list_heavy_processes(limit) → ProcessGroup[]` (`{ name, pids, memoryBytes, icon, protected }`) |
 | 3 | command | `end_process_group(name, pids) → EndResult` (per pid: `ok \| accessDenied \| protected \| notFound`) |
-| 2.5 | event | `activity:show` → `{ kind: "volume" \| "brightness" \| "bluetooth" \| "power" \| "capsLock" \| "screenshot", payload, durationMs }` |
 | 2.6 | activity kinds | `claudeDone`, `claudeNeedsInput` (payload: `{ sessionId, project }`) in `activity:show` |
 | 2.6 | event | `claude:sessions` → `{ sessions: { sessionId, project, status: "working" \| "done" \| "needsInput", updatedAtMs }[] }` |
 | 2.6 | command | `claude_focus_session(sessionId)`, `claude_hooks_status() → { installed }`, `claude_hooks_install()`, `claude_hooks_remove()` |
@@ -311,17 +328,52 @@ meaning; new phases slot in between.
 9. **Fit:** at text size 120 % and 150 %, the panel with the media card fits; the apps grid scrolls rather than overflowing.
 10. **Windows Media Player** (the new app): play a local file → it shows as "Media Player" with its controls.
 
-### Phase 2.5: Live Activities
-A small activity system: an event source in Rust emits `activity:show { kind, payload, durationMs }`.
-The island expands to a compact "activity" size for a few seconds, without stealing hover state, then collapses.
-Start from [prompts/phase-2.5-live-activities.md](prompts/phase-2.5-live-activities.md): research and a design proposal come before any code.
-- [ ] Activity queue + priority (don't interrupt a hovered/expanded island; coalesce rapid repeats)
-- [ ] Volume and brightness changes (Core Audio endpoint volume callbacks; WMI or monitor brightness)
-- [ ] Bluetooth audio connected/disconnected, with battery level where exposed
-- [ ] Charger plugged/unplugged, low battery (`GetSystemPowerStatus` / power notifications)
-- [ ] Caps Lock toggled
-- [ ] Screenshot taken: thumbnail you can drag out (watch the Screenshots folder / clipboard)
-- [ ] Per-activity on/off switches (stored now, UI in Phase 4b)
+### Phase 2.5: Live Activities (built 2026-10-30; manual check pending)
+Sources push activities into one channel; the hover poller owns the queue as part of its state machine (`Showing` phase,
+CASESTUDY D14). The island morphs to a 340 px compact activity (92 px tall for screenshots) and back.
+Kick-off prompt: [prompts/phase-2.5-live-activities.md](prompts/phase-2.5-live-activities.md).
+- [x] Queue: *feedback* (volume, brightness, Caps Lock) shows at once, replaces what's showing, and is dropped while the
+      panel is open; *notices* (Bluetooth, power, screenshot) wait, go stale (10–60 s) and resume after interruption.
+      Same key = update in place (one id). Never covers the open panel; hot-zone dwell still opens it (D14)
+- [x] Volume/mute: `IAudioEndpointVolumeCallback` on the default output, re-subscribed by `IMMNotificationClient` (D15)
+- [x] Brightness: WMI `WmiMonitorBrightnessEvent`, pulled semi-synchronously (D15)
+- [x] Bluetooth audio connect/disconnect from endpoint state changes, deduplicated by container id; battery from the
+      undocumented `{104EA319…} 2` property, re-read 1.5 s after connecting (D15)
+- [x] Charger plugged/unplugged and low battery (crossing 20 % / 10 % on battery) via power-setting notifications on a
+      message-only window
+- [x] Caps Lock: `GetKeyState` polled in the 60 Hz poller (no hook)
+- [x] Screenshot: overlapped `ReadDirectoryChangesW` on the Screenshots known folder, shell thumbnail; hovering holds it
+      and makes it clickable; drag out with `SHDoDragDrop`, click to open (D16)
+- [x] Switches in `%APPDATA%\dev.wpill.topbar\settings.json` (`activities.volume`, …, read at launch; UI in Phase 4b)
+- [x] Verified from outside (2026-10-30, `RUST_LOG=topbar_lib=debug`, SendInput + screen captures + `GWL_EXSTYLE`):
+      Caps Lock toggled and restored → "Caps Lock · On" activity, island stayed click-through, foreground unchanged;
+      2× volume up + 2× down (restored) → one activity updated in place; WMI brightness 100 → 90 → 100 → activity at 90;
+      a file copied into Screenshots → thumbnail activity, clickable only while hovered, held past 6 s, gone ~1 s after
+      leaving; hot-zone dwell during an activity → panel; a screenshot arriving while the panel was open showed after it
+      collapsed; a synthetic drag from the thumbnail started a shell drag (drag image, "+ Copy") without changing the
+      foreground window. 36 Rust tests pass
+- [ ] Manual check (below)
+
+**Manual check (Phase 2.5)** (run with `$env:RUST_LOG='info,topbar_lib=debug'`; `activity:show` lines appear in the log)
+1. **Volume keys:** press volume up/down several times. One activity shows the bar moving and the level; it leaves 1.5 s
+   after the last press. Mute shows "Muted" and an empty bar. Windows' own flyout also appears (known limitation).
+2. **Brightness keys:** same, with the sun icon. Adaptive brightness changes may also show it (known limitation).
+3. **Bluetooth headphones:** connect → "WUF-W35 · Connected" (with "· N%" if it reports battery, possibly appearing a
+   moment later). Disconnect → "Disconnected". One activity each, not one per audio profile.
+4. **Charger:** unplug → "On battery · N%"; plug in → "Charging · N%" with a bolt.
+5. **Caps Lock:** on → "Caps Lock On" in the accent color; off → "Off".
+6. **Screenshot:** Win+PrtScn → "Screenshot saved" with the thumbnail. Hover it: it stays up. Drag the thumbnail into an
+   Explorer folder, a chat or an email → the file is copied there and the activity ends. Take another and click the
+   thumbnail → it opens in Photos and the activity ends. Win+Shift+S (Snipping Tool auto-save on) also shows it.
+7. **Panel open:** open the panel and press a volume key → nothing covers the panel. Take a screenshot with the panel
+   open, then leave it → the screenshot activity appears after the panel closes.
+8. **Hover during an activity:** while a volume activity shows, rest on the top edge → the full panel opens.
+   Clicks under a volume/brightness activity reach the app beneath it.
+9. **Focus:** typing in Notepad continues while activities come and go and while dragging a screenshot out.
+10. **Fullscreen:** in a fullscreen video, volume keys show no island; a screenshot taken there appears after leaving
+    fullscreen if within 30 s.
+11. **Theme:** with Spotify playing (tinted island), activities use the art's colors; with nothing playing, black + green.
+12. **Switches:** set `"capsLock": false` in `%APPDATA%\dev.wpill.topbar\settings.json`, restart → Caps Lock shows nothing.
 
 ### Phase 2.6: Claude Code activity
 The island tells you when a local Claude Code session finishes a task or needs a decision, through Claude Code
@@ -394,6 +446,11 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
 - Media: apps decide what GSMTC exposes. Browsers often disable next/previous, some apps never send a timeline (no
   progress bar), and live streams have no duration. App names come from the app id (`Spotify.exe` → "Spotify"),
   with a few known ids mapped; others are just capitalized.
+- Activities: Windows' own volume/brightness flyouts still appear next to ours (hiding them needs shell-window hacks).
+  Brightness covers internal panels only (no DDC/CI monitors) and also reacts to adaptive brightness. The Bluetooth
+  battery level uses an undocumented device property and is missing for devices that don't report it. Screenshots come
+  from the Screenshots folder only: PrtScn to the clipboard (no file) isn't an activity. Switches are edited by hand
+  until Phase 4b.
 
 ## Distribution
 - `pnpm tauri build` produces `src-tauri/target/release/bundle/nsis/TopBar_0.1.0_x64-setup.exe`:

@@ -144,6 +144,63 @@ the shown session has art, paused included, because the panel still shows that a
 *Alternatives:* extracting in Rust (would need JPEG decoding and a payload change for something purely visual);
 blurring the art itself behind the island (heavier, and busy art hurts text legibility).
 
+### D14: An activity is a hover phase, and the queue lives on the poller thread (Phase 2.5)
+*Why:* an activity changes the island's shape, its hit area and whether it takes clicks: exactly what the hover state
+machine already owns (D1). Making it a React-side expand would have split that ownership and reintroduced the
+"webview gets no mouse events while click-through" problem. So `hover/logic.rs` gained a `Showing` phase, and a
+`Machine` combines the phase with the activity queue: dwelling in the hot zone during an activity still opens the panel,
+and nothing is ever shown over an open (or leaving) panel. The queue has two classes. *Feedback* (volume, brightness,
+Caps Lock) answers a key just pressed: it shows at once, replaces what's showing, and is dropped if it can't show,
+because feedback after the fact is noise. *Notices* (Bluetooth, power, screenshot) wait while the panel is open, resume
+with at least 1.5 s if feedback interrupted them, and go stale after 10–60 s. Activities with the same key update in
+place with the same id, so a burst of volume presses is one activity with a moving bar. Sources send finished
+activities down one channel that the poller drains each 16 ms tick: no locks around the queue, no extra wakeups, and
+all timing in one place. Only the screenshot is *interactive*: while the cursor is on it the island takes clicks and the
+countdown pauses. Other activities stay click-through under the cursor, so a volume bar never eats a click meant for a
+browser tab. `set_panel_rect` gained a `mode`, so a late report for the previous shape can't become the hit area (a
+generalization of C3).
+*Alternatives:* a separate activity window (two windows to keep in sync, D2 again); timing durations in React
+(throttled when idle, and Rust needs to know anyway to restore click-through); one priority list without classes
+(either volume feedback waits behind a screenshot, or notices get dropped like feedback).
+
+### D15: One watcher thread per source; the cheapest reliable API for each (Phase 2.5)
+*Why:* each source follows the D11 pattern (its thread owns the subscriptions, callbacks only forward, guards
+unregister on drop and on `RunEvent::Exit`), but the APIs differ:
+- **Volume:** `IAudioEndpointVolumeCallback` on the default output, re-registered when `IMMNotificationClient` reports a
+  new default. Both are COM interfaces implemented in Rust with `#[implement]`. The current level at subscribe time is a
+  baseline, not an activity.
+- **Bluetooth audio:** endpoint state changes from the same `IMMNotificationClient` rather than a Bluetooth device
+  watcher. It only fires for audio devices (the scope), and a headset's stereo and hands-free endpoints share a device
+  container, so connects are deduplicated by container id. A `DeviceInformation` query on the container tells
+  Bluetooth from wired (a `BTHENUM\`/`BTHLE\` node) and reads the battery from the undocumented
+  `{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2` property, which is what Settings shows.
+- **Brightness:** WMI's `WmiMonitorBrightnessEvent`, pulled semi-synchronously (`IEnumWbemClassObject::Next` with a
+  500 ms timeout). No sink object to implement, nothing calls into the process from WMI threads, and the timeout doubles as
+  the stop check. `GUID_VIDEO_CURRENT_MONITOR_BRIGHTNESS` power notifications were rejected: not on the documented list.
+- **Power:** `RegisterPowerSettingNotification` for AC/DC and battery percentage. It needs a window, so the thread owns a
+  message-only window (never the island's HWND).
+- **Caps Lock:** polled with `GetKeyState` in the existing poller. Verified with SendInput that a long-lived thread with
+  no message queue sees the toggle, so no keyboard hook is needed (D1).
+- **Screenshots:** an overlapped `ReadDirectoryChangesW` on the Screenshots known folder, waited on together with a stop
+  event; the thumbnail comes from the shell (`IShellItemImageFactory`), so any image type works and Explorer's cache helps.
+
+*Alternatives:* a low-level keyboard hook for volume, brightness and Caps Lock (sees key presses but not the resulting
+level, misses changes made by other apps, and is the hook D1 avoided); polling `GetSystemPowerStatus` (simple, but
+wakes the CPU for something Windows will push); clipboard monitoring for screenshots (an image with no file can't be
+dragged out as a file).
+
+### D16: Drag-out with the shell's own drag loop, from the non-activating window (Phase 2.5)
+*Why:* a screenshot is most useful dropped straight into a chat or folder. HTML5 drag can't carry a real file out of
+WebView2, so the webview only detects the gesture (press, then 4 px of movement) and calls a *sync* command. Tauri runs
+those on the main thread, which Tao has OLE-initialized and which owns the island window. The command runs
+`SHDoDragDrop` with the file's shell-item data object and no drop source of its own (the shell supplies the default one
+and the drag image), while the button is still down. `WS_EX_NOACTIVATE` doesn't matter: drop targets never check whether
+the source is active. Verified with a synthetic drag: the shell's drag image and "+ Copy" cursor appeared and the
+foreground window never changed. While the drag runs, the poller holds the activity. A successful drop elsewhere ends
+it; a click (no movement) opens the file instead.
+*Alternatives:* click-to-open plus a "copy file" button putting `CF_HDROP` on the clipboard (the fallback planned in
+case the drag failed); `tauri-plugin-drag` (same mechanism, an extra dependency for ~20 lines).
+
 ### D14: Claude Code activity through hooks, a named pipe and a self-forwarding exe (planned, Phase 2.6)
 *Why:* Claude Code already runs hooks at the moments that matter (`Stop` when a turn finishes,
 `Notification` when it needs a decision) and hands each hook a JSON description on stdin. The cheapest
@@ -214,6 +271,16 @@ honors and clears Task Manager's `StartupApproved` switch, and repairs an existi
 the same exe on launch, so already-installed users get fixed.
 *Lesson:* test paths with spaces. The dev machine happened to have one, and that caught it.
 
+### C6: A screenshot "dropped" back onto the island counted as shared
+*Symptom:* a synthetic drag released over the island itself logged `dropped: true`, which would have ended the activity
+as if the file had gone somewhere. *Diagnosis:* the island window had been built with `disable_drag_drop_handler()` (to
+avoid Tauri file-drop events), which left WebView2's own drop target in charge. It accepted the file with a copy effect.
+It didn't navigate this time, but a webview deciding what to do with a dropped file is not something to rely on.
+*Fix:* keep Tauri's drop handler (it intercepts drops before WebView2 and only emits an event nobody listens to), and
+count a drop as shared only if the cursor is no longer over the island (`WindowFromPoint` → root == island). The same
+drag then logged `dropped: false` and the activity stayed up.
+*Lesson:* "disable the handler" can mean "hand the event to the next handler in line", not "ignore it".
+
 ### Still open
 - **Foreground-lock rules** in practice: the fallback chain is implemented but not yet exercised
   against elevated or minimized targets (manual test 7).
@@ -242,6 +309,7 @@ the same exe on launch, so already-installed users get fixed.
 | 2026-10-30 | Phase 2 signed off: all 10 manual media checks pass (Spotify, YouTube, two sessions, nothing playing, text sizes). |
 | 2026-10-30 | Island background themed from the album art (D13). |
 | 2026-10-30 | Phase 2.5 kick-off prompt written (`prompts/`), so each phase can start in a fresh session. |
+| 2026-10-30 | Phase 2.5 built: activity queue as a hover phase (D14), six sources on four watcher threads plus the poller (D15), screenshot drag-out (D16, C6). Verified from outside; manual checklist pending. |
 | 2026-10-30 | Phase 2.6 (Claude Code activity) added to the roadmap after 2.5 (D14), with its kick-off prompt. |
 
 ## 7. Results & metrics

@@ -1,20 +1,24 @@
 import { useRef, type CSSProperties } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { ActivityView } from "../features/activities/ActivityView";
 import { AppsList } from "../features/apps/AppsList";
 import { useArtTheme } from "../features/media/artTheme";
 import { MediaCard } from "../features/media/MediaCard";
 import { Equalizer, PillArt } from "../features/media/PillMedia";
 import { useMedia } from "../features/media/useMedia";
 import { Clock } from "./Clock";
-import { contentFade, islandSpring, PANEL_RADIUS, PILL_RADIUS } from "./motion";
+import { ACTIVITY_RADIUS, contentFade, islandSpring, PANEL_RADIUS, PILL_RADIUS } from "./motion";
 import { useIslandState } from "./useIslandState";
 import { usePanelSizeReporter } from "./usePanelSizeReporter";
 import "./island.css";
 
+const RADIUS = { pill: PILL_RADIUS, activity: ACTIVITY_RADIUS, panel: PANEL_RADIUS } as const;
+
 export function Island() {
-  const { expanded, hidden } = useIslandState();
+  const { expanded, hidden, activity } = useIslandState();
+  const mode = expanded ? "panel" : activity ? "activity" : "pill";
   const ref = useRef<HTMLDivElement>(null);
-  usePanelSizeReporter(ref, expanded);
+  usePanelSizeReporter(ref, mode === "pill" ? null : mode);
   const media = useMedia();
   const nowPlaying = media.active?.status === "playing" ? media.active : null;
   // Tinted while there is an active session with art (playing or paused); plain black otherwise.
@@ -32,11 +36,25 @@ export function Island() {
         layout
         className="island"
         data-expanded={expanded}
+        data-mode={mode}
         transition={islandSpring}
-        style={{ borderRadius: expanded ? PANEL_RADIUS : PILL_RADIUS }}
+        style={{ borderRadius: RADIUS[mode] }}
       >
         <AnimatePresence mode="popLayout" initial={false}>
-          {expanded ? (
+          {mode === "activity" && activity ? (
+            // Keyed by kind: an in-place update (another volume step) re-renders without a crossfade.
+            <motion.div
+              key={`activity-${activity.kind}`}
+              className="island__activity"
+              layout="position"
+              initial={{ opacity: 0, filter: "blur(4px)" }}
+              animate={{ opacity: 1, filter: "blur(0px)" }}
+              exit={{ opacity: 0 }}
+              transition={contentFade}
+            >
+              <ActivityView activity={activity} />
+            </motion.div>
+          ) : expanded ? (
             <motion.div
               key="panel"
               className="island__panel"
