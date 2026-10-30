@@ -8,8 +8,10 @@
 **Phase 1.5 is complete (2026-10-30): tray menu, launch at startup and single instance, with all manual checks passed.**
 **Phase 2 is complete (2026-10-30): media card, pill art + equalizer and session switcher, with all 10 manual checks passed.**
 After sign-off, the island also took its colors from the album art (D13).
-**Phase 2.5 is built (2026-10-30): Live Activities for volume, brightness, Bluetooth audio, power, Caps Lock and
-screenshots. Verified from outside (below); the manual checklist is pending.** Then Phase 4a. See [Roadmap](#roadmap).
+**Phase 2.5 is complete (2026-10-30): Live Activities for volume, brightness, Bluetooth audio, power, Caps Lock and
+screenshots, with all 12 manual checks passed.** The charging activity also got an orbiting green outline (D18).
+**Next: Phase 2.6 (Claude Code activity).** See [Roadmap](#roadmap). Kick-off prompt for a new session:
+[prompts/phase-2.6-claude-code.md](prompts/phase-2.6-claude-code.md).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -328,7 +330,7 @@ meaning; new phases slot in between.
 9. **Fit:** at text size 120 % and 150 %, the panel with the media card fits; the apps grid scrolls rather than overflowing.
 10. **Windows Media Player** (the new app): play a local file → it shows as "Media Player" with its controls.
 
-### Phase 2.5: Live Activities (built 2026-10-30; manual check pending)
+### Phase 2.5: Live Activities (complete 2026-10-30)
 Sources push activities into one channel; the hover poller owns the queue as part of its state machine (`Showing` phase,
 CASESTUDY D14). The island morphs to a 340 px compact activity (92 px tall for screenshots) and back.
 Kick-off prompt: [prompts/phase-2.5-live-activities.md](prompts/phase-2.5-live-activities.md).
@@ -354,7 +356,7 @@ Kick-off prompt: [prompts/phase-2.5-live-activities.md](prompts/phase-2.5-live-a
       leaving; hot-zone dwell during an activity → panel; a screenshot arriving while the panel was open showed after it
       collapsed; a synthetic drag from the thumbnail started a shell drag (drag image, "+ Copy") without changing the
       foreground window. 36 Rust tests pass
-- [ ] Manual check (below)
+- [x] Manual check (below): all 12 pass, 2026-10-30 (including Bluetooth headphones, charger, screenshot drag-out and fullscreen)
 
 **Manual check (Phase 2.5)** (run with `$env:RUST_LOG='info,topbar_lib=debug'`; `activity:show` lines appear in the log)
 1. **Volume keys:** press volume up/down several times. One activity shows the bar moving and the level; it leaves 1.5 s

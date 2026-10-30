@@ -326,6 +326,7 @@ drag then logged `dropped: false` and the activity stayed up.
 | 2026-10-30 | Phase 2.5 built: activity queue as a hover phase (D14), six sources on four watcher threads plus the poller (D15), screenshot drag-out (D16, C6). Verified from outside; manual checklist pending. |
 | 2026-10-30 | Phase 2.6 (Claude Code activity) added to the roadmap after 2.5 (D17), with its kick-off prompt. |
 | 2026-10-30 | Charging activity: orbiting green outline + halo; `motion-designer` agent added for all UI changes (D18). |
+| 2026-10-30 | Phase 2.5 signed off: all 12 manual checks pass (volume, brightness, Bluetooth headphones, charger, Caps Lock, screenshot drag-out, panel and fullscreen behavior). |
 
 ## 7. Results & metrics
 
