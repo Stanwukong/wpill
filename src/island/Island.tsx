@@ -1,6 +1,7 @@
-import { useRef } from "react";
+import { useRef, type CSSProperties } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AppsList } from "../features/apps/AppsList";
+import { useArtTheme } from "../features/media/artTheme";
 import { MediaCard } from "../features/media/MediaCard";
 import { Equalizer, PillArt } from "../features/media/PillMedia";
 import { useMedia } from "../features/media/useMedia";
@@ -16,11 +17,16 @@ export function Island() {
   usePanelSizeReporter(ref, expanded);
   const media = useMedia();
   const nowPlaying = media.active?.status === "playing" ? media.active : null;
+  // Tinted while there is an active session with art (playing or paused); plain black otherwise.
+  const theme = useArtTheme(media.active?.artwork ?? null);
+  const themeVars = theme
+    ? ({ "--tint-from": theme.from, "--tint-to": theme.to, "--accent": theme.accent } as CSSProperties)
+    : undefined;
 
   if (hidden) return null;
 
   return (
-    <div className="stage">
+    <div className="stage" style={themeVars}>
       <motion.div
         ref={ref}
         layout

@@ -7,6 +7,11 @@
   align-items: flex-start;
   padding-top: 6px; /* PANEL_TOP_PX */
   pointer-events: none;
+  /* Album-art theme changes fade rather than snap. */
+  transition:
+    --tint-from 700ms ease,
+    --tint-to 700ms ease,
+    --accent 700ms ease;
 }
 
 .island {
@@ -14,7 +19,7 @@
   position: relative;
   pointer-events: auto;
   overflow: hidden;
-  background: var(--island-bg);
+  background: linear-gradient(135deg, var(--tint-from), var(--tint-to));
   color: var(--island-fg);
   box-shadow:
     0 0 0 1px var(--island-border),

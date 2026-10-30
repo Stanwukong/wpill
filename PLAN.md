@@ -284,6 +284,9 @@ meaning; new phases slot in between.
       with app chips as a switcher. A manual pick lasts until a different session becomes most recent.
 - [x] Verified from outside (2026-10-30): Spotify session detected at startup with art, title and artist; pressing play in
       Spotify produced one `media:state` and the pill switched to art + equalizer; no extra emits during steady playback
+- [x] Album-art theme (2026-10-30, after sign-off): the island's background is a dark gradient in the art's dominant
+      hue, and the equalizer and playing dot use a lighter accent of it. Colors are computed in the webview from the data
+      URL and fade over 700 ms; plain black when there's no art (CASESTUDY D13)
 - [x] Manual check (below): all 10 pass, 2026-10-30 (Spotify, YouTube in a browser, two sessions, nothing playing, text sizes)
 
 **Manual check (Phase 2)** (run with `$env:RUST_LOG='info,topbar_lib=debug'` to see `media:state` lines)

@@ -1,7 +1,26 @@
+/* Registered so the album-art theme (features/media/artTheme.ts) can transition smoothly;
+   unregistered custom properties can't be animated. Defaults are the plain black island. */
+@property --tint-from {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #000;
+}
+
+@property --tint-to {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #000;
+}
+
+@property --accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #30d158;
+}
+
 :root {
   color-scheme: dark;
   /* The island is always dark, like the hardware it imitates. */
-  --island-bg: #000;
   --island-fg: #f5f5f7;
   --island-muted: rgba(245, 245, 247, 0.58);
   --island-border: rgba(255, 255, 255, 0.08);
@@ -9,7 +28,6 @@
   --tile-hover: rgba(255, 255, 255, 0.09);
   --tile-active: rgba(255, 255, 255, 0.14);
   --danger: #ff6b6b;
-  --playing: #30d158;
 
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   font-size: 14px;

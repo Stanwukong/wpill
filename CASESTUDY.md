@@ -132,6 +132,18 @@ becomes most recent.
 *Alternatives:* a separate artwork command keyed by track (smaller events, but an extra round trip and
 cache on both sides); downscaling art with `BitmapDecoder` (only worth it if large thumbnails become common).
 
+### D13: The island takes its colors from the album art (Phase 2 polish)
+*Why:* a black island with a colorful thumbnail in it looks pasted on; tinting the whole surface makes the
+media state readable at a glance, like the hardware it imitates. The webview already has the art as a data URL,
+so `artTheme.ts` draws it to a 24×24 canvas and picks the dominant *colorful* hue (pixels bucketed by hue, weighted
+by saturation and mid-lightness, so a small vivid area beats a large grey one; mostly-grey art falls back to its
+average). From that hue it derives a dark gradient (lightness 24 % → 9 %, so the white text keeps its contrast) and a
+lighter accent for the equalizer and playing dot. The colors are `@property`-registered CSS custom properties, which
+is what lets them transition (700 ms) instead of snapping. Results are cached per artwork. The tint applies whenever
+the shown session has art, paused included, because the panel still shows that art.
+*Alternatives:* extracting in Rust (would need JPEG decoding and a payload change for something purely visual);
+blurring the art itself behind the island (heavier, and busy art hurts text legibility).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -215,6 +227,7 @@ the same exe on launch, so already-installed users get fixed.
 | 2026-10-30 | Phase 1.5 signed off: tray, startup launch, Task Manager toggle and single instance all pass by hand. |
 | 2026-10-30 | Phase 2 built: GSMTC media watcher (D11), filtered `media:state` (D12), media card with seekable progress, pill art + equalizer, session switcher. |
 | 2026-10-30 | Phase 2 signed off: all 10 manual media checks pass (Spotify, YouTube, two sessions, nothing playing, text sizes). |
+| 2026-10-30 | Island background themed from the album art (D13). |
 
 ## 7. Results & metrics
 
