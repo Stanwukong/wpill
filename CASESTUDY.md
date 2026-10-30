@@ -461,6 +461,7 @@ grown to ~20 GB of stale builds, filling the drive mid-link (`os error 112`); `c
 | 2026-10-30 | Phase 2.6 signed off: all 12 manual checks pass (Windows Terminal, VS Code, two sessions, permission prompts, Esc, fullscreen, TopBar not running, disconnect). |
 | 2026-10-30 | Phase 2.7 (local automation agent) planned and placed next on the roadmap (D21), with its kick-off prompt. |
 | 2026-10-30 | Phase 2.7a–b built: headless runs in Job Objects (D22), approvals in the island through `topbar.exe mcp` and a token-checked pipe (D23), the command window and the Cascadia Mono refresh (D24, via the motion-designer agent). Verified from outside with haiku runs (deny, allow, allow for this run, turn limit, follow-up resume, Stop with `ping -t`, TopBar killed and quit mid-run); manual checklist pending. |
+| 2026-10-30 | Phase 2.7a–b signed off: all 12 manual checks pass (hotkey, read-only task, deny, allow and "for this run", Stop and the stop hotkey, limits, two runs, panel and fullscreen, follow-up, quit mid-run, audit, text sizes). Stage 2.7c kick-off prompt written. |
 
 ## 7. Results & metrics
 

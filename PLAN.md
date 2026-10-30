@@ -12,10 +12,10 @@ After sign-off, the island also took its colors from the album art (D13).
 screenshots, with all 12 manual checks passed.** The charging activity also got an orbiting green outline (D18).
 **Phase 2.6 is complete (2026-10-30): Claude Code activity through hooks (spinner, done / needs-input activities with
 an orange edge, panel section, click to focus, tray Connect/Disconnect), with all 12 manual checks passed.**
-**Phase 2.7a–b are built (2026-10-30): headless agent runs from a command window (Win+Alt+A), progress in the island,
-approvals (Allow / Deny) in the island, Cascadia Mono for Claude content. Verified from outside; the manual check below
-is pending.** See [Phase 2.7](#phase-27-local-automation-agent). Stages 2.7c–e follow after sign-off (their kick-off
-prompt is written then).
+**Phase 2.7a–b are complete (2026-10-30): headless agent runs from a command window (Win+Alt+A), progress in the
+island, approvals (Allow / Deny) in the island, Cascadia Mono for Claude content, with all 12 manual checks passed.**
+See [Phase 2.7](#phase-27-local-automation-agent). **Next: stage 2.7c (read-only desktop tools)**, kick-off prompt
+[prompts/phase-2.7c-desktop-tools.md](prompts/phase-2.7c-desktop-tools.md).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -604,8 +604,10 @@ hotkey ─▶ command window (focusable, separate) ── agent_start ─▶ Rus
       `ping -t localhost` under three shells (all six processes gone), TopBar killed mid-run and quit mid-run (no
       `claude.exe`, bridge or `PING.EXE` left), hotkey → command window in the foreground, captures of the approval
       activity and the command window. 95 Rust tests pass
+- [x] Manual check (below): all 12 pass, 2026-10-30
 
-**Stage 2.7c: desktop tools, read-only**
+**Stage 2.7c: desktop tools, read-only** (next). Kick-off prompt:
+[prompts/phase-2.7c-desktop-tools.md](prompts/phase-2.7c-desktop-tools.md)
 - [ ] `list_windows`, `focused_window` (reuse `apps/`), `screenshot(window | screen)` (downscaled PNG as MCP image
       content; never of the island itself), `ui_tree(window)` via UI Automation (names, roles, values, bounding boxes,
       depth and size capped; password fields reported without values)
@@ -625,7 +627,7 @@ hotkey ─▶ command window (focusable, separate) ── agent_start ─▶ Rus
 approving prompts of interactive terminal sessions from the island (possible later through the `PermissionRequest`
 hook; deliberately not mixed in here).
 
-**Manual check (Phase 2.7a–b)** (run the installed build or `pnpm tauri dev` with
+**Manual check (Phase 2.7a–b, all pass 2026-10-30)** (run the installed build or `pnpm tauri dev` with
 `$env:RUST_LOG='info,topbar_lib=debug'`; use a test folder and cheap tasks, e.g. model `haiku` in Options)
 1. **Hotkey:** Win+Alt+A from any app opens the command window with the cursor in the prompt; Esc hides it; the island
    never takes focus (typing in another app afterwards still goes there).
