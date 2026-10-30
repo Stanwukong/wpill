@@ -48,11 +48,11 @@ export function ActivityView({ activity }: { activity: ActivityPayload }) {
       return <ScreenshotActivity id={activity.id} shot={activity.payload} />;
     case "claudeDone": {
       const { sessionId, project, failed } = activity.payload;
-      return <ClaudeActivity sessionId={sessionId} project={project} detail={failed ? "Stopped" : "Done"} muted={failed} />;
+      return <ClaudeActivity sessionId={sessionId} project={project} state={failed ? "stopped" : "done"} />;
     }
     case "claudeNeedsInput": {
       const { sessionId, project } = activity.payload;
-      return <ClaudeActivity sessionId={sessionId} project={project} detail="Needs your input" />;
+      return <ClaudeActivity sessionId={sessionId} project={project} state="needsInput" />;
     }
   }
 }

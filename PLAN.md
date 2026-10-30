@@ -427,6 +427,11 @@ Claude Code hook ──stdin JSON──▶ topbar.exe hook (forwarder, exits bef
       Segoe UI Symbol, `--claude: #d77757`) left of the clock while a session works and on working rows; the island's
       edge glows orange while "done" shows and breathes slowly (3 s) while "needs input" shows. Reduced motion: a
       static `●` and a static edge. Checked in headless Edge renders on the plain and tinted island
+- [x] Activity layout v2 (2026-10-30, after sign-off, from feedback): one 44 px row like the other compact
+      activities. ✻ · project · "Done"/"Stopped" sliding out from behind the name (smaller, muted, 320 ms), and at the
+      right end an orange check that draws in (360 ms, 120 ms after the text) or three blinking dots while it needs
+      input (1.4 s cycle, aria-label "needs your input"). Needs-input → done switches in place. Reduced motion: no
+      slide, check fully drawn, still dots
 - [x] Panel section "Claude Code" between the media card and the apps: status mark, project, status, how long ago;
       click focuses (nearest ancestor owning an Alt+Tab window, then a title match on the folder name)
 - [x] Tray "Connect Claude Code…" / "Disconnect Claude Code…": a native message box shows the exact entries and asks;
@@ -541,8 +546,8 @@ the stream events, must be checked against the current docs at kick-off.
 - [ ] Limits: default max turns and budget, per run; the run ends with a clear "limit reached" status
 - [ ] **Claude UI refresh** (feedback after 2.6; through the motion-designer agent, applied to 2.6's activities, the
       panel section and the new agent UI together so they share one look):
-      - Smaller status text ("Done", "Needs your input", "Stopped"): today it's as large as the project name and
-        competes with it. The project stays the title; the status reads as a quieter secondary line.
+      - ~~Smaller status text~~: done early in 2.6's activity layout v2 (one row, sliding status, check / dots).
+        Carry the same treatment into the panel section and the agent UI.
       - A distinct typeface for Claude content (project names, statuses, the command window), so Claude activities
         read as their own family next to volume or media. It must be installed on Windows or bundled under an open
         licence (Anthropic's own brand fonts aren't licensed for this). Candidates to compare in renders: Cascadia
