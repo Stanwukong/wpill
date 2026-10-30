@@ -635,7 +635,7 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
 
 ## Distribution
 - `pnpm tauri build` produces `src-tauri/target/release/bundle/nsis/TopBar_0.1.0_x64-setup.exe`:
-  **1.47 MB download, 4.13 MB installed** (see CASESTUDY §7 for RAM/CPU).
+  **1.62 MiB download as of Phase 2.6** (1.47 MB at Phase 1; 4.13 MB installed then; see CASESTUDY §7 for RAM/CPU).
 - Windows 11 already has the WebView2 runtime, so nothing else is downloaded. On machines without it,
   Tauri's default NSIS mode fetches a small WebView2 bootstrapper during install.
 - A fresh release build takes ~11 min (fat LTO). The release profile trades build time for size.
