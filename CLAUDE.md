@@ -54,7 +54,8 @@ The first `cargo build` compiles ~360 crates (several minutes); later rebuilds o
 - `lib.rs` uses `.build()?.run(|app, event| …)` so `RunEvent::Exit` can stop the media watcher (unregisters its WinRT handlers).
 - Plugins (registered in `lib.rs`): `tauri-plugin-single-instance` (must stay first). Don't use
   `tauri-plugin-autostart`: it writes the exe path unquoted, which breaks for paths with spaces.
-- `prompts/`: kick-off prompts for starting a phase in a fresh session (one per phase, linked from PLAN.md).
+- `prompts/`: kick-off prompts for starting a phase in a fresh session (one per phase, linked from PLAN.md;
+  currently 2.5 and 2.6).
   When a phase is signed off, write the next one so a new session can pick up without this conversation.
 - `src/`: `lib/ipc.ts` + `lib/types.ts`, `island/` (Island, Clock, hooks, `motion.ts`), `features/apps/`,
   `features/media/` (`useMedia` lives in `Island` so state survives the panel remounting; `MediaCard`, `PillMedia`, `useProgress`,

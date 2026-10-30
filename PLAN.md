@@ -196,6 +196,9 @@ Command errors: `mediaSessionGone` (session ended), `mediaRejected` (the app ret
 | 3 | command | `list_heavy_processes(limit) → ProcessGroup[]` (`{ name, pids, memoryBytes, icon, protected }`) |
 | 3 | command | `end_process_group(name, pids) → EndResult` (per pid: `ok \| accessDenied \| protected \| notFound`) |
 | 2.5 | event | `activity:show` → `{ kind: "volume" \| "brightness" \| "bluetooth" \| "power" \| "capsLock" \| "screenshot", payload, durationMs }` |
+| 2.6 | activity kinds | `claudeDone`, `claudeNeedsInput` (payload: `{ sessionId, project }`) in `activity:show` |
+| 2.6 | event | `claude:sessions` → `{ sessions: { sessionId, project, status: "working" \| "done" \| "needsInput", updatedAtMs }[] }` |
+| 2.6 | command | `claude_focus_session(sessionId)`, `claude_hooks_status() → { installed }`, `claude_hooks_install()`, `claude_hooks_remove()` |
 | 4a | event | `monitor:changed` |
 | 4b | event | `settings:changed` |
 | 4b | command | `get_settings`, `set_settings` |
@@ -244,10 +247,11 @@ meaning; new phases slot in between.
 | 1 | **1.5 Shell basics** | Tray icon, quit, launch at startup | ~1 hour. Testers need to quit and autostart before anything is shared. |
 | 2 | **2 Media card** | Now playing + controls, media state in the collapsed pill | Makes the island feel alive; the planned next phase. |
 | 3 | **2.5 Live Activities** | Island auto-expands for system events | The defining Dynamic Island behavior; reuses Phase 2's pill plumbing. |
-| 4 | **4a Release readiness** | Multi-monitor + per-monitor DPI, code signing, v0.2 release | Docking/undocking breaks placement today; unsigned installers trigger SmartScreen. |
-| 5 | **3 Memory-heavy apps** | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
-| 6 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
-| 7 | **Spikes** | Notifications mirror, calendar peek, live window previews | Uncertain feasibility or needs sign-in; prototype before committing. |
+| 4 | **2.6 Claude Code activity** | Island shows when a local Claude Code session finishes or needs a decision | Added 2026-10-30 (D14). Small once 2.5's activity queue exists; high daily value while working with Claude Code. |
+| 5 | **4a Release readiness** | Multi-monitor + per-monitor DPI, code signing, v0.2 release | Docking/undocking breaks placement today; unsigned installers trigger SmartScreen. |
+| 6 | **3 Memory-heavy apps** | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
+| 7 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
+| 8 | **Spikes** | Notifications mirror, calendar peek, live window previews | Uncertain feasibility or needs sign-in; prototype before committing. |
 
 ### Phase 1.5: shell basics (complete 2026-10-30)
 - [x] Tray icon (`tauri` `tray-icon` feature, `src-tauri/src/tray.rs`). The menu (left or right click) shows a
@@ -318,6 +322,37 @@ Start from [prompts/phase-2.5-live-activities.md](prompts/phase-2.5-live-activit
 - [ ] Caps Lock toggled
 - [ ] Screenshot taken: thumbnail you can drag out (watch the Screenshots folder / clipboard)
 - [ ] Per-activity on/off switches (stored now, UI in Phase 4b)
+
+### Phase 2.6: Claude Code activity
+The island tells you when a local Claude Code session finishes a task or needs a decision, through Claude Code
+hooks. Start from [prompts/phase-2.6-claude-code.md](prompts/phase-2.6-claude-code.md) (research and a design
+proposal before any code). Depends on Phase 2.5's activity queue.
+
+```
+Claude Code hook ──stdin JSON──▶ topbar.exe hook (forwarder, exits before Tauri starts)
+                                   │ per-user named pipe
+                                   ▼
+                     TopBar: claude/ listener thread ──▶ activity queue (2.5) ──▶ island
+                                                     └──▶ claude:sessions ──▶ panel section
+```
+
+- [ ] `topbar.exe hook` forwarder: argument checked in `main.rs` before Tauri; stdin → named pipe; silent
+      exit 0 when TopBar isn't running; never blocks or fails the hook
+- [ ] Pipe listener thread (`src-tauri/src/claude/`): current-user-only pipe, size-capped defensive parsing,
+      session state keyed by `session_id` (working / done / needs input) with expiry
+- [ ] Activities: "<project>: done" on `Stop`; "<project>: needs your input" on `Notification`, at higher
+      priority. Project = `cwd` folder name; never prompt or transcript text
+- [ ] Panel section: open sessions with status dots; click focuses the session's terminal or VS Code window
+      (best effort: ancestor process chain, then a title match on the folder name)
+- [ ] Tray "Connect Claude Code…": shows the exact `~/.claude/settings.json` entries, asks first, backs up,
+      merges without clobbering existing hooks, quoted exe path; can remove them again
+- [ ] Manual hook JSON documented here for people who prefer to edit settings themselves
+- [ ] Manual test list (in the prompt): finish while in another app, permission prompt, two sessions,
+      VS Code + Windows Terminal, click-to-focus, TopBar not running, hooks removed
+
+Hooks in scope (confirm the exact fields against the current Claude Code docs first): `Stop`, `Notification`,
+`UserPromptSubmit` (working), `SessionStart` / `SessionEnd`. Only sessions that run on this machine and fire
+hooks are covered; claude.ai/code sessions don't run here.
 
 ### Phase 4a: release readiness
 - [ ] Multi-monitor + per-monitor DPI: re-read geometry on `WM_DISPLAYCHANGE` / `WM_DPICHANGED` and

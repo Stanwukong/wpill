@@ -23,6 +23,9 @@ Constraints that matter here:
   whether hovering or clicking an activity does anything, and how that fits the panel-rect hit test (D2, D7).
 - The island never activates (rule 2). Check that dragging a screenshot out of a `WS_EX_NOACTIVATE`,
   click-through-by-default window is feasible before committing to it. If it isn't, propose a fallback.
+- Keep the activity queue generic. Phase 2.6 (Claude Code activity, see PLAN.md) will push activities
+  into it from a named-pipe listener, not a system API, including one that should stay up until handled.
+  Don't hard-code the source list into the queue or the hover state machine.
 - Reuse the Phase 2 pattern for event sources: a dedicated thread owns the subscriptions, callbacks only
   forward a message, and registrations are RAII guards removed on drop and on `RunEvent::Exit`.
 - Prefer polling inside the existing 60 Hz poller over a global low-level hook where it's cheap (D1).

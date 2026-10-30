@@ -144,6 +144,19 @@ the shown session has art, paused included, because the panel still shows that a
 *Alternatives:* extracting in Rust (would need JPEG decoding and a payload change for something purely visual);
 blurring the art itself behind the island (heavier, and busy art hurts text legibility).
 
+### D14: Claude Code activity through hooks, a named pipe and a self-forwarding exe (planned, Phase 2.6)
+*Why:* Claude Code already runs hooks at the moments that matter (`Stop` when a turn finishes,
+`Notification` when it needs a decision) and hands each hook a JSON description on stdin. The cheapest
+reliable bridge is to make `topbar.exe` its own hook command: `topbar.exe hook` reads stdin, writes it to a
+per-user named pipe, and exits before Tauri or WebView2 start, so Claude Code isn't slowed down. A pipe
+needs no network port, can be locked to the current user, and simply isn't there when TopBar isn't running
+(the forwarder then exits quietly, so the hook never fails). It's scheduled after 2.5 because it's just
+another activity source for 2.5's queue.
+*Alternatives:* the single-instance plugin's argument forwarding (no stdin, so the JSON would have to go on
+the command line); a localhost HTTP server (opens a port any local process can find); a PowerShell or `curl`
+hook script (slow to start, and an extra file to install); watching transcript files (fragile, and reads
+far more than needed).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -229,6 +242,7 @@ the same exe on launch, so already-installed users get fixed.
 | 2026-10-30 | Phase 2 signed off: all 10 manual media checks pass (Spotify, YouTube, two sessions, nothing playing, text sizes). |
 | 2026-10-30 | Island background themed from the album art (D13). |
 | 2026-10-30 | Phase 2.5 kick-off prompt written (`prompts/`), so each phase can start in a fresh session. |
+| 2026-10-30 | Phase 2.6 (Claude Code activity) added to the roadmap after 2.5 (D14), with its kick-off prompt. |
 
 ## 7. Results & metrics
 
