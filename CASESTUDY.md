@@ -568,6 +568,7 @@ blaming either side.
 | 2026-10-30 | Stage 2.7c built: read-only desktop tools with a second, TopBar-side approval check (D25), a glow on the screen's edges while Claude looks (D26), an eye in the approval's `read` badge (motion-designer). Verified from outside with haiku runs and direct looks (C10); manual checklist pending. |
 | 2026-10-30 | Stage 2.7c signed off: all 12 manual checks pass (window list, glow, UI tree, password field, covered window, island not captured, deny, for this run, gone/minimized/elevated, locked screen, audit, text sizes). |
 | 2026-10-31 | Stage 2.7d built: seven desktop actions, UI Automation first with `[n]` refs, one approval each, aborted by your input (D27); pointer badge, acting activity and acting glow (motion-designer). Verified with haiku runs; manual checklist pending. |
+| 2026-10-31 | Stage 2.7d signed off: all 12 manual checks pass (set a field, invoke behind, raw input, command window text, deny, abort, hands off, gone/elevated/locked, password and secrets, launch, audit, text sizes). Stage 2.7e kick-off prompt written. |
 
 ## 7. Results & metrics
 

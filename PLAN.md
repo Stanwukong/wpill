@@ -17,12 +17,11 @@ island, approvals (Allow / Deny) in the island, Cascadia Mono for Claude content
 **Phase 2.7c is complete (2026-10-30): read-only desktop tools (`list_windows`,
 `focused_window`, `screenshot`, `ui_tree`), each approved in the island with an eye in the `read` badge, and a glow on
 the screen's edges while Claude looks, with all 12 manual checks passed.**
-**Phase 2.7d is built (2026-10-31): seven desktop actions (`focus_window`, `invoke`, `set_value`, `click`,
+**Phase 2.7d is complete (2026-10-31): seven desktop actions (`focus_window`, `invoke`, `set_value`, `click`,
 `type_text`, `press_keys`, `launch`), UI Automation first with `[n]` refs from `ui_tree`, each approved on its own
-and never for the run, stopped by any input of yours; verified with haiku runs and direct actions. Manual checklist
-pending.**
-See [Phase 2.7](#phase-27-local-automation-agent). **Next: sign off 2.7d (manual check below), then stage 2.7e
-(routines).**
+and never for the run, stopped by any input of yours, with all 12 manual checks passed.**
+See [Phase 2.7](#phase-27-local-automation-agent). **Next: stage 2.7e (routines)**, kick-off prompt
+[prompts/phase-2.7e-routines.md](prompts/phase-2.7e-routines.md).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -706,7 +705,7 @@ folder)
 11. **Audit:** the run's `.jsonl` has `look` lines with target, size and format, and no image data.
 12. **Text size 100 / 120 / 150 %:** the eye sits in the badge without changing the approval's size.
 
-**Stage 2.7d: desktop actions** (built 2026-10-31; manual check pending). Kick-off prompt:
+**Stage 2.7d: desktop actions** (complete 2026-10-31). Kick-off prompt:
 [prompts/phase-2.7d-desktop-actions.md](prompts/phase-2.7d-desktop-actions.md). Decision: CASESTUDY D27; challenge C11.
 
 *Research at kick-off (Claude Code 2.1.123 / 2.1.159 / 2.1.314 bundles):* MCP tools still need permission in `default`
@@ -750,9 +749,9 @@ forward (`SetFocus` does); a Win32 `Invoke` that opens a modal dialog can block 
       offered; closed window → `windowGone`; elevated Task Manager → `elevated`; focused Chrome password field →
       `passwordField` before any key; secret text, Win+R and `file:` refused; typing aborted by moving the mouse
       after 269 of 391 characters with no modifier left down. 133 Rust tests pass
-- [ ] Manual check (below)
+- [x] Manual check (below): all 12 pass, 2026-10-31
 
-**Manual check (Phase 2.7d)** (`pnpm tauri dev` with `$env:RUST_LOG='info,topbar_lib=debug'`, model `haiku`, a scratch
+**Manual check (Phase 2.7d, all pass 2026-10-31)** (`pnpm tauri dev` with `$env:RUST_LOG='info,topbar_lib=debug'`, model `haiku`, a scratch
 folder, Notepad on a scratch file)
 1. **Set a field:** "Set the Notepad text to 'hello' using TopBar's tools": `ui_tree`, then "Set "Text editor" to
    "hello" in Notepad · …" with a pointer in the `input` badge and no "for this run"; Notepad shows hello.
@@ -775,7 +774,7 @@ folder, Notepad on a scratch file)
 11. **Audit:** the run's `.jsonl` has `act` lines with tool, target and result, and typed text only as `{chars, lines}`.
 12. **Text size 100 / 120 / 150 %:** the pointer badge, the acting activity and the pending card's text block fit.
 
-**Stage 2.7e: routines** (stretch)
+**Stage 2.7e: routines** (next). Kick-off prompt: [prompts/phase-2.7e-routines.md](prompts/phase-2.7e-routines.md)
 - [ ] Saved instructions (prompt + folder + limits), run from the command window or on a schedule while TopBar runs
 
 **Out of scope:** cloud or remote sessions, WSL sessions, voice input, other machines, running TopBar elevated,
