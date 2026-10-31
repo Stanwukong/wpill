@@ -24,7 +24,7 @@
 }
 
 .agent-dot[data-status="waiting"] {
-  background: var(--claude);
+  background: var(--agent);
   animation: agent-breathe 3000ms ease-in-out infinite;
 }
 
@@ -56,16 +56,16 @@
   gap: 3px;
   padding: 1px 5px;
   border-radius: 5px;
-  box-shadow: inset 0 0 0 1px rgba(var(--claude-rgb), 0.4);
+  box-shadow: inset 0 0 0 1px rgba(var(--agent-rgb), 0.4);
   font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
   font-size: 10px;
   font-weight: 600;
   line-height: 13px;
   letter-spacing: 0.02em;
-  color: var(--claude);
+  color: var(--agent);
 }
 
-/* Buttons: Allow is the one filled thing (Claude orange); Deny and the rest stay quiet. */
+/* Buttons: Allow is the one filled thing (amber, dark ink); Deny and the rest stay quiet. */
 .agent-btn {
   flex: none;
   height: 24px;
@@ -92,16 +92,22 @@
 }
 
 .agent-btn--allow {
-  background: var(--claude);
-  color: #1a0f0b;
+  background: var(--agent);
+  color: var(--agent-ink);
 }
 
 .agent-btn--allow:hover {
-  background: color-mix(in srgb, var(--claude) 88%, white);
+  background: color-mix(in srgb, var(--agent) 88%, white);
 }
 
 .agent-btn:active {
   opacity: 0.8;
+}
+
+/* Allow goes a deeper amber when pressed rather than fading. */
+.agent-btn--allow:active:not(:disabled) {
+  background: var(--agent-deep);
+  opacity: 1;
 }
 
 /* Answered, waiting for Rust to withdraw it. */
@@ -192,11 +198,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 11px;
-  color: var(--claude-status);
+  color: var(--agent-status);
 }
 
 .agent-row[data-status="waiting"] .agent-row__status {
-  color: var(--claude);
+  color: var(--agent);
 }
 
 .agent-row[data-status="failed"] .agent-row__status {
@@ -238,7 +244,7 @@
 .agent-pending__tool {
   flex: none;
   font-size: 11px;
-  color: var(--claude-status);
+  color: var(--agent-status);
 }
 
 .agent-pending__summary {

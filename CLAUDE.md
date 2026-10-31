@@ -100,9 +100,11 @@ the drive once); `cargo clean --profile dev` when space runs low.
   `artTheme` = album-art colors → `--tint-from`/`--tint-to`/`--accent`, set on `.stage`; those are `@property`-registered in
   `global.css` so they can transition. Use `var(--accent)` for highlights, not a fixed color),
   `features/activities/` (`ActivityView` per kind, `ScreenshotActivity` with the drag/click gesture, `ClaudeActivity`,
-  inline SVG `icons`), `features/claude/` (`useClaudeSessions` lives in `Island`, `ClaudeSpinner`/`ClaudeMark`, the
-  panel's `ClaudeSection`; `--claude` is a fixed token like `--charge`; Claude content uses `--font-claude`,
-  Cascadia Mono), `features/agent/` (`useAgentRuns` lives in `Island`, panel rows `AgentRunItems` in ClaudeSection's
+  inline SVG `icons`), `features/claude/` (`useClaudeSessions` lives in `Island`, `WorkingGlyphs.tsx` =
+  `WorkingIndicator` (the amber wave while something works) and `AgentMark` (the wave at rest), the panel's
+  `ClaudeSection`; `--agent` (amber, with `--agent-rgb`/`-deep`/`-ink`) is a fixed token like `--charge`, mirrored by
+  `COLOR` in `window/glow.rs`; never reintroduce Claude Code's spinner, `✻` or orange (D30); Claude content uses
+  `--font-claude`, Cascadia Mono). The equaliser uses `--media-accent`: the art's accent, or soft white with no art, `features/agent/` (`useAgentRuns` lives in `Island`, panel rows `AgentRunItems` in ClaudeSection's
   `agent` slot; the `agentApproval` view is `features/activities/AgentApproval.tsx`), `command/` (the command window's
   own page: new task form, run list, transcript, follow-ups; routines: `RoutineList`, `RoutineEditor`, `TaskFields`
   shared with `NewTask`, `useRoutines`, `routineLabels`).

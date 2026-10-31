@@ -1,55 +1,53 @@
 /*
- * Claude Code's spinner: its Windows-terminal frames (· ✢ * ✶ ✻ ✽, then back) stacked in one pseudo-element and
- * stepped up a line every 120 ms (1.44 s per cycle) with a transform, so it stays on the compositor. The box is a
- * fixed size so frames of different widths don't move the layout. Only Segoe UI Symbol has all of these glyphs.
+ * Working: an amber sine sliding right through a small window whose ends fade, one wavelength per 1.6 s, linear.
+ * Transform only, so it stays on the compositor. Pill size 22 × 10 (wavelength 8), rows 14 × 6 (wavelength 6); the
+ * paths are in WorkingGlyphs.tsx. Reduced motion: the wave holds still.
  */
-.claude-spinner {
+.working {
+  --wave-shift: -8px;
   flex: none;
-  display: inline-block;
-  width: 14px;
-  height: 16px;
-  overflow: hidden;
-  font-family: "Segoe UI Symbol", sans-serif;
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 16px;
-  text-align: center;
-  color: var(--claude);
-}
-
-.claude-spinner::before {
-  content: "\00B7\A\2722\A*\A\2736\A\273B\A\273D\A\273D\A\273B\A\2736\A*\A\2722\A\00B7";
   display: block;
-  white-space: pre;
-  animation: claude-spin 1440ms steps(12) infinite;
+  width: 22px;
+  height: 10px;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
 }
 
-@keyframes claude-spin {
+.working--small {
+  --wave-shift: -6px;
+  width: 14px;
+  height: 6px;
+}
+
+.working__run {
+  display: block;
+  fill: none;
+  stroke: var(--agent);
+  stroke-linecap: round;
+  animation: working-ripple 1600ms linear infinite;
+}
+
+@keyframes working-ripple {
+  from {
+    transform: translateX(var(--wave-shift));
+  }
   to {
-    transform: translateY(-100%);
+    transform: none;
   }
 }
 
-/* Claude Code shows a ● in the same place. */
 @media (prefers-reduced-motion: reduce) {
-  .claude-spinner::before {
-    content: "\25CF";
-    font-size: 9px;
+  .working__run {
     animation: none;
   }
 }
 
-/* The ✻ in the icon slot of the Claude activities (the 22 px icon box). */
-.claude-mark {
+/* The wave at rest, in the icon slot of the Claude activities (the 22 px icon box). */
+.agent-mark {
   flex: none;
   width: 22px;
   height: 22px;
-  display: grid;
-  place-items: center;
-  font-family: "Segoe UI Symbol", sans-serif;
-  font-size: 19px;
-  line-height: 1;
-  color: var(--claude);
+  color: var(--agent);
 }
 
 /* Panel section */
@@ -121,7 +119,7 @@
 }
 
 .claude-row[data-status="needsInput"] .claude-row__dot {
-  background: var(--claude);
+  background: var(--agent);
 }
 
 .claude-row__project {
@@ -135,11 +133,11 @@
 .claude-row__status {
   flex: none;
   font-size: 11px;
-  color: var(--claude-status);
+  color: var(--agent-status);
 }
 
 .claude-row[data-status="needsInput"] .claude-row__status {
-  color: var(--claude);
+  color: var(--agent);
 }
 
 .claude-row__time {

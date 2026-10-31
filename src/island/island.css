@@ -11,7 +11,8 @@
   transition:
     --tint-from 700ms ease,
     --tint-to 700ms ease,
-    --accent 700ms ease;
+    --accent 700ms ease,
+    --media-accent 700ms ease;
 }
 
 .island {

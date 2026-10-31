@@ -452,6 +452,29 @@ still wait for you to let go of the mouse and keyboard. Budgets are required for
 could hold a tool call for days); a per-routine allow list (pre-approval); disabling approvals' "for this run" in
 routine runs (unneeded: you still click it yourself).
 
+### D30: TopBar's own look: a wave and amber, not Claude Code's spinner and orange (Phase 4a-1)
+*Why:* until now the Claude UI copied Claude Code (the `· ✢ * ✶ ✻ ✽` glyph spinner, the `✻` mark, `#d77757` orange).
+Anthropic's guidance for products built on Claude Code says they should keep their own branding and not look like
+Claude Code, and TopBar is going public. The new accent is the amber of the author's portfolio site (`femiajanaku`,
+dark-mode `--accent` `38 92% 55%` = `#f6a823`, deeper `#f59e0b`, ink `#0f0f0f` on it: white on amber is 2.0:1), as a
+fixed token `--agent` (like `--charge`, never the album-art `--accent`). Amber on the black island is 10.5:1; the
+weakest spot is 4.0:1 in the lightest corner of a warm amber album tint, away from any text.
+*Working indicator (`WorkingIndicator`):* a sine wave (1.6 px, round caps) scrolling sideways by one wavelength every
+1.6 s (linear, `translateX` only, so compositor-only), its ends faded with a mask; 22×10 in the pill, 14×6 in rows.
+The mark (`AgentMark`) is the wave at rest, two periods. Reduced motion: the still wave. The edge glow (and the native
+`glow.rs` band) moved to amber; the needs-input edge breathes on the site's `pulse-amber` timing (1 → 0.5 over 2 s).
+With no album art, the equaliser is now soft white instead of `--accent`'s initial green, which sat beside the amber
+wave and matched the charging green.
+*How it was picked:* the motion-designer agent rendered candidates in headless Edge (pill, activities, approval card,
+panel rows, command window; plain black, cool and warm tints; dpr 1.2 and 1.5; frame strips and GIFs). First round:
+an orbit around a capsule (the island's shape), a shuttle in a pill track, and a rotating arc. The author asked for a
+wavy line instead; second round: a scrolling ripple, a plucked "string" whose amplitude swings, and a "signal" squiggle
+travelling along a flat line. The ripple won on the black island: the string moved on the same axis and tempo as the
+equaliser (a second visualiser) and went flat twice per cycle; the signal read as an arrow or a heartbeat trace at 1×.
+A breathing pill was deliberately not used: breathing already means "waiting on you".
+*Alternatives:* keeping Claude Code's look (not allowed for a public product); the orbit (strong, but the author
+preferred a wave); a breathing indicator (confuses working with waiting).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -624,6 +647,7 @@ process" are different facts; scheduling decisions use the process.
 | 2026-10-31 | Stage 2.7d signed off: all 12 manual checks pass (set a field, invoke behind, raw input, command window text, deny, abort, hands off, gone/elevated/locked, password and secrets, launch, audit, text sizes). Stage 2.7e kick-off prompt written. |
 | 2026-10-31 | Stage 2.7e built: routines saved in `routines.json`, run now or on a schedule by one Rust thread (D28), patient approvals and desktop tools off by default for unattended runs (D29), the routines list and editor in the command window (motion-designer). Verified from outside with haiku runs (run now, a schedule firing once, approval and deny, overlap, Stop and stop-all, pause, a missed time caught up once and one skipped, delete); manual checklist pending. |
 | 2026-10-31 | Stage 2.7e signed off: all 12 manual checks pass (save as routine, run now, edit, schedule, approval, away, overlap, missed while closed, pause, stop, delete, text sizes). **Phase 2.7 complete.** Phase 4a (release readiness) starts. |
+| 2026-11-01 | Stage 4a-1: TopBar's own look (D30). The Claude Code-style spinner, `✻` and orange are replaced by an amber wave, its mark and an amber edge, chosen from two rounds of rendered candidates (motion-designer); checked live with a haiku run. |
 
 ## 7. Results & metrics
 

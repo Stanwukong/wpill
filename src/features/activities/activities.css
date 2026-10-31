@@ -80,9 +80,9 @@
 }
 
 /*
- * Claude Code: the edge glows Claude orange while a Claude activity shows. An inset ring with a soft inner glow on
- * `::after` (follows the morphing radius via `border-radius: inherit`), over a steady halo on `.island`.
- * Done holds steady; needs-input breathes the ring slowly (3 s, ease-in-out) because it can stay up for minutes.
+ * Sessions and agent runs: the edge glows amber (--agent) while their activity shows. An inset ring with a soft inner
+ * glow on `::after` (follows the morphing radius via `border-radius: inherit`), over a steady halo on `.island`.
+ * Done holds steady; needs-input breathes the ring (opacity 1 → 0.5 → 1 over 2 s, ease-in-out).
  * Opacity only, so the loop stays on the compositor; absent unless `data-claude` is set.
  */
 .island::after {
@@ -91,8 +91,8 @@
   inset: 0;
   border-radius: inherit;
   box-shadow:
-    inset 0 0 0 1.5px rgba(var(--claude-rgb), 0.85),
-    inset 0 0 14px rgba(var(--claude-rgb), 0.22);
+    inset 0 0 0 1.5px rgba(var(--agent-rgb), 0.8),
+    inset 0 0 14px rgba(var(--agent-rgb), 0.2);
   opacity: 0;
   pointer-events: none;
   transition: opacity 250ms ease-in;
@@ -103,31 +103,31 @@
   transition: opacity 400ms ease-out;
 }
 
-/* claude-in fades the ring in (it's listed last, so it wins while it runs); then the breathing takes over. */
+/* edge-in fades the ring in (it's listed last, so it wins while it runs); then the breathing takes over. */
 .island[data-claude="needsInput"]::after {
   animation:
-    claude-breathe 3000ms ease-in-out infinite,
-    claude-in 400ms ease-out;
+    edge-breathe 2000ms ease-in-out infinite,
+    edge-in 400ms ease-out;
 }
 
 .island[data-claude] {
   box-shadow:
-    0 0 0 1px rgba(var(--claude-rgb), 0.2),
-    0 0 22px rgba(var(--claude-rgb), 0.3),
+    0 0 0 1px rgba(var(--agent-rgb), 0.2),
+    0 0 22px rgba(var(--agent-rgb), 0.28),
     0 10px 30px var(--island-shadow);
 }
 
-@keyframes claude-breathe {
+@keyframes edge-breathe {
   0%,
   100% {
     opacity: 1;
   }
   50% {
-    opacity: 0.4;
+    opacity: 0.5;
   }
 }
 
-@keyframes claude-in {
+@keyframes edge-in {
   from {
     opacity: 0;
   }
@@ -157,7 +157,7 @@
 }
 
 /*
- * One row: ✻ · project · status, then the state's mark at the right end. The name gives way (ellipsis) before the
+ * One row: mark · project · status, then the state's mark at the right end. The name gives way (ellipsis) before the
  * status or the mark. The status slides out of a clip right after the name (Framer, `claudeStatusIn`).
  */
 .claude-activity__line {
@@ -184,7 +184,7 @@
   margin-left: -2px;
   font-size: 11px;
   font-weight: 400;
-  color: var(--claude-status);
+  color: var(--agent-status);
 }
 
 .claude-activity__status > span {
@@ -198,7 +198,7 @@
   height: 22px;
   display: grid;
   place-items: center;
-  color: var(--claude);
+  color: var(--agent);
 }
 
 .claude-activity__end > * {
@@ -338,9 +338,9 @@
 }
 
 /*
- * Agent approval: three compact lines. ✻ · project · tool · risk; the command (Claude font, one line) in a quiet
+ * Agent approval: three compact lines. mark · project · tool · risk; the command (Claude font, one line) in a quiet
  * well that opens the command window; then the choices, aligned to the project column. No motion of its own: the
- * island morphs to its height and the orange edge breathes (`data-claude="needsInput"`).
+ * island morphs to its height and the amber edge breathes (`data-claude="needsInput"`).
  */
 .activity--approval {
   height: auto;
@@ -377,7 +377,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 11px;
-  color: var(--claude-status);
+  color: var(--agent-status);
 }
 
 .approval__summary {
@@ -437,8 +437,8 @@
 }
 
 /*
- * Agent acting: ✻ · project · step, and under it what stops it. Not clickable. The pointer at the end is muted
- * while TopBar waits for you to let go and turns Claude orange once it acts (120 ms, in place).
+ * Agent acting: mark · project · step, and under it what stops it. Not clickable. The pointer at the end is muted
+ * while TopBar waits for you to let go and turns amber once it acts (120 ms, in place).
  */
 .activity--acting {
   height: auto;
@@ -468,7 +468,7 @@
   padding-left: 2px;
   margin-left: -2px;
   font-size: 11px;
-  color: var(--claude-status);
+  color: var(--agent-status);
 }
 
 .acting__hint {
@@ -486,5 +486,5 @@
 }
 
 .activity--acting[data-phase="acting"] > .activity__icon {
-  color: var(--claude);
+  color: var(--agent);
 }

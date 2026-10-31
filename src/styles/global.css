@@ -18,6 +18,14 @@
   initial-value: #30d158;
 }
 
+/* The equalizer's color: the art's accent when there is a theme, a soft white on the plain black island (the default
+   --accent green would read as charging). Set with --accent by Island; registered so it fades with the theme. */
+@property --media-accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: rgba(245, 245, 247, 0.85);
+}
+
 /* Position of the light orbiting the island while charging (features/activities/activities.css). */
 @property --orbit {
   syntax: "<angle>";
@@ -38,13 +46,16 @@
   /* Charging is always green, whatever the album-art accent is. */
   --charge: #30d158;
   --charge-rgb: 48, 209, 88;
-  /* Claude Code's own orange (its dark theme's `claude` color); never follows the album art. */
-  --claude: #d77757;
-  --claude-rgb: 215, 119, 87;
-  /* Claude content (projects, statuses, commands, transcripts): Claude Code lives in a terminal. The ✻ mark and the
-     spinner stay Segoe UI Symbol (claude.css); headings and chrome stay Segoe. */
+  /* TopBar's agent amber (sessions, agent runs, the edge glow, Allow); never follows the album art. Text on it uses
+     --agent-ink (white on amber fails contrast); --agent-deep is the pressed state. */
+  --agent: #f6a823;
+  --agent-rgb: 246, 168, 35;
+  --agent-deep: #f59e0b;
+  --agent-ink: #0f0f0f;
+  /* Claude content (projects, statuses, commands, transcripts): Claude Code lives in a terminal. The working wave and
+     the mark are SVG (WorkingGlyphs.tsx); headings and chrome stay Segoe. */
   --font-claude: "Cascadia Mono", "Cascadia Code", Consolas, "Segoe UI Variable Text", monospace;
-  --claude-status: rgba(245, 245, 247, 0.48);
+  --agent-status: rgba(245, 245, 247, 0.48);
 
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   font-size: 14px;

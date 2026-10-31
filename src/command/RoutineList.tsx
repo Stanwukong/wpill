@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { commands, errorMessage } from "../lib/ipc";
 import type { Routines, RoutineView } from "../lib/types";
 import { ClockGlyph } from "../features/agent/AgentGlyphs";
-import { ClaudeSpinner } from "../features/claude/ClaudeGlyphs";
+import { WorkingIndicator } from "../features/claude/WorkingGlyphs";
 import { lastLine, scheduleLine } from "./routineLabels";
 import { folderName } from "./TaskFields";
 
@@ -103,7 +103,7 @@ function RoutineItem({
     <div className="cmd-routine" data-scheduled={routine.nextRunAtMs !== null}>
       <button className="cmd-run cmd-routine__body" aria-pressed={selected} onClick={onSelect} title={routine.cwd}>
         <span className="cmd-run__line">
-          <span className="cmd-run__mark cmd-routine__mark">{running ? <ClaudeSpinner /> : <ClockGlyph />}</span>
+          <span className="cmd-run__mark cmd-routine__mark">{running ? <WorkingIndicator small /> : <ClockGlyph />}</span>
           <span className="cmd-run__project">{routine.name}</span>
         </span>
         <span className="cmd-run__detail" title={schedule}>

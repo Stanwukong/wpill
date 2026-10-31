@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { ClaudeSession, ClaudeStatus } from "../../lib/types";
-import { ClaudeSpinner } from "./ClaudeGlyphs";
+import { WorkingIndicator } from "./WorkingGlyphs";
 import { focusClaudeSession } from "./useClaudeSessions";
 import "./claude.css";
 
@@ -36,7 +36,7 @@ export function ClaudeSection({ sessions, agent }: { sessions: ClaudeSession[]; 
           <li key={s.sessionId}>
             <button className="claude-row" data-status={s.status} onClick={() => focusClaudeSession(s.sessionId)}>
               <span className="claude-row__mark">
-                {s.status === "working" ? <ClaudeSpinner /> : <span className="claude-row__dot" />}
+                {s.status === "working" ? <WorkingIndicator small /> : <span className="claude-row__dot" />}
               </span>
               <span className="claude-row__project">{s.project}</span>
               <span className="claude-row__status">{STATUS[s.status]}</span>

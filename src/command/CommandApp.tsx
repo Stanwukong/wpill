@@ -4,7 +4,7 @@ import type { AgentOptions, AgentRun, RoutineDraft, RoutineView } from "../lib/t
 import { ClockGlyph, RunDot } from "../features/agent/AgentGlyphs";
 import { ago, endLabel } from "../features/agent/labels";
 import { isLive, useAgentRuns } from "../features/agent/useAgentRuns";
-import { ClaudeMark, ClaudeSpinner } from "../features/claude/ClaudeGlyphs";
+import { AgentMark, WorkingIndicator } from "../features/claude/WorkingGlyphs";
 import { NewTask } from "./NewTask";
 import { RoutineEditor } from "./RoutineEditor";
 import { RoutineList } from "./RoutineList";
@@ -125,7 +125,7 @@ export function CommandApp() {
   return (
     <div className="cmd">
       <header className="cmd__bar" data-tauri-drag-region>
-        <ClaudeMark />
+        <AgentMark />
         <span className="cmd__title" data-tauri-drag-region>
           Claude agent
         </span>
@@ -243,7 +243,7 @@ function RunItem({ run, selected, onSelect }: { run: AgentRun; selected: boolean
     <button className="cmd-run" data-status={run.status} aria-pressed={selected} onClick={onSelect} title={run.cwd}>
       <span className="cmd-run__line">
         <span className="cmd-run__mark">
-          {run.status === "working" || run.status === "starting" ? <ClaudeSpinner /> : <RunDot status={run.status} />}
+          {run.status === "working" || run.status === "starting" ? <WorkingIndicator small /> : <RunDot status={run.status} />}
         </span>
         <span className="cmd-run__project">
           {run.routine?.trigger === "schedule" && <ClockGlyph />}

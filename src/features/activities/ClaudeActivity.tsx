@@ -1,15 +1,15 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { claudeCheckDraw, claudeDotsOut, claudeStatusIn } from "../../island/motion";
-import { ClaudeMark } from "../claude/ClaudeGlyphs";
+import { AgentMark } from "../claude/WorkingGlyphs";
 
 export type ClaudeActivityState = "done" | "stopped" | "needsInput";
 
 /**
- * A Claude Code session (or an agent run) finished a turn or is waiting for the user: one row, ✻ · project ·
+ * A Claude Code session (or an agent run) finished a turn or is waiting for the user: one row, mark · project ·
  * status, with the state's mark at the right end (a check that draws in, or waiting dots). Interactive: Rust makes
  * the island clickable while the cursor is on it; a click focuses the session's window or opens the run (Rust then
  * acknowledges and hides it). The island keeps this element mounted when needs-input turns into done (same key), so
- * only the status and the end mark animate. The orange edge is driven by `data-claude` on `.island` (activities.css).
+ * only the status and the end mark animate. The amber edge is driven by `data-claude` on `.island` (activities.css).
  */
 export function ClaudeActivity({
   project,
@@ -29,7 +29,7 @@ export function ClaudeActivity({
 
   return (
     <button className="activity activity--claude" data-state={state} onClick={onOpen}>
-      <ClaudeMark />
+      <AgentMark />
       <span className="claude-activity__line">
         <span className="activity__title">{project}</span>
         {status && (

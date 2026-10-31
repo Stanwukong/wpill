@@ -3,13 +3,13 @@ import type { AgentApprovalActivity } from "../../lib/types";
 import { ChevronGlyph, RiskGlyph } from "../agent/AgentGlyphs";
 import { RISK_LABEL } from "../agent/labels";
 import { decide, openRun } from "../agent/useAgentRuns";
-import { ClaudeMark } from "../claude/ClaudeGlyphs";
+import { AgentMark } from "../claude/WorkingGlyphs";
 import "../agent/agent.css";
 
 type Choice = "allow" | "deny" | "run";
 
 /**
- * An agent run asks to use a tool: ✻ · project (or routine) · tool · risk, the command or path on its own line (click it for
+ * An agent run asks to use a tool: mark · project (or routine) · tool · risk, the command or path on its own line (click it for
  * the command window), then Deny / Allow and, where Rust offers it, "Allow … for this run". Sticky: Rust withdraws
  * it once answered, so a click only marks the choice as pending. Interactive while hovered (Rust's hit test).
  */
@@ -31,7 +31,7 @@ export function AgentApproval({ approval }: { approval: AgentApprovalActivity })
   return (
     <div className="activity activity--approval" data-risk={risk}>
       <div className="approval__head">
-        <ClaudeMark />
+        <AgentMark />
         <span className="approval__title">
           <span className="activity__title">{routineName ?? project}</span>
           <span className="approval__tool">{tool}</span>

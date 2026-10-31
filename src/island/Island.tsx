@@ -4,7 +4,7 @@ import { ActivityView } from "../features/activities/ActivityView";
 import { AgentRunItems } from "../features/agent/AgentRunItems";
 import { isLive, recentRuns, useAgentRuns } from "../features/agent/useAgentRuns";
 import { AppsList } from "../features/apps/AppsList";
-import { ClaudeSpinner } from "../features/claude/ClaudeGlyphs";
+import { WorkingIndicator } from "../features/claude/WorkingGlyphs";
 import { ClaudeSection } from "../features/claude/ClaudeSection";
 import { useClaudeSessions } from "../features/claude/useClaudeSessions";
 import { useArtTheme } from "../features/media/artTheme";
@@ -25,7 +25,7 @@ export function Island() {
   const mode = expanded ? "panel" : activity ? "activity" : "pill";
   // Drives the orbiting charge ring on the island's edge (features/activities/activities.css).
   const charging = activity?.kind === "power" && activity.payload.event === "pluggedIn";
-  // Drives the Claude orange edge (activities.css): steady when done or acting, breathing while it needs the user.
+  // Drives the amber agent edge (activities.css): steady when done or acting, breathing while it needs the user.
   const claude =
     activity?.kind === "claudeDone" || activity?.kind === "agentFinished" || activity?.kind === "agentActing"
       ? "done"
@@ -44,7 +44,12 @@ export function Island() {
   // Tinted while there is an active session with art (playing or paused); plain black otherwise.
   const theme = useArtTheme(media.active?.artwork ?? null);
   const themeVars = theme
-    ? ({ "--tint-from": theme.from, "--tint-to": theme.to, "--accent": theme.accent } as CSSProperties)
+    ? ({
+        "--tint-from": theme.from,
+        "--tint-to": theme.to,
+        "--accent": theme.accent,
+        "--media-accent": theme.accent,
+      } as CSSProperties)
     : undefined;
 
   if (hidden) return null;
@@ -109,7 +114,7 @@ export function Island() {
               transition={contentFade}
             >
               {nowPlaying && <PillArt session={nowPlaying} />}
-              {claudeWorking && <ClaudeSpinner />}
+              {claudeWorking && <WorkingIndicator />}
               <Clock variant="pill" />
               {nowPlaying && <Equalizer />}
             </motion.div>

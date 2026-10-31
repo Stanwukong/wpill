@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { AgentApprovalActivity, AgentRun } from "../../lib/types";
-import { ClaudeSpinner } from "../claude/ClaudeGlyphs";
+import { WorkingIndicator } from "../claude/WorkingGlyphs";
 import { ClockGlyph, RunDot, StopGlyph } from "./AgentGlyphs";
 import { ago, runLabel } from "./labels";
 import { decide, isLive, openRun, stopRun } from "./useAgentRuns";
@@ -34,7 +34,7 @@ function AgentRunItem({ run }: { run: AgentRun }) {
           onClick={() => openRun(run.runId)}
         >
           <span className="claude-row__mark">
-            {run.status === "working" || run.status === "starting" ? <ClaudeSpinner /> : <RunDot status={run.status} />}
+            {run.status === "working" || run.status === "starting" ? <WorkingIndicator small /> : <RunDot status={run.status} />}
           </span>
           <span className="agent-row__project">{run.routine?.name ?? run.project}</span>
           <span className="agent-badge" title={run.routine?.trigger === "schedule" ? "Started by its schedule" : undefined}>

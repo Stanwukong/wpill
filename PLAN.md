@@ -10,8 +10,8 @@
 After sign-off, the island also took its colors from the album art (D13).
 **Phase 2.5 is complete (2026-10-30): Live Activities for volume, brightness, Bluetooth audio, power, Caps Lock and
 screenshots, with all 12 manual checks passed.** The charging activity also got an orbiting green outline (D18).
-**Phase 2.6 is complete (2026-10-30): Claude Code activity through hooks (spinner, done / needs-input activities with
-an orange edge, panel section, click to focus, tray Connect/Disconnect), with all 12 manual checks passed.**
+**Phase 2.6 is complete (2026-10-30): Claude Code activity through hooks (working indicator, done / needs-input
+activities with a glowing edge, panel section, click to focus, tray Connect/Disconnect), with all 12 manual checks passed.**
 **Phase 2.7a–b are complete (2026-10-30): headless agent runs from a command window (Win+Alt+A), progress in the
 island, approvals (Allow / Deny) in the island, Cascadia Mono for Claude content, with all 12 manual checks passed.**
 **Phase 2.7c is complete (2026-10-30): read-only desktop tools (`list_windows`,
@@ -22,9 +22,9 @@ the screen's edges while Claude looks, with all 12 manual checks passed.**
 and never for the run, stopped by any input of yours, with all 12 manual checks passed.**
 **Phase 2.7e is complete (2026-10-31): routines (saved instructions run from the command window or on a schedule while
 TopBar runs), with all 12 manual checks passed. Phase 2.7 is complete.**
-**Next: [Phase 4a](#phase-4a-release-readiness) (release readiness)**, kick-off prompt
-[prompts/phase-4a-release-readiness.md](prompts/phase-4a-release-readiness.md), starting with stage 4a-1 (own visual
-identity).
+**Now: [Phase 4a](#phase-4a-release-readiness) (release readiness)**, kick-off prompt
+[prompts/phase-4a-release-readiness.md](prompts/phase-4a-release-readiness.md). 4a-1 (own visual identity: the amber
+wave, D30) is done (2026-11-01); **next: 4a-2 (multi-monitor and per-monitor DPI)**, proposal pending approval.
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -504,7 +504,9 @@ Claude Code hook ──stdin JSON──▶ topbar.exe hook (forwarder, exits bef
 - [x] Claude look (motion-designer agent): Claude Code's spinner (`· ✢ * ✶ ✻ ✽` forwards then back, 120 ms a frame,
       Segoe UI Symbol, `--claude: #d77757`) left of the clock while a session works and on working rows; the island's
       edge glows orange while "done" shows and breathes slowly (3 s) while "needs input" shows. Reduced motion: a
-      static `●` and a static edge. Checked in headless Edge renders on the plain and tinted island
+      static `●` and a static edge. Checked in headless Edge renders on the plain and tinted island.
+      **Replaced in Phase 4a-1 (D30):** the wave indicator (`WorkingIndicator`), the wave mark (`AgentMark`) and the
+      amber `--agent` token; the needs-input edge breathes over 2 s
 - [x] Activity layout v2 (2026-10-30, after sign-off, from feedback): one 44 px row like the other compact
       activities. ✻ · project · "Done"/"Stopped" sliding out from behind the name (smaller, muted, 320 ms), and at the
       right end an orange check that draws in (360 ms, 120 ms after the text) or three blinking dots while it needs
@@ -546,9 +548,9 @@ shell form: Claude Code before 2.1.15x has no `args` exec form and would run a b
 **Manual check (Phase 2.6)** (run with `$env:RUST_LOG='info,topbar_lib=debug'`; connect from the tray first, then
 restart any open Claude Code sessions)
 1. **Task finishes while you're elsewhere:** give Claude a task, switch to another app. When it finishes the island
-   shows "<project> · Done" with an orange edge for 5 s; the pill shows the spinner left of the clock while it works.
+   shows "<project> · Done" with an amber edge for 5 s; the pill shows the wave left of the clock while it works.
 2. **Permission prompt:** ask for something that needs a permission (e.g. a Bash command not on the allow list), switch
-   away. About 6 s later "<project> · Needs your input" appears with a slowly breathing orange edge and stays. Approve
+   away. About 6 s later "<project> · Needs your input" appears with a slowly breathing amber edge and stays. Approve
    it in the terminal → the activity leaves when the tool finishes (and "Done" follows when the turn ends).
 3. **Click to focus:** while "Needs your input" shows, hover it and click → the session's terminal comes to the front
    and the activity is gone. Clicks beside the island still reach the app under it.
@@ -558,7 +560,7 @@ restart any open Claude Code sessions)
    two VS Code windows open, the one whose title names the folder.
 6. **Panel open when a session finishes:** keep the panel open → nothing covers it, the row turns "Done". A "needs input"
    arriving meanwhile shows after the panel closes.
-7. **Esc:** interrupt a running task → the spinner stops about a minute later (idle notification), with no activity.
+7. **Esc:** interrupt a running task → the wave stops about a minute later (idle notification), with no activity.
 8. **Fullscreen:** a question asked while a fullscreen video plays shows after leaving fullscreen.
 9. **TopBar not running:** quit TopBar; Claude Code runs normally with no hook errors.
 10. **Close a terminal mid-task:** its session leaves the panel within ~30 s.
@@ -580,7 +582,7 @@ from TopBar itself. Kick-off prompt: [prompts/phase-2.7-automation-agent.md](pro
 hotkey ─▶ command window (focusable, separate) ── agent_start ─▶ Rust agent/ ── spawns ─▶ claude -p (stream-json)
                 ▲ transcript (agent:output)               │  reads NDJSON events ◀──────────────┘   │
                 │                                         ▼                                         │ stdio MCP
-         island: spinner, agentApproval (Allow/Deny), agentFinished          topbar.exe mcp (bridge) ◀┘
+         island: wave,    agentApproval (Allow/Deny), agentFinished          topbar.exe mcp (bridge) ◀┘
                 ▲                                         ▲                         │ per-user pipe
                 └──────── activity queue (2.5/D19) ◀──────┴── TopBar MCP server ◀───┘
                                                               tools: approve, windows, screenshot, ui_tree, (click, type)
@@ -870,7 +872,7 @@ hook; deliberately not mixed in here).
 `$env:RUST_LOG='info,topbar_lib=debug'`; use a test folder and cheap tasks, e.g. model `haiku` in Options)
 1. **Hotkey:** Win+Alt+A from any app opens the command window with the cursor in the prompt; Esc hides it; the island
    never takes focus (typing in another app afterwards still goes there).
-2. **A read-only task:** "List the 5 largest files in this folder" runs: the pill shows the spinner, the panel row shows
+2. **A read-only task:** "List the 5 largest files in this folder" runs: the pill shows the wave, the panel row shows
    the step, `agentFinished` "Done" appears, and the answer is in the command window.
 3. **Approval, Deny:** a task needing a shell command shows the Allow / Deny activity with the command; Deny → Claude
    adapts and says so; the transcript shows "Denied by you".
@@ -890,9 +892,13 @@ hook; deliberately not mixed in here).
 ### Phase 4a: release readiness
 Kick-off prompt: [prompts/phase-4a-release-readiness.md](prompts/phase-4a-release-readiness.md) (stages 4a-1 identity,
 4a-2 monitors and DPI, 4a-3 name and repo, 4a-4 signing, 4a-5 v0.2 release).
-- [ ] Own visual identity before a public release: replace the Claude Code look-alike spinner, `✻` mark and orange
-      with TopBar's own working indicator and an amber accent from the femiajanaku palette. Prompt:
-      [prompts/spinner-redesign.md](prompts/spinner-redesign.md)
+- [x] **4a-1 Own visual identity** (2026-11-01, D30): the Claude Code look-alike spinner, `✻` mark and orange are
+      replaced by an amber wave (`WorkingIndicator`, a sine scrolling one wavelength per 1.6 s), the wave at rest
+      (`AgentMark`) and the `--agent` amber (`#f6a823`, ink `#0f0f0f`) from the femiajanaku palette; amber edge glow
+      breathing over 2 s, amber screen-edge glow (`glow.rs`); a soft white equaliser when a track has no art. Picked
+      from two rounds of headless-Edge candidates (motion-designer). Prompt: [prompts/spinner-redesign.md](prompts/spinner-redesign.md).
+      Checked live (`pnpm tauri dev`, haiku via `agent-test`): the wave beside the clock while working, the approval
+      card, "Done" with the amber edge, the command window. Typecheck, fmt, clippy and 145 Rust tests clean
 - [ ] Multi-monitor + per-monitor DPI: re-read geometry on `WM_DISPLAYCHANGE` / `WM_DPICHANGED` and
       reposition. Choose the island's monitor (primary by default)
 - [ ] Final name (bundle identifier, `%APPDATA%` migration), README, LICENSE, privacy note

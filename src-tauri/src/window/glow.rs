@@ -1,5 +1,5 @@
-//! The screen-edge glow that shows while an agent run looks at the desktop (Phase 2.7c): a soft band of Claude's
-//! accent along the four edges of the monitor being looked at, so you always know when Claude is looking.
+//! The screen-edge glow that shows while an agent run looks at the desktop (Phase 2.7c): a soft band of the agent
+//! accent (amber) along the four edges of the monitor being looked at, so you always know when Claude is looking.
 //!
 //! A native window, not a webview: layered (per-pixel alpha), click-through, never activated, topmost just below
 //! the island, and excluded from every capture (`WDA_EXCLUDEFROMCAPTURE`), so it never shows up in a screenshot.
@@ -38,8 +38,8 @@ use crate::desktop::logic::{GlowState, Rect, ACT_GLOW_HOLD};
 use crate::error::AppResult;
 use crate::win32;
 
-/// Claude's accent, the `--claude` token in `src/styles/global.css` (Phase 4a changes both together).
-const COLOR: (f32, f32, f32) = (0xd7 as f32, 0x77 as f32, 0x57 as f32);
+/// The agent accent, the `--agent` token in `src/styles/global.css` (change both together).
+const COLOR: (f32, f32, f32) = (0xf6 as f32, 0xa8 as f32, 0x23 as f32);
 /// Band width in logical px at 100 % (× the monitor's DPI scale, not Text size).
 const BAND: f32 = 32.0;
 /// Alpha at the very edge.

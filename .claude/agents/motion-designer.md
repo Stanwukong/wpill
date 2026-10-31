@@ -19,16 +19,23 @@ Read `CLAUDE.md` first (architecture rules and Windows gotchas apply to you too)
   things that aren't physical, no pulsing for attention unless something needs the user.
 - **Dark island always.** Colors come from tokens in `src/styles/global.css`: `--tint-from`/`--tint-to` (album-art
   gradient), `--accent` (follows the art; use it for highlights), `--island-fg`, `--island-muted`. Semantic colors
-  that must not follow the art (charging green `--charge`, Claude Code orange `--claude`, `--danger`) are their own
-  tokens. Edge effects on `.island`: the charge ring uses `::before`, the Claude glow `::after` (driven by
-  `data-charging` / `data-claude`); glyph spinners step a stacked pseudo-element with `steps()` rather than JS. Design for both the
-  plain black island and a tinted one.
+  that must not follow the art (charging green `--charge`, `--danger`, and the agent amber `--agent` `#f6a823` with
+  `--agent-rgb`, `--agent-deep` `#f59e0b` for pressed and `--agent-ink` `#0f0f0f` for text on amber) are their own
+  tokens. The equalizer uses `--media-accent`: the art's accent, or a soft white (`rgba(245,245,247,0.85)`) on the plain
+  black island, so the no-art default green never reads as charging. Edge effects on `.island`: the charge ring uses
+  `::before`, the amber agent glow `::after` (driven by `data-charging` / `data-claude`). Design for both the plain
+  black island (primary: it's what most people see, including while media without art plays) and a tinted one.
+- **TopBar's own agent look** (Phase 4a): never copy Claude Code's visuals (no ✻-style marks, starbursts, glyph-cycling
+  spinners or its orange). Working = `WorkingIndicator` (`features/claude/WorkingGlyphs.tsx`): an amber sine rippling
+  right through a window with faded ends, one wavelength per 1.6 s, linear, `translateX` only; pill 22×10 (λ 8, 1.6 px
+  stroke), `small` 14×6 (λ 6, 1.5 px) for rows and lists; absent when nothing works; reduced motion holds it still. The
+  static mark is `AgentMark`: the wave at rest (two periods, 1.8 px) in the 22 px icon slot, 18 px in the command bar.
 - **Claude content uses `--font-claude`** (Cascadia Mono → Consolas fallback): project names (13.5 px, weight 500;
-  Cascadia's 600 reads heavy), statuses (11 px, 400, `--claude-status`), commands, prompts and transcripts. Headings,
-  buttons and other chrome stay Segoe; the ✻ mark and the spinner stay Segoe UI Symbol. Cascadia's glyphs touch the
+  Cascadia's 600 reads heavy), statuses (11 px, 400, `--agent-status`), commands, prompts and transcripts. Headings,
+  buttons and other chrome stay Segoe; the wave and the mark are SVG. Cascadia's glyphs touch the
   cell edge, so clips around its text need ~2 px of slack.
-- **Agent UI** (Phase 2.7): `features/agent/` (shared `agent.css`: `agent-btn` with Allow as the only filled, orange
-  button, `agent-link` for quiet text choices, `agent-risk` (reads/changes quiet, input a red tag), `agent-dot` that
+- **Agent UI** (Phase 2.7): `features/agent/` (shared `agent.css`: `agent-btn` with Allow as the only filled, amber
+  button (`--agent-ink` text, `--agent-deep` pressed), `agent-link` for quiet text choices, `agent-risk` (reads/changes quiet, input a red tag), `agent-dot` that
   breathes while waiting). The approval activity is the one multi-line activity; the panel lists runs through
   `ClaudeSection`'s `agent` slot. The command window (`src/command/`) is a normal opaque window (`#141416`) in the
   same tokens; it's sized in physical px by Rust, so Text size shrinks its CSS viewport (480×373 at 150%): check it
@@ -36,7 +43,7 @@ Read `CLAUDE.md` first (architecture rules and Windows gotchas apply to you too)
 - **Routines** (2.7e): the command window's sidebar has a compact Routines section (`RoutineList.tsx`, capped at 40 %
   of the height) above the runs; the editor (`RoutineEditor.tsx`) reuses the task form's pieces from
   `TaskFields.tsx`. Labels live in `routineLabels.ts` and are worked out per render (no ticking timers). A 12 px clock
-  glyph (`AgentGlyphs`) marks scheduled runs and routines with a next run (orange) or none (muted). The island shows
+  glyph (`AgentGlyphs`) marks scheduled runs and routines with a next run (amber) or none (muted). The island shows
   `routineName ?? project` and nothing new beyond that clock in the panel's `agent` tag. The only new motion is the
   switch knob (120 ms ease-out, off under reduced motion). Never word a routine as pre-approving anything.
 
@@ -45,9 +52,12 @@ Read `CLAUDE.md` first (architecture rules and Windows gotchas apply to you too)
 - **Shape changes** (pill ⇄ activity ⇄ panel) are Framer Motion `layout` with `islandSpring` from
   `src/island/motion.ts`. Content inside crossfades with `contentFade` (opacity + a little blur), keyed so in-place
   updates don't re-animate. New timing constants for Framer go in `motion.ts`, never inline.
-- **Ambient loops** (spinners, orbiting light, equalizers) are CSS keyframes, not JS. Animate `transform` and
+- **Ambient loops** (the working wave, orbiting light, equalizers) are CSS keyframes, not JS. Animate `transform` and
   `opacity` where possible; animate a registered custom property (`@property`, e.g. an `<angle>` or `<color>`)
   when a gradient must move. Keep loops slow and linear (2–3 s per cycle reads as "alive", faster reads as "busy").
+- **Agent edge glow:** `data-claude="done"` (and acting) holds a steady amber ring (inset 1.5 px at 0.8, inner 14 px at
+  0.2, halo 22 px at 0.28); `"needsInput"` (also approvals) breathes it, opacity 1 → 0.5 → 1 over 2 s ease-in-out, after
+  a 400 ms fade-in. Reduced motion: steady.
 - **Enter/exit:** 150–400 ms, ease-out in, faster out. Values that step (volume, brightness) get a ~120 ms
   transition so the bar moves rather than jumps.
 - **`prefers-reduced-motion: reduce`:** stop loops and keep the static end state. Always include it.
@@ -55,13 +65,13 @@ Read `CLAUDE.md` first (architecture rules and Windows gotchas apply to you too)
   `requestAnimationFrame` loops while nothing visible changes, nothing animating while the pill is idle.
   Prefer effects that are paused or absent when their state isn't active.
 - **Outside the webview:** the screen-edge glow shown while an agent run looks at the desktop (2.7c) is a native
-  layered window drawn by Rust (`src-tauri/src/window/glow.rs`): color = `--claude`, 32 px band, `0.6·(1−t)²`,
+  layered window drawn by Rust (`src-tauri/src/window/glow.rs`): color = `--agent`, 32 px band, `0.6·(1−t)²`,
   220 ms ease-out cubic in, 1.5 s hold, 400 ms ease-in quad out, no fades with animations off, never pulsing. While
   Claude *acts* (2.7d) it is stronger: 40 px band at 0.72 plus a 2 px rim at 0.92 (1 px anti-alias ramp), 600 ms
   hold; acting wins over looking and switching repaints at once, no crossfade. You write its spec as constants; the
-  main session implements it. If `--claude` changes (Phase 4a), its `COLOR` changes too.
+  main session implements it. If `--agent` changes, its `COLOR` changes too.
 - **Desktop actions in the island (2.7d):** a pointer glyph (`PointerGlyph`) leads the `input` risk badge (the eye
-  stays for looks); `agentActing` is a calm, non-interactive activity with the steady orange edge (`data-claude`
+  stays for looks); `agentActing` is a calm, non-interactive activity with the steady amber edge (`data-claude`
   "done"), no loops.
 
 ## Contracts you must keep

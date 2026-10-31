@@ -37,10 +37,9 @@ textarea {
   border-bottom: 1px solid var(--island-border);
 }
 
-.cmd__bar .claude-mark {
+.cmd__bar .agent-mark {
   width: 18px;
   height: 18px;
-  font-size: 15px;
 }
 
 .cmd__title {
@@ -152,7 +151,7 @@ textarea {
   text-align: center;
   font-size: 15px;
   font-weight: 400;
-  color: var(--claude);
+  color: var(--agent);
 }
 
 .cmd-runs {
@@ -218,11 +217,11 @@ textarea {
 
 .cmd-run__status {
   flex: none;
-  color: var(--claude-status);
+  color: var(--agent-status);
 }
 
 .cmd-run[data-status="waiting"] .cmd-run__status {
-  color: var(--claude);
+  color: var(--agent);
 }
 
 .cmd-run[data-status="failed"] .cmd-run__status {
@@ -264,17 +263,17 @@ textarea {
   color: var(--island-muted);
 }
 
-/* Paused: a quiet orange word; Resume sits beside it. */
+/* Paused: a quiet amber word; Resume sits beside it. */
 .cmd-routines__paused {
   font-size: 10.5px;
-  color: var(--claude);
+  color: var(--agent);
 }
 
 .cmd-routines__pause[data-paused="true"] {
-  color: var(--claude);
+  color: var(--agent);
 }
 
-/* Narrow sidebar (large Text size): orange Resume carries "paused" alone. */
+/* Narrow sidebar (large Text size): amber Resume carries "paused" alone. */
 @media (max-width: 560px) {
   .cmd-routines__paused {
     display: none;
@@ -373,9 +372,9 @@ textarea {
   color: var(--island-muted);
 }
 
-/* A schedule that will run: its clock in Claude orange. Off, paused or switched off: muted. */
+/* A schedule that will run: its clock in amber. Off, paused or switched off: muted. */
 .cmd-routine[data-scheduled="true"] .cmd-routine__mark {
-  color: var(--claude);
+  color: var(--agent);
 }
 
 .cmd-routine__mark .agent-clock {
@@ -402,12 +401,12 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
-  color: var(--claude-status);
+  color: var(--agent-status);
 }
 
 .cmd-routine__last[data-tone="skipped"],
 .routine__last[data-tone="skipped"] {
-  color: rgba(var(--claude-rgb), 0.85);
+  color: rgba(var(--agent-rgb), 0.85);
 }
 
 .cmd-routine__last[data-tone="failed"],
@@ -465,12 +464,16 @@ textarea {
 }
 
 .cmd-btn--primary {
-  background: var(--claude);
-  color: #1a0f0b;
+  background: var(--agent);
+  color: var(--agent-ink);
 }
 
 .cmd-btn--primary:hover {
-  background: color-mix(in srgb, var(--claude) 88%, white);
+  background: color-mix(in srgb, var(--agent) 88%, white);
+}
+
+.cmd-btn--primary:active:not(:disabled) {
+  background: var(--agent-deep);
 }
 
 .cmd-btn--quiet {
@@ -505,7 +508,7 @@ textarea {
   color: var(--danger);
 }
 
-/* Inputs: a faint well with a hairline, Claude orange hairline when focused. */
+/* Inputs: a faint well with a hairline, amber hairline when focused. */
 .task__prompt,
 .composer__box,
 .task-field select,
@@ -524,7 +527,7 @@ textarea {
 .task-field select:focus,
 .task-field input:focus,
 .routine input:focus {
-  box-shadow: inset 0 0 0 1px rgba(var(--claude-rgb), 0.6);
+  box-shadow: inset 0 0 0 1px rgba(var(--agent-rgb), 0.6);
 }
 
 /* New task */
@@ -603,7 +606,7 @@ textarea {
   background: rgba(255, 255, 255, 0.05);
 }
 
-/* The chosen folder: a Claude-orange dot in the gutter and a faint fill. */
+/* The chosen folder: an amber dot in the gutter and a faint fill. */
 .task-folder[aria-selected="true"] {
   background: rgba(255, 255, 255, 0.08);
 }
@@ -616,7 +619,7 @@ textarea {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--claude);
+  background: var(--agent);
 }
 
 .task-folder__name {
@@ -932,8 +935,8 @@ textarea {
 }
 
 .days__day[aria-pressed="true"] {
-  background: rgba(var(--claude-rgb), 0.18);
-  box-shadow: inset 0 0 0 1px rgba(var(--claude-rgb), 0.55);
+  background: rgba(var(--agent-rgb), 0.18);
+  box-shadow: inset 0 0 0 1px rgba(var(--agent-rgb), 0.55);
   color: var(--island-fg);
 }
 
@@ -941,7 +944,7 @@ textarea {
   gap: 10px;
 }
 
-/* Toggle: Windows-style track and knob, Claude orange when on. The knob slides in 120 ms. */
+/* Toggle: Windows-style track and knob, amber when on. The knob slides in 120 ms. */
 .switch {
   display: flex;
   align-items: flex-start;
@@ -986,17 +989,17 @@ textarea {
 }
 
 .switch input:checked + .switch__track {
-  background: var(--claude);
+  background: var(--agent);
   box-shadow: none;
 }
 
 .switch input:checked + .switch__track::after {
   transform: translateX(14px);
-  background: #1a0f0b;
+  background: var(--agent-ink);
 }
 
 .switch input:focus-visible + .switch__track {
-  outline: 2px solid rgba(var(--claude-rgb), 0.6);
+  outline: 2px solid rgba(var(--agent-rgb), 0.6);
   outline-offset: 2px;
 }
 
@@ -1095,11 +1098,11 @@ textarea {
   text-overflow: ellipsis;
   font-family: var(--font-claude);
   font-size: 11px;
-  color: var(--claude-status);
+  color: var(--agent-status);
 }
 
 .run__status[data-status="waiting"] {
-  color: var(--claude);
+  color: var(--agent);
 }
 
 .run__status[data-status="failed"] {
@@ -1174,7 +1177,7 @@ textarea {
 .entry__chevron {
   display: inline-block;
   width: 1.4ch;
-  color: var(--claude);
+  color: var(--agent);
 }
 
 .entry--result-block {
@@ -1254,7 +1257,7 @@ textarea {
   flex: none;
   font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
   font-size: 11px;
-  color: var(--claude);
+  color: var(--agent);
 }
 
 .entry__note-what {
@@ -1271,7 +1274,7 @@ textarea {
 }
 
 .entry--note[data-outcome="waiting"] .entry__note-outcome {
-  color: var(--claude);
+  color: var(--agent);
 }
 
 .entry--note[data-outcome="denied"] .entry__note-outcome {
@@ -1316,8 +1319,8 @@ textarea {
   gap: 6px 10px;
   padding: 7px 8px 7px 12px;
   border-radius: 10px;
-  background: rgba(var(--claude-rgb), 0.08);
-  box-shadow: inset 0 0 0 1px rgba(var(--claude-rgb), 0.35);
+  background: rgba(var(--agent-rgb), 0.08);
+  box-shadow: inset 0 0 0 1px rgba(var(--agent-rgb), 0.35);
   white-space: nowrap;
 }
 
@@ -1345,7 +1348,7 @@ textarea {
   flex: none;
   font-family: var(--font-claude);
   font-size: 11.5px;
-  color: var(--claude);
+  color: var(--agent);
 }
 
 .pending__summary {
@@ -1424,8 +1427,8 @@ textarea {
   place-items: center;
   border: 0;
   border-radius: 8px;
-  background: var(--claude);
-  color: #1a0f0b;
+  background: var(--agent);
+  color: var(--agent-ink);
   transition:
     opacity 120ms ease,
     background-color 120ms ease;
@@ -1434,6 +1437,10 @@ textarea {
 .composer__send svg {
   width: 15px;
   height: 15px;
+}
+
+.composer__send:active:not(:disabled) {
+  background: var(--agent-deep);
 }
 
 .composer__send:disabled {

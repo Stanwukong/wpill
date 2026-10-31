@@ -90,7 +90,7 @@ export function RiskGlyph({ desktop, risk }: { desktop: boolean; risk: AgentRisk
   return risk === "input" ? <PointerGlyph /> : <EyeGlyph />;
 }
 
-/** The run's state in a 14 px slot: Claude's spinner while it works, a breathing dot while it waits, a dot after. */
+/** The run's state in a 14 px slot: the working wave while it works, a breathing dot while it waits, a dot after. */
 export function RunDot({ status }: { status: AgentStatus }) {
   return <span className="agent-dot" data-status={status} />;
 }
