@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { commands, errorMessage } from "../lib/ipc";
 import type { AgentApprovalActivity, AgentEntry, AgentEvent, AgentRun } from "../lib/types";
-import { EyeGlyph, StopGlyph } from "../features/agent/AgentGlyphs";
+import { RiskGlyph, StopGlyph } from "../features/agent/AgentGlyphs";
 import { endLabel, RISK_LABEL, runLabel } from "../features/agent/labels";
 import { decide, isLive, stopRun } from "../features/agent/useAgentRuns";
 import type { Transcript } from "./useTranscripts";
@@ -202,13 +202,14 @@ function PendingCard({ approval }: { approval: AgentApprovalActivity }) {
       <span className="pending__what">
         <span className="pending__tool">{approval.tool}</span>
         <span className="agent-risk" data-risk={approval.risk}>
-          {approval.desktop && <EyeGlyph />}
+          <RiskGlyph desktop={approval.desktop} risk={approval.risk} />
           {RISK_LABEL[approval.risk]}
         </span>
         <span className="pending__summary" title={approval.summary}>
           {approval.summary}
         </span>
       </span>
+      {approval.detail != null && <pre className="pending__detail">{approval.detail}</pre>}
       <span className="pending__actions">
         {approval.rememberAs && (
           <button className="agent-link" disabled={sent} onClick={() => answer("allow", "run")}>

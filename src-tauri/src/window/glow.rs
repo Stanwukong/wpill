@@ -6,6 +6,10 @@
 //! It's painted once per monitor with `UpdateLayeredWindow` and faded by stepping its constant alpha on a timer
 //! that only runs during fades. Its thread owns the window and pumps its messages; `look_started` /
 //! `look_ended` can be called from any thread. Spec from the motion-designer agent (2026-10-30).
+//!
+//! While Claude *acts* (2.7d, `act_started` / `act_ended`) the glow is stronger and gains a crisp rim at the very
+//! edge, so it reads "hands off" rather than "looking". Acting wins over looking; switching between the two
+//! repaints at once (no crossfade, no dip). Spec from the motion-designer agent (2026-10-31).
 
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
@@ -30,7 +34,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::activity::Watcher;
-use crate::desktop::logic::{GlowState, Rect};
+use crate::desktop::logic::{GlowState, Rect, ACT_GLOW_HOLD};
 use crate::error::AppResult;
 use crate::win32;
 
@@ -40,6 +44,12 @@ const COLOR: (f32, f32, f32) = (0xd7 as f32, 0x77 as f32, 0x57 as f32);
 const BAND: f32 = 32.0;
 /// Alpha at the very edge.
 const PEAK: f32 = 0.60;
+/// While acting: a wider, stronger band...
+const ACT_BAND: f32 = 40.0;
+const ACT_PEAK: f32 = 0.72;
+/// ...plus a solid rim this wide (logical px × DPI scale, at least 2 physical px), then a 1 px anti-alias ramp.
+const RIM: f32 = 2.0;
+const RIM_ALPHA: f32 = 0.92;
 const FADE_IN: Duration = Duration::from_millis(220);
 const FADE_OUT: Duration = Duration::from_millis(400);
 const FRAME_MS: u32 = 16;
@@ -48,20 +58,62 @@ const WM_GLOW_CHANGED: u32 = WM_APP + 1;
 const TIMER_FADE: usize = 1;
 const TIMER_HOLD: usize = 2;
 
-/// One edge's contribution at `distance` px into a `band`-px band: `PEAK · (1 − t)²`.
-fn edge(distance: f32, band: f32) -> f32 {
-    let t = distance / band;
-    if t >= 1.0 {
-        0.0
-    } else {
-        PEAK * (1.0 - t) * (1.0 - t)
+/// Which glow is up: Claude looking, or acting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Look,
+    Act,
+}
+
+/// The band's shape, in physical px.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Style {
+    band: f32,
+    peak: f32,
+    /// 0 for no rim.
+    rim: f32,
+}
+
+impl Style {
+    fn of(kind: Kind, scale: f32) -> Style {
+        match kind {
+            Kind::Look => Style {
+                band: BAND * scale,
+                peak: PEAK,
+                rim: 0.0,
+            },
+            Kind::Act => Style {
+                band: ACT_BAND * scale,
+                peak: ACT_PEAK,
+                rim: (RIM * scale).round().max(2.0),
+            },
+        }
     }
 }
 
+/// One edge's contribution at `distance` px: the band `peak · (1 − t)²`, combined with the rim (solid, then a
+/// 1 px ramp) like light.
+fn edge(distance: f32, style: Style) -> f32 {
+    let t = distance / style.band;
+    let band = if t >= 1.0 {
+        0.0
+    } else {
+        style.peak * (1.0 - t) * (1.0 - t)
+    };
+    let rim = if style.rim <= 0.0 || distance >= style.rim + 1.0 {
+        0.0
+    } else if distance < style.rim {
+        RIM_ALPHA
+    } else {
+        RIM_ALPHA * (style.rim + 1.0 - distance)
+    };
+    1.0 - (1.0 - rim) * (1.0 - band)
+}
+
 /// The four edges combined like light: `1 − Π(1 − eᵢ)`.
-fn intensity(x: f32, y: f32, width: f32, height: f32, band: f32) -> f32 {
+fn intensity(x: f32, y: f32, width: f32, height: f32, style: Style) -> f32 {
     let edges = [x, y, width - 1.0 - x, height - 1.0 - y];
-    1.0 - edges.iter().map(|&d| 1.0 - edge(d, band)).product::<f32>()
+    1.0 - edges.iter().map(|&d| 1.0 - edge(d, style)).product::<f32>()
 }
 
 fn ease_out_cubic(p: f32) -> f32 {
@@ -79,17 +131,45 @@ struct Fade {
     duration: Duration,
 }
 
-#[derive(Default)]
 struct Shared {
     hwnd: isize,
     /// Kept below this window (the island), so the island draws over the top band.
     island: isize,
     state: GlowState,
-    /// The monitor of the latest look, and the one the bitmap was painted for.
+    act: GlowState,
+    /// The monitor of the latest look or action, and the monitor and kind the bitmap was painted for.
     monitor: Rect,
-    painted: Rect,
+    painted: Option<(Rect, Kind)>,
     alpha: f32,
     fade: Option<Fade>,
+}
+
+impl Default for Shared {
+    fn default() -> Self {
+        Self {
+            hwnd: 0,
+            island: 0,
+            state: GlowState::default(),
+            act: GlowState::with_hold(ACT_GLOW_HOLD),
+            monitor: Rect::default(),
+            painted: None,
+            alpha: 0.0,
+            fade: None,
+        }
+    }
+}
+
+impl Shared {
+    /// What should show at `now`: acting wins over looking.
+    fn kind(&self, now: Instant) -> Option<Kind> {
+        if self.act.visible(now) {
+            Some(Kind::Act)
+        } else if self.state.visible(now) {
+            Some(Kind::Look)
+        } else {
+            None
+        }
+    }
 }
 
 fn shared() -> MutexGuard<'static, Shared> {
@@ -118,6 +198,29 @@ pub fn look_ended() {
     let hwnd = {
         let mut s = shared();
         s.state.end(Instant::now());
+        s.hwnd
+    };
+    poke(hwnd);
+}
+
+/// An action on `monitor` starts (2.7d): the stronger, rimmed glow comes up there.
+pub fn act_started(monitor: Rect) {
+    let hwnd = {
+        let mut s = shared();
+        s.act.start();
+        if !monitor.is_empty() {
+            s.monitor = monitor;
+        }
+        s.hwnd
+    };
+    poke(hwnd);
+}
+
+/// An action ended: the acting glow holds briefly, then gives way to a look's glow or fades.
+pub fn act_ended() {
+    let hwnd = {
+        let mut s = shared();
+        s.act.end(Instant::now());
         s.hwnd
     };
     poke(hwnd);
@@ -230,13 +333,18 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
 fn update(hwnd: HWND) {
     let now = Instant::now();
     let mut s = shared();
-    let want = if s.state.visible(now) { 1.0 } else { 0.0 };
+    let kind = s.kind(now);
+    let want = if kind.is_some() { 1.0 } else { 0.0 };
     let animate = animations_on();
 
-    if want > 0.0 && s.monitor != s.painted && !s.monitor.is_empty() {
+    // A new monitor, or look ↔ act: repaint at once, at the current alpha.
+    if let Some(kind) = kind {
         let monitor = s.monitor;
-        if paint(hwnd, monitor, s.alpha) {
-            s.painted = monitor;
+        if !monitor.is_empty()
+            && s.painted != Some((monitor, kind))
+            && paint(hwnd, monitor, s.alpha, kind)
+        {
+            s.painted = Some((monitor, kind));
         }
     }
     // Retarget the fade from wherever it is now, so a new look during a fade-out never dips and re-flashes.
@@ -273,7 +381,10 @@ fn update(hwnd: HWND) {
         }
     }
     let (alpha, fading, island) = (s.alpha, s.fade.is_some(), s.island);
-    let hold = s.state.next_change(now);
+    let hold = match (s.state.next_change(now), s.act.next_change(now)) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    };
     drop(s);
 
     set_alpha(hwnd, alpha, island);
@@ -339,9 +450,9 @@ fn set_alpha(hwnd: HWND, alpha: f32, island: isize) {
 }
 
 /// Paints the band for `monitor` into the layered window (and moves it there).
-fn paint(hwnd: HWND, monitor: Rect, alpha: f32) -> bool {
+fn paint(hwnd: HWND, monitor: Rect, alpha: f32, kind: Kind) -> bool {
     let (w, h) = (monitor.width, monitor.height);
-    let band = BAND * monitor_scale(monitor);
+    let style = Style::of(kind, monitor_scale(monitor));
     let info = BITMAPINFO {
         bmiHeader: BITMAPINFOHEADER {
             biSize: size_of::<BITMAPINFOHEADER>() as u32,
@@ -365,7 +476,7 @@ fn paint(hwnd: HWND, monitor: Rect, alpha: f32) -> bool {
             return false;
         };
         let pixels = std::slice::from_raw_parts_mut(bits as *mut u8, w as usize * h as usize * 4);
-        fill(pixels, w as usize, h as usize, band);
+        fill(pixels, w as usize, h as usize, style);
         let old = SelectObject(dc, dib.into());
         let blend = BLENDFUNCTION {
             BlendOp: AC_SRC_OVER as u8,
@@ -397,9 +508,9 @@ fn paint(hwnd: HWND, monitor: Rect, alpha: f32) -> bool {
 }
 
 /// Premultiplied BGRA: one color, alpha from `intensity`. Only the band is touched; the middle stays clear.
-fn fill(pixels: &mut [u8], width: usize, height: usize, band: f32) {
+fn fill(pixels: &mut [u8], width: usize, height: usize, style: Style) {
     let (r, g, b) = COLOR;
-    let reach = band.ceil() as usize;
+    let reach = style.band.max(style.rim + 1.0).ceil() as usize;
     for y in 0..height {
         let near_y = y < reach || y + reach >= height;
         for x in 0..width {
@@ -407,7 +518,7 @@ fn fill(pixels: &mut [u8], width: usize, height: usize, band: f32) {
                 continue;
             }
             let a =
-                intensity(x as f32, y as f32, width as f32, height as f32, band).clamp(0.0, 1.0);
+                intensity(x as f32, y as f32, width as f32, height as f32, style).clamp(0.0, 1.0);
             let i = (y * width + x) * 4;
             pixels[i] = (b * a).round() as u8;
             pixels[i + 1] = (g * a).round() as u8;
@@ -453,25 +564,44 @@ fn animations_on() -> bool {
 mod tests {
     use super::*;
 
+    const LOOK: Style = Style {
+        band: 32.0,
+        peak: PEAK,
+        rim: 0.0,
+    };
+
     #[test]
     fn band_falloff_and_corners() {
-        assert!((edge(0.0, 32.0) - PEAK).abs() < 1e-6);
-        assert!((edge(16.0, 32.0) - PEAK * 0.25).abs() < 1e-6);
-        assert_eq!(edge(32.0, 32.0), 0.0);
-        assert_eq!(edge(100.0, 32.0), 0.0);
-        let mid = intensity(960.0, 540.0, 1920.0, 1080.0, 32.0);
+        assert!((edge(0.0, LOOK) - PEAK).abs() < 1e-6);
+        assert!((edge(16.0, LOOK) - PEAK * 0.25).abs() < 1e-6);
+        assert_eq!(edge(32.0, LOOK), 0.0);
+        assert_eq!(edge(100.0, LOOK), 0.0);
+        let mid = intensity(960.0, 540.0, 1920.0, 1080.0, LOOK);
         assert_eq!(mid, 0.0);
-        let side = intensity(0.0, 540.0, 1920.0, 1080.0, 32.0);
-        let corner = intensity(0.0, 0.0, 1920.0, 1080.0, 32.0);
+        let side = intensity(0.0, 540.0, 1920.0, 1080.0, LOOK);
+        let corner = intensity(0.0, 0.0, 1920.0, 1080.0, LOOK);
         assert!((side - PEAK).abs() < 1e-6);
         assert!(corner > side && corner < 1.0);
+    }
+
+    #[test]
+    fn acting_has_a_rim_and_a_stronger_band() {
+        let act = Style::of(Kind::Act, 1.0);
+        assert_eq!(act.rim, 2.0);
+        assert_eq!(Style::of(Kind::Act, 1.5).rim, 3.0);
+        assert!(edge(0.0, act) > RIM_ALPHA, "rim and band add up like light");
+        assert!(edge(1.9, act) > RIM_ALPHA);
+        // The rim reads as a line: a clear step down after it.
+        assert!(edge(3.5, act) < edge(1.0, act) - 0.2);
+        assert!(edge(10.0, act) > edge(10.0, Style::of(Kind::Look, 1.0)));
+        assert_eq!(edge(40.0, act), 0.0);
     }
 
     #[test]
     fn fill_touches_only_the_band() {
         let (w, h) = (200, 100);
         let mut px = vec![0u8; w * h * 4];
-        fill(&mut px, w, h, 10.0);
+        fill(&mut px, w, h, Style { band: 10.0, ..LOOK });
         let at = |x: usize, y: usize| px[(y * w + x) * 4 + 3];
         assert_eq!(at(100, 50), 0);
         assert_eq!(at(0, 50), (255.0 * PEAK).round() as u8);

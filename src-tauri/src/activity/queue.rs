@@ -35,6 +35,8 @@ struct Rules {
     sticky: bool,
 }
 
+const ACTING_PRIORITY: u8 = 4;
+
 const fn ms(n: u64) -> Duration {
     Duration::from_millis(n)
 }
@@ -66,6 +68,11 @@ fn rules(activity: &Activity) -> Rules {
             sticky: true,
             ..notice(3, Duration::ZERO, Duration::ZERO)
         },
+        // Above approvals: while TopBar acts you should see it, and other runs' approvals wait their turn.
+        Activity::AgentActing(_) => Rules {
+            sticky: true,
+            ..notice(ACTING_PRIORITY, Duration::ZERO, Duration::ZERO)
+        },
         Activity::AgentFinished(_) => notice(2, ms(5000), ms(120_000)),
     }
 }
@@ -84,9 +91,13 @@ fn key(activity: &Activity) -> String {
         Activity::ClaudeNeedsInput(c) => claude_key(c.session_id),
         // One per request, so approvals from several runs take turns like several sessions' questions.
         Activity::AgentApproval(a) => approval_key(a.request_id),
+        Activity::AgentActing(_) => ACTING_KEY.into(),
         Activity::AgentFinished(f) => format!("agent:{}", f.run_id),
     }
 }
+
+/// One action runs at a time, so one key: waiting → acting updates it in place.
+pub const ACTING_KEY: &str = "acting";
 
 /// The key of an agent approval, for `Signal::Retract` once it's answered.
 pub fn approval_key(request_id: u32) -> String {
@@ -112,6 +123,10 @@ pub fn interactive(activity: &Activity) -> bool {
 
 fn preempts(new: &Rules, current: &Shown) -> bool {
     if new.class == Class::Feedback {
+        return true;
+    }
+    // TopBar acting on the desktop always shows at once (an approval on screen steps aside and comes back).
+    if new.priority >= ACTING_PRIORITY {
         return true;
     }
     // A sticky notice on screen steps aside for any other notice; a new sticky one waits its turn.

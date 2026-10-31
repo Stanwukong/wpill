@@ -2,6 +2,7 @@
 
 mod logic;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -37,6 +38,14 @@ struct Shared {
     force_collapse: bool,
     expanded: bool,
     hidden: bool,
+}
+
+/// While TopBar acts on the desktop for an agent run (2.7d), the cursor is treated as away: the island neither
+/// opens on hover nor takes clicks, so a synthetic click near the top centre lands on the app underneath.
+static HANDS_OFF: AtomicBool = AtomicBool::new(false);
+
+pub fn set_hands_off(on: bool) {
+    HANDS_OFF.store(on, Ordering::Relaxed);
 }
 
 /// Tauri-managed state shared between the poller thread and commands.
@@ -174,15 +183,16 @@ fn run(app: AppHandle, geo: Geometry, own: isize) {
         let panel = measured(RectMode::Panel).unwrap_or_else(|| PanelRect::default_for(&geo));
         let activity_rect =
             measured(RectMode::Activity).unwrap_or_else(|| PanelRect::default_activity(&geo));
+        let away = HANDS_OFF.load(Ordering::Relaxed);
         let sample = Sample {
             now,
-            in_hot_zone: logic::in_hot_zone(&geo, cursor.x, cursor.y),
-            in_panel: logic::in_panel(&geo, panel, cursor.x, cursor.y),
-            in_activity: logic::in_panel(&geo, activity_rect, cursor.x, cursor.y),
-            dragging,
+            in_hot_zone: !away && logic::in_hot_zone(&geo, cursor.x, cursor.y),
+            in_panel: !away && logic::in_panel(&geo, panel, cursor.x, cursor.y),
+            in_activity: !away && logic::in_panel(&geo, activity_rect, cursor.x, cursor.y),
+            dragging: !away && dragging,
         };
         let before = machine.phase;
-        if force {
+        if force || (away && machine.phase.is_expanded()) {
             machine.force_collapse(now, &mut out);
         } else {
             machine.tick(&sample, &mut out);

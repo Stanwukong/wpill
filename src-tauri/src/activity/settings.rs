@@ -50,7 +50,7 @@ impl Switches {
             | Activity::ClaudeNeedsInput(_)
             | Activity::AgentFinished(_) => self.claude,
             // A run waits on its approval, so it can't be switched off (it would only time out).
-            Activity::AgentApproval(_) => true,
+            Activity::AgentApproval(_) | Activity::AgentActing(_) => true,
         }
     }
 }

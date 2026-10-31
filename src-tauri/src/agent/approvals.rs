@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
-use super::describe;
+use super::{actions, describe};
 use crate::ipc::{AgentApprovalActivity, AgentRisk};
 
 /// Grants kept per run at most (approved prompts whose call never came).
@@ -42,9 +42,11 @@ pub struct Request {
     pub input: Value,
     pub reply: ReplyTo,
     pub purpose: Purpose,
-    /// For a desktop look at a window: its name ("Chrome · GitHub") and process, seen when asking.
+    /// For a desktop look or action on a window: its name ("Chrome · GitHub") and process, seen when asking.
     pub target: Option<String>,
     pub target_pid: Option<u32>,
+    /// For an action on an element: how it's named (`"Save"`), from the run's latest `ui_tree`.
+    pub element: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -61,6 +63,8 @@ pub struct Pending {
 }
 
 #[derive(Debug)]
+// Short-lived and moved once; boxing `Pending` would only add an allocation per request.
+#[allow(clippy::large_enum_variant)]
 pub enum Asked {
     /// Covered by an earlier "allow for this run".
     Remembered {
@@ -106,8 +110,16 @@ impl Approvals {
                 };
             }
         }
-        let desktop = describe::is_desktop(&req.tool);
-        let summary = if desktop {
+        let action = describe::is_action(&req.tool);
+        let desktop = action || describe::is_desktop(&req.tool);
+        let summary = if action {
+            describe::action_summary(
+                &req.tool,
+                &req.input,
+                req.target.as_deref(),
+                req.element.as_deref(),
+            )
+        } else if desktop {
             describe::desktop_summary(&req.tool, &req.input, req.target.as_deref())
         } else {
             describe::summary(&req.tool, &req.input, &req.cwd)
@@ -123,6 +135,7 @@ impl Approvals {
                 risk: describe::risk(&req.tool),
                 remember_as: key.as_deref().map(describe::remember_scope),
                 desktop,
+                detail: actions::detail(&req.tool, &req.input),
             },
             input: req.input,
             reply: req.reply,
@@ -170,7 +183,7 @@ impl Approvals {
     }
 
     fn add_grant(&mut self, run_id: &str, tool: &str, input: &Value, pid: Option<u32>) {
-        if !describe::is_desktop(tool) {
+        if !describe::is_desktop(tool) && !describe::is_action(tool) {
             return;
         }
         if self.grants.iter().filter(|g| g.run_id == run_id).count() >= MAX_GRANTS {
@@ -196,6 +209,11 @@ impl Approvals {
         self.remembered.remove(run_id);
         self.grants.retain(|g| g.run_id != run_id);
         self.take(|p| p.activity.run_id == run_id)
+    }
+
+    /// Claude Code cancelled the call (`notifications/cancelled`): withdraw its approval.
+    pub fn cancel(&mut self, conn: u64, rpc_id: &Value) -> Vec<Pending> {
+        self.take(|p| p.reply.conn == conn && &p.reply.rpc_id == rpc_id)
     }
 
     /// The bridge went away: nobody is left to answer.
@@ -245,6 +263,7 @@ mod tests {
             purpose: Purpose::Prompt,
             target: None,
             target_pid: None,
+            element: None,
         }
     }
 

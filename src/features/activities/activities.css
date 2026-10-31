@@ -435,3 +435,56 @@
 .activity--approval [data-chosen="true"]:disabled {
   opacity: 0.8;
 }
+
+/*
+ * Agent acting: ✻ · project · step, and under it what stops it. Not clickable. The pointer at the end is muted
+ * while TopBar waits for you to let go and turns Claude orange once it acts (120 ms, in place).
+ */
+.activity--acting {
+  height: auto;
+  min-height: 52px;
+  padding: 8px 16px 9px 14px;
+}
+
+.acting__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* The project keeps up to 60 % of the line; the step gives way (ellipsis) first. */
+.activity--acting .claude-activity__line .activity__title {
+  flex: none;
+  max-width: 60%;
+}
+
+.acting__step {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: 2px;
+  margin-left: -2px;
+  font-size: 11px;
+  color: var(--claude-status);
+}
+
+.acting__hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--island-muted);
+}
+
+.activity--acting > .activity__icon {
+  color: var(--island-muted);
+  transition: color 120ms ease-out;
+}
+
+.activity--acting[data-phase="acting"] > .activity__icon {
+  color: var(--claude);
+}

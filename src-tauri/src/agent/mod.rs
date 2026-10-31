@@ -8,10 +8,14 @@
 //! - The desktop tools (2.7c, `tools.rs` → `crate::desktop`) look at windows and the screen. Each look is
 //!   approved (Claude Code's prompt, then TopBar's own grant check), runs on its own thread, and lights the
 //!   screen edges (`window::glow`) while it runs.
+//! - The desktop actions (2.7d, `actions.rs` → `crate::desktop::act`) focus, invoke, set fields, click, type,
+//!   press keys and launch. Each is approved on its own (never "for this run"), waits until you let go of the
+//!   mouse and keyboard, shows `agentActing` and the acting glow, and stops at once if you touch either.
 //! - Hotkeys (`hotkey.rs`) open the command window or stop everything. Everything is logged (`audit.rs`).
 //!
 //! Rust owns runs, approvals and timeouts; React only renders `agent:runs`, `agent:output` and the activities.
 
+mod actions;
 mod approvals;
 mod audit;
 mod bridge;
@@ -40,12 +44,13 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use windows::Win32::Foundation::WAIT_TIMEOUT;
 use windows::Win32::System::Threading::{SetEvent, WaitForSingleObject, INFINITE};
 
-use crate::activity::{approval_key, Activities, Signal, Watcher};
-use crate::desktop;
+use crate::activity::{approval_key, Activities, Signal, Watcher, ACTING_KEY};
+use crate::desktop::{self, refs::Refs};
 use crate::error::{AppError, AppResult};
 use crate::ipc::{
-    events, Activity, AgentEntry, AgentEvent, AgentFinishedActivity, AgentOptions,
-    AgentOutputPayload, AgentRunsPayload, AgentStarted, AgentStatus, ClaudeInstall,
+    events, Activity, AgentActingActivity, AgentActingPhase, AgentEntry, AgentEvent,
+    AgentFinishedActivity, AgentOptions, AgentOutputPayload, AgentRunsPayload, AgentStarted,
+    AgentStatus, ClaudeInstall,
 };
 use crate::win32::Handle;
 use crate::window::{self, glow};
@@ -93,6 +98,10 @@ struct Inner {
     signals: Option<Sender<Signal>>,
     /// Ends the server, connection and timer threads.
     stop: Option<Arc<Handle>>,
+    /// What each run's looks have seen: `ui_tree` refs and screenshot positions, for actions.
+    refs: Refs,
+    /// The action running now (one at a time): its run and call, so Stop or a cancel can abort it.
+    acting: Option<(String, u64, Value)>,
 }
 
 /// Tauri-managed agent state. Every thread and command goes through it; replies to bridges are written after
@@ -199,6 +208,7 @@ impl Inner {
             let message = match by {
                 "timeout" => "Nobody answered in TopBar within the time limit, so this was denied.",
                 "runEnded" => "The run ended before this was answered.",
+                "cancelled" => "The call was cancelled before it was answered.",
                 _ => "The user denied this in TopBar. Don't retry it; adapt or explain what you needed.",
             };
             if let Some(conn) = self.conns.get(&p.reply.conn) {
@@ -252,6 +262,7 @@ impl Inner {
 
     /// The run just ended: withdraw its approvals, offer `agentFinished` (not after Stop: you know), clean up.
     fn finished(&mut self, run_id: &str, after: &mut After) {
+        self.refs.end_run(run_id);
         let pending = self.approvals.end_run(run_id);
         self.settle(pending, false, "runEnded", after);
         let Some(slot) = self.slot(run_id) else {
@@ -450,6 +461,8 @@ fn serve(app: &AppHandle, pipe: Arc<pipe::Pipe>, stop: &Handle) {
                 input,
             } => approve(app, conn, rpc_id, tool_name, input),
             mcp::Action::Look { rpc_id, name, args } => look(app, conn, rpc_id, name, args),
+            mcp::Action::Act { rpc_id, name, args } => act(app, conn, rpc_id, name, args),
+            mcp::Action::Cancel { request_id } => cancel(app, conn, &request_id),
             mcp::Action::Ignore => {}
         }
     }
@@ -477,14 +490,16 @@ fn approve(app: &AppHandle, conn: u64, rpc_id: Value, tool: String, input: Value
         inner.audit(
             &run_id,
             "approval",
-            json!({ "tool": tool, "input": audit::input_for_log(&input) }),
+            json!({ "tool": tool, "input": audit::input_for_log(&actions::redact(&tool, &input)) }),
         );
+        let element = actions::element_for(&tool, &input, &run_id, &inner.refs, Instant::now());
         let reply = ReplyTo { conn, rpc_id };
         let asked = Ask {
             run_id: &run_id,
             tool: &tool,
             purpose: Purpose::Prompt,
             target,
+            element,
         };
         if let Some((reply, input, _)) = ask(&mut inner, asked, input, reply, &mut after) {
             after
@@ -527,6 +542,7 @@ fn look(app: &AppHandle, conn: u64, rpc_id: Value, name: &'static str, args: Val
                 tool: &tool,
                 purpose: Purpose::Look,
                 target,
+                element: None,
             };
             if let Some((reply, args, pid)) = ask(&mut inner, asked, args, reply, &mut after) {
                 after.looks.push(LookJob {
@@ -543,9 +559,222 @@ fn look(app: &AppHandle, conn: u64, rpc_id: Value, name: &'static str, args: Val
     after.run(app, &agents);
 }
 
+/// One of the desktop actions was called. Like a look, it runs only with the one-time grant its approved
+/// prompt left (actions are never remembered for the run); without one, TopBar asks in the island itself.
+fn act(app: &AppHandle, conn: u64, rpc_id: Value, name: &'static str, args: Value) {
+    let tool = format!("mcp__{}__{name}", mcp::SERVER_NAME);
+    let target = desktop_target(&tool, &args);
+    let agents = app.state::<Agents>();
+    let mut after = After::default();
+    {
+        let mut inner = agents.lock();
+        let Some(c) = inner.conns.get(&conn) else {
+            return;
+        };
+        let (pipe, run_id) = (c.pipe.clone(), c.run_id.clone());
+        let checked =
+            actions::parse(name, &args).map_err(|why| tools::refused(rpc_id.clone(), &why));
+        let checked = checked.and_then(|call| {
+            actions::resolve(&call, &run_id, &inner.refs, Instant::now())
+                .map_err(|e| actions::reply(rpc_id.clone(), &Err(e)))
+        });
+        if let Err(reply) = checked {
+            after.replies.push((pipe, reply));
+        } else if let Some(pid) = inner.approvals.take_grant(&run_id, &tool, &args) {
+            after.looks.push(LookJob {
+                pipe,
+                rpc_id,
+                run_id,
+                tool,
+                args,
+                pid,
+            });
+        } else {
+            log::info!("agent action {tool} arrived without an approved prompt; asking in TopBar");
+            let element = actions::element_for(&tool, &args, &run_id, &inner.refs, Instant::now());
+            let reply = ReplyTo { conn, rpc_id };
+            let asked = Ask {
+                run_id: &run_id,
+                tool: &tool,
+                purpose: Purpose::Look,
+                target,
+                element,
+            };
+            if let Some((reply, args, pid)) = ask(&mut inner, asked, args, reply, &mut after) {
+                after.looks.push(LookJob {
+                    pipe,
+                    rpc_id: reply.rpc_id,
+                    run_id,
+                    tool,
+                    args,
+                    pid,
+                });
+            }
+        }
+    }
+    after.run(app, &agents);
+}
+
+/// Claude Code gave up on call `rpc_id`: its approval is withdrawn, and if it's the action running now, that
+/// action stops before its next event.
+fn cancel(app: &AppHandle, conn: u64, rpc_id: &Value) {
+    let agents = app.state::<Agents>();
+    let mut after = After::default();
+    {
+        let mut inner = agents.lock();
+        if inner
+            .acting
+            .as_ref()
+            .is_some_and(|(_, c, id)| *c == conn && id == rpc_id)
+        {
+            log::info!("agent action cancelled by Claude Code; stopping it");
+            desktop::abort_action();
+        }
+        let cancelled = inner.approvals.cancel(conn, rpc_id);
+        inner.settle(cancelled, false, "cancelled", &mut after);
+    }
+    after.run(app, &agents);
+}
+
+/// Brings `hwnd` to the front on the main thread (the foreground fallback chain needs a message queue).
+fn focus_on_main(app: &AppHandle, hwnd: isize) -> Result<(), desktop::ActError> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let posted = app.run_on_main_thread(move || {
+        let _ = tx.send(crate::apps::bring_to_front(crate::win32::from_raw(hwnd)));
+    });
+    if posted.is_err() {
+        return Err(desktop::ActError::NotForeground);
+    }
+    match rx.recv_timeout(Duration::from_secs(3)) {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(AppError::WindowGone)) => Err(desktop::ActError::WindowGone),
+        _ => Err(desktop::ActError::NotForeground),
+    }
+}
+
+/// Runs an approved action on its own thread: the acting glow, the island kept out of the way, the
+/// `agentActing` activity (waiting for you to let go, then acting), then the reply and the audit line.
+fn run_act(app: &AppHandle, job: LookJob) {
+    let app = app.clone();
+    let spawned = std::thread::Builder::new()
+        .name("agent-act".into())
+        .spawn(move || {
+            let name = actions::short_name(&job.tool).unwrap_or_default();
+            let agents = app.state::<Agents>();
+            let (prepared, signals, project) = {
+                let mut inner = agents.lock();
+                let conn = inner
+                    .conns
+                    .iter()
+                    .find(|(_, c)| Arc::ptr_eq(&c.pipe, &job.pipe))
+                    .map_or(0, |(id, _)| *id);
+                let prepared = actions::parse(name, &job.args)
+                    .map_err(desktop::ActError::Refused)
+                    .and_then(|call| {
+                        let (action, pid) =
+                            actions::resolve(&call, &job.run_id, &inner.refs, Instant::now())?;
+                        Ok((call.hwnd, action, pid))
+                    });
+                let project = inner
+                    .slot(&job.run_id)
+                    .map(|s| s.run.project.clone())
+                    .unwrap_or_default();
+                if prepared.is_ok() {
+                    inner.acting = Some((job.run_id.clone(), conn, job.rpc_id.clone()));
+                }
+                let element = actions::element_for(
+                    &job.tool,
+                    &job.args,
+                    &job.run_id,
+                    &inner.refs,
+                    Instant::now(),
+                );
+                (
+                    prepared.map(|p| (p, element)),
+                    inner.signals.clone(),
+                    project,
+                )
+            };
+            let result = match prepared {
+                Err(e) => Err(e),
+                Ok(((hwnd, action, refs_pid), element)) => {
+                    let label = hwnd
+                        .and_then(desktop::identify)
+                        .map(|t| tools::target_label(&t));
+                    let step = describe::acting_step(
+                        &job.tool,
+                        &job.args,
+                        label.as_deref(),
+                        element.as_deref(),
+                    );
+                    let show = !matches!(action, desktop::Action::Launch(_));
+                    let offer = {
+                        let (signals, run_id) = (signals.clone(), job.run_id.clone());
+                        move |phase: desktop::Phase| {
+                            let (Some(tx), true) = (&signals, show) else {
+                                return;
+                            };
+                            let phase = match phase {
+                                desktop::Phase::Waiting => AgentActingPhase::Waiting,
+                                desktop::Phase::Acting => AgentActingPhase::Acting,
+                            };
+                            let _ = tx.send(Signal::Offer(Activity::AgentActing(
+                                AgentActingActivity {
+                                    run_id: run_id.clone(),
+                                    project: project.clone(),
+                                    step: step.clone(),
+                                    phase,
+                                },
+                            )));
+                        }
+                    };
+                    let focus_app = app.clone();
+                    glow::act_started(desktop::monitor_of(hwnd));
+                    crate::hover::set_hands_off(true);
+                    let result = desktop::act(
+                        hwnd,
+                        job.pid.or(refs_pid),
+                        action,
+                        move |h| focus_on_main(&focus_app, h),
+                        offer,
+                    );
+                    crate::hover::set_hands_off(false);
+                    glow::act_ended();
+                    if let Some(tx) = &signals {
+                        let _ = tx.send(Signal::Retract(ACTING_KEY.into()));
+                    }
+                    result
+                }
+            };
+            let audit = {
+                let mut inner = agents.lock();
+                inner.acting = None;
+                inner.audit.clone()
+            };
+            if let Some(audit) = audit {
+                audit.log(
+                    &job.run_id,
+                    "act",
+                    actions::audit_fields(name, &job.args, &result),
+                );
+            }
+            match &result {
+                Ok(a) => log::info!("agent action {name} done: {}", a.what),
+                Err(e) => log::info!("agent action {name} failed: {}", e.code()),
+            }
+            let reply = actions::reply(job.rpc_id, &result);
+            if let Err(e) = job.pipe.write(reply.to_string().as_bytes()) {
+                log::debug!("agent action reply not delivered: {e}");
+            }
+        });
+    if let Err(e) = spawned {
+        log::warn!("agent action thread: {e}");
+    }
+}
+
 /// The window a desktop look names, resolved before asking: its label for the summary, and its process.
 fn desktop_target(tool: &str, input: &Value) -> (Option<String>, Option<u32>) {
-    if !describe::is_desktop(tool) {
+    if !describe::is_desktop(tool) && !describe::is_action(tool) {
         return (None, None);
     }
     let target = input
@@ -562,8 +791,10 @@ struct Ask<'a> {
     run_id: &'a str,
     tool: &'a str,
     purpose: Purpose,
-    /// For desktop looks: the window's label and process.
+    /// For desktop looks and actions: the window's label and process.
     target: (Option<String>, Option<u32>),
+    /// For actions on an element: its label from the run's latest `ui_tree`.
+    element: Option<String>,
 }
 
 /// Asks about a request: `Some` (answered at once) when its kind is remembered for the run, else it waits as an
@@ -576,6 +807,15 @@ fn ask(
     after: &mut After,
 ) -> Option<(ReplyTo, Value, Option<u32>)> {
     let timeout = Duration::from_secs(inner.settings.approval_timeout_secs.max(10));
+    // The audit's "asked" line never carries typed text: its summary is built from the redacted input.
+    let logged_summary = describe::is_action(a.tool).then(|| {
+        describe::action_summary(
+            a.tool,
+            &actions::redact(a.tool, &input),
+            a.target.0.as_deref(),
+            a.element.as_deref(),
+        )
+    });
     let slot = inner.slot(a.run_id)?;
     let request = Request {
         run_id: a.run_id.to_string(),
@@ -587,6 +827,7 @@ fn ask(
         purpose: a.purpose,
         target: a.target.0,
         target_pid: a.target.1,
+        element: a.element,
     };
     match inner.approvals.ask(request, Instant::now(), timeout) {
         Asked::Remembered {
@@ -611,7 +852,8 @@ fn ask(
             inner.audit(
                 a.run_id,
                 "asked",
-                json!({ "requestId": activity.request_id, "summary": activity.summary,
+                json!({ "requestId": activity.request_id,
+                        "summary": logged_summary.as_ref().unwrap_or(&activity.summary),
                         "risk": activity.risk, "by": by }),
             );
             if let Some(slot) = inner.slot(a.run_id) {
@@ -649,6 +891,9 @@ fn ask(
 /// Runs an approved look on its own thread with the glow up, then answers the call and logs what was looked at
 /// (never the image or the tree).
 fn run_look(app: &AppHandle, job: LookJob) {
+    if actions::short_name(&job.tool).is_some() {
+        return run_act(app, job);
+    }
     let app = app.clone();
     let spawned = std::thread::Builder::new()
         .name("agent-look".into())
@@ -664,7 +909,38 @@ fn run_look(app: &AppHandle, job: LookJob) {
                 Err(why) => Err(desktop::LookError::Failed(why)),
             };
             let reply = tools::reply(job.rpc_id, &result);
-            let audit = app.state::<Agents>().lock().audit.clone();
+            let agents = app.state::<Agents>();
+            let audit = {
+                let mut inner = agents.lock();
+                // What the look saw, so actions can name its elements and points (2.7d).
+                let now = Instant::now();
+                match &result {
+                    Ok(desktop::Outcome::Tree {
+                        target, elements, ..
+                    }) => inner.refs.put_tree(
+                        &job.run_id,
+                        target.hwnd as i64,
+                        target.pid,
+                        elements.clone(),
+                        now,
+                    ),
+                    Ok(desktop::Outcome::Image {
+                        image,
+                        target: Some(target),
+                    }) => {
+                        let view = desktop::plan::View {
+                            origin: image.origin,
+                            scale: image.scale,
+                            frame: image.origin,
+                        };
+                        inner
+                            .refs
+                            .put_view(&job.run_id, target.hwnd as i64, target.pid, view, now);
+                    }
+                    _ => {}
+                }
+                inner.audit.clone()
+            };
             if let Some(audit) = audit {
                 audit.log(&job.run_id, "look", tools::audit_fields(name, &result));
             }
@@ -828,6 +1104,13 @@ fn on_exit(app: &AppHandle, run_id: &str, generation: u32, code: Option<i32>, st
 }
 
 fn stop_run(inner: &mut Inner, run_id: &str, after: &mut After) {
+    if inner
+        .acting
+        .as_ref()
+        .is_some_and(|(run, _, _)| run == run_id)
+    {
+        desktop::abort_action();
+    }
     let Some(slot) = inner.slot(run_id) else {
         return;
     };
@@ -1121,7 +1404,7 @@ pub async fn command_window_hide(app: AppHandle) -> AppResult<()> {
 /// Debug builds only: drive the agent from outside for verification, through a second launch that the
 /// single-instance plugin forwards here. `topbar.exe agent-test start <cwd> <prompt> [model] [maxTurns]`,
 /// `… decide <requestId> allow|deny [run]`, `… send <runId> <text>`, `… stop <runId>`, `… stop-all`,
-/// `… show [runId]`, `… look <tool> [argsJson] [imageFile]` (a desktop look without Claude or approvals, glow
+/// `… show [runId]`, `… act <tool> [argsJson]` (an action without Claude or approvals), `… look <tool> [argsJson] [imageFile]` (a desktop look without Claude or approvals, glow
 /// included). Results go to the log.
 #[cfg(debug_assertions)]
 pub fn debug_command(app: &AppHandle, args: &[String]) {
@@ -1198,6 +1481,44 @@ pub fn debug_command(app: &AppHandle, args: &[String]) {
                             "{audit}\n{}",
                             describe::truncate(&text.join("\n"), 3000)
                         ))
+                    }
+                    Some(Err(e)) => Err(AppError::AgentInvalid(e)),
+                    None => Err(AppError::AgentInvalid("unknown tool".into())),
+                }
+            }
+            // `act <tool> [argsJson]`: an action without Claude or approvals (no refs: points, text, keys, launch).
+            // The waits, the guard and the glow work as in a run.
+            "act" => {
+                let name = actions::NAMES.iter().copied().find(|n| *n == arg(1));
+                let args: Value = serde_json::from_str(&arg(2)).unwrap_or(json!({}));
+                match name.map(|n| actions::parse(n, &args)) {
+                    Some(Ok(call)) => {
+                        match actions::resolve(&call, "", &Refs::default(), Instant::now()) {
+                            Ok((action, _)) => {
+                                let focus_app = app.clone();
+                                glow::act_started(desktop::monitor_of(call.hwnd));
+                                crate::hover::set_hands_off(true);
+                                let result = tauri::async_runtime::spawn_blocking(move || {
+                                    desktop::act(
+                                        call.hwnd,
+                                        None,
+                                        action,
+                                        move |h| focus_on_main(&focus_app, h),
+                                        |phase| log::info!("agent-test act: {phase:?}"),
+                                    )
+                                })
+                                .await
+                                .unwrap_or_else(|e| Err(desktop::ActError::Failed(e.to_string())));
+                                crate::hover::set_hands_off(false);
+                                glow::act_ended();
+                                let reply = actions::reply(json!(0), &result);
+                                Ok(reply["result"]["content"][0]["text"]
+                                    .as_str()
+                                    .unwrap_or_default()
+                                    .to_string())
+                            }
+                            Err(e) => Err(AppError::AgentInvalid(e.message())),
+                        }
                     }
                     Some(Err(e)) => Err(AppError::AgentInvalid(e)),
                     None => Err(AppError::AgentInvalid("unknown tool".into())),

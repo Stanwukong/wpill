@@ -41,6 +41,7 @@ pnpm typecheck              # tsc --noEmit
 .\src-tauri\target\debug\topbar.exe agent-test start <folder> "<prompt>" haiku 4
 .\src-tauri\target\debug\topbar.exe agent-test decide <requestId> allow|deny [run]   # also: send, stop, stop-all, show, hide, quit
 .\src-tauri\target\debug\topbar.exe agent-test look screenshot '{"hwnd":123}' C:\tmp\shot.png   # a desktop look without Claude (also list_windows, focused_window, ui_tree)
+.\src-tauri\target\debug\topbar.exe agent-test act type_text '{"hwnd":123,"text":"hi"}'   # an action without Claude or approvals (no refs; real input: ask first)
 ```
 
 The first `cargo build` compiles ~370 crates (several minutes); later rebuilds of the
@@ -73,11 +74,17 @@ the drive once); `cargo clean --profile dev` when space runs low.
   `settings.rs` (`agent` block in settings.json). Pure and unit-tested: `stream.rs` (stream-json), `lifecycle.rs`
   (run state), `approvals.rs`, `describe.rs` (risk, summaries, remember keys), `mcp.rs`.
   `window/command.rs` creates the focusable `command` window (`command.html` → `src/command/`).
-  `desktop/` (Phase 2.7c, what agent runs may look at; read-only): `mod.rs` = `run(Look)` on a per-look MTA thread,
-  `windows.rs` (Alt+Tab list from `apps/`, target checks: gone, ours, cloaked, hung, elevated, locked), `capture.rs`
-  (PrintWindow / BitBlt + capture exclusion), `encode.rs` (WIC), `uia.rs`; pure and tested: `logic.rs`, `tree.rs`.
-  `agent/tools.rs` = the four MCP tools' definitions, arguments and replies (pure); `agent/approvals.rs` also holds the
-  one-time look grants. `window/glow.rs` = the native screen-edge glow window (own thread, `look_started`/`look_ended`).
+  `desktop/` (Phase 2.7c looks, 2.7d actions): `mod.rs` = `run(Look)` on a per-look MTA thread and `act(…)` on a
+  per-action one (one action at a time), `windows.rs` (Alt+Tab list from `apps/`, target checks: gone, ours, cloaked,
+  hung, elevated, locked), `capture.rs` (PrintWindow / BitBlt + capture exclusion), `encode.rs` (WIC), `uia.rs`,
+  `act.rs` (find an element again from a ref, UIA patterns), `input.rs` (`SendInput`), `guard.rs` (low-level hooks:
+  your input aborts), `launch.rs` (links, Start-menu apps); pure and tested: `logic.rs`, `tree.rs` (outline with
+  `[n]` refs), `plan.rs` (actions, chords, text/secret checks, coordinates, URLs, `ActError`), `refs.rs` (per-run refs
+  and screenshot views). `agent/tools.rs` = the four look tools, `agent/actions.rs` = the seven action tools
+  (definitions, arguments, ref resolution, replies, redacted audit; pure); `agent/approvals.rs` also holds the
+  one-time grants for looks and actions. `window/glow.rs` = the native screen-edge glow window (own thread,
+  `look_started`/`look_ended`, stronger with a rim for `act_started`/`act_ended`). `hover::set_hands_off` keeps the
+  island collapsed and click-through while an action runs.
 - `lib.rs` uses `.build()?.run(|app, event| …)` so `RunEvent::Exit` can stop the media and activity watchers (unregisters their handlers).
 - Plugins (registered in `lib.rs`): `tauri-plugin-single-instance` (must stay first). Don't use
   `tauri-plugin-autostart`: it writes the exe path unquoted, which breaks for paths with spaces.
@@ -218,8 +225,23 @@ the drive once); `cargo clean --profile dev` when space runs low.
   results over `MAX_MCP_OUTPUT_TOKENS`), and replies must stay well under the agent pipe's 4 MiB cap (an oversized reply
   is dropped and Claude Code waits). Claude Code stores tool images in its session transcripts under `~/.claude/projects`.
 - **The Win32 `VARIANT` has no `Drop`:** `VariantClear` what UIA's `GetCachedPropertyValue` returns.
+- **Desktop actions never act on a guess.** An element is found again by its runtime id (at its old position, then
+  `FindAll`) and must still match type, name and automation id; a raw click point must be on the target
+  (`WindowFromPoint` root) and the target in front before every `SendInput` batch. Your input aborts: the low-level
+  hooks in `guard.rs` count events without `LLKHF_INJECTED`/`LLMHF_INJECTED` (`GetLastInputInfo` counts ours too);
+  their callback only stores atomics (Windows silently drops slow LL hooks). An action first waits until you've let
+  go for 500 ms (the Allow click itself is your input). Always release keys that went down. Input actions are never
+  remembered "for this run"; typed text is redacted in the audit (`actions::redact`). Win-key chords, Alt+Tab and
+  Ctrl(+Shift)+Esc are refused; `launch` takes https/http/ms-settings links and Start-menu apps only.
+- **Synthetic typing is paced on purpose (C11).** Windows 11 Notepad turns a burst of `KEYEVENTF_UNICODE` events into
+  copies of the last character, and drops keys or loses Shift when real key events arrive together. `input.rs` types
+  real keys from the target's layout (`VkKeyScanExW`, Shift and Caps Lock handled), one event per `SendInput`, 25 ms
+  apart and 60 ms after a modifier goes down. Don't batch it back up; check typed text by reading it back (UIA or a
+  screenshot), not by `SendInput`'s count, and compare with WordPad when an app looks wrong.
 - **Testing agent runs:** use `topbar.exe agent-test …` (debug builds only), a scratch folder, `haiku` and low
   max turns. Don't send synthetic keystrokes while the user is at the machine; they land in whatever has focus.
+  UI Automation actions (`invoke`, `set_value`) send no input and work with the window behind; ask before testing
+  `focus_window`, `click`, `type_text`, `press_keys` or `launch`.
 - **Windows PowerShell 5.1 can't list GSMTC sessions** (`GetSessions()` comes back empty). Check media state with the
   `topbar_lib=debug` log instead.
 

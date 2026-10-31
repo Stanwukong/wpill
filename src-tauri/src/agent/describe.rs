@@ -3,7 +3,8 @@
 
 use serde_json::Value;
 
-use super::tools;
+use super::{actions, tools};
+use crate::desktop::plan;
 use crate::ipc::AgentRisk;
 
 const MAX_SUMMARY: usize = 160;
@@ -21,16 +22,6 @@ const READ_TOOLS: &[&str] = &[
     "TodoWrite",
     "NotebookRead",
 ];
-/// TopBar's own desktop actions (stage 2.7d): input into other apps, never remembered.
-const INPUT_TOOLS: &[&str] = &[
-    "mcp__topbar__focus_window",
-    "mcp__topbar__invoke",
-    "mcp__topbar__set_value",
-    "mcp__topbar__click",
-    "mcp__topbar__type_text",
-    "mcp__topbar__press_keys",
-    "mcp__topbar__launch",
-];
 const EDIT_TOOLS: &[&str] = &["Edit", "MultiEdit", "Write", "NotebookEdit"];
 const SHELL_TOOLS: &[&str] = &["Bash", "PowerShell"];
 /// Anything here in a shell command makes it compound: remembering its first word would allow far more.
@@ -38,7 +29,7 @@ const SHELL_OPERATORS: &[&str] = &["&", "|", ";", "`", "$(", ">", "<", "\n", "\r
 
 /// Unknown tools (other MCP servers, new built-ins) count as changes. TopBar's desktop looks are reads.
 pub fn risk(tool: &str) -> AgentRisk {
-    if INPUT_TOOLS.contains(&tool) {
+    if is_action(tool) {
         AgentRisk::Input
     } else if READ_TOOLS.contains(&tool) || is_desktop(tool) {
         AgentRisk::Read
@@ -50,6 +41,170 @@ pub fn risk(tool: &str) -> AgentRisk {
 /// One of TopBar's own desktop looks (2.7c): `list_windows`, `focused_window`, `screenshot`, `ui_tree`.
 pub fn is_desktop(tool: &str) -> bool {
     tools::short_name(tool).is_some()
+}
+
+/// One of TopBar's own desktop actions (2.7d): input into other apps, risk `input`, never remembered.
+pub fn is_action(tool: &str) -> bool {
+    actions::short_name(tool).is_some()
+}
+
+/// Text in an approval: quoted on one line (newlines as ⏎), cut to `max`.
+fn quote(text: &str, max: usize) -> String {
+    let one: String = text
+        .replace("\r\n", "\n")
+        .chars()
+        .map(|c| if c == '\n' { '⏎' } else { c })
+        .collect();
+    format!("\"{}\"", truncate(&one, max))
+}
+
+/// The approval line for a desktop action: exactly what will happen, where. `target` names the window
+/// ("Notepad · notes.txt"), `element` the control (`"Save"`). Typed text is shown short; when the audit asks
+/// with the text redacted (`{ chars }`), only its length.
+pub fn action_summary(
+    tool: &str,
+    input: &Value,
+    target: Option<&str>,
+    element: Option<&str>,
+) -> String {
+    let window = target.unwrap_or("a window that has closed");
+    let thing = element.unwrap_or("an element that's no longer there");
+    let button = str_field(input, "button");
+    let click = match button {
+        "right" => "Right-click",
+        "double" => "Double-click",
+        _ => "Click",
+    };
+    let text = match tools_text(input) {
+        TextArg::Short(t) => format!("{} into {window}", quote(&t, 60)),
+        TextArg::Long(t, n) => format!("{n} characters into {window}: {}", quote(&t, 40)),
+        TextArg::Count(n) => format!("{n} characters into {window}"),
+    };
+    let summary = match actions::short_name(tool) {
+        Some(actions::FOCUS_WINDOW) => format!("Bring {window} to the front"),
+        Some(actions::INVOKE) => {
+            let verb = match str_field(input, "action") {
+                "toggle" => "Toggle",
+                "select" => "Select",
+                "expand" => "Expand",
+                "collapse" => "Collapse",
+                "scrollIntoView" => "Scroll to",
+                "focus" => "Focus",
+                _ => "Press",
+            };
+            format!("{verb} {thing} in {window}")
+        }
+        Some(actions::SET_VALUE) => {
+            let value = match input.get("value") {
+                Some(Value::String(v)) if v.chars().count() <= 60 && !v.contains('\n') => {
+                    quote(v, 60)
+                }
+                Some(Value::String(v)) => format!("{} characters", v.chars().count()),
+                Some(v) => format!("{} characters", v["chars"].as_u64().unwrap_or(0)),
+                None => "nothing".into(),
+            };
+            format!("Set {thing} to {value} in {window}")
+        }
+        Some(actions::CLICK) if input.get("element").is_some_and(|v| !v.is_null()) => {
+            format!("{click} {thing} in {window}")
+        }
+        Some(actions::CLICK) => {
+            let (x, y) = (
+                input["x"].as_i64().unwrap_or(0),
+                input["y"].as_i64().unwrap_or(0),
+            );
+            let unit = if str_field(input, "from") == "screenshot" {
+                " (screenshot px)"
+            } else {
+                ""
+            };
+            format!("{click} at {x}, {y}{unit} in {window}")
+        }
+        Some(actions::TYPE_TEXT) => format!("Type {text}"),
+        Some(actions::PRESS_KEYS) => {
+            let chords: Vec<String> = keys_field(input)
+                .iter()
+                .map(|k| match plan::parse_chord(k) {
+                    Ok(c) => match plan::chord_note(&c) {
+                        Some(note) => format!("{} ({note})", c.label()),
+                        None => c.label(),
+                    },
+                    Err(_) => k.to_string(),
+                })
+                .collect();
+            format!("Press {} in {window}", chords.join(", then "))
+        }
+        Some(actions::LAUNCH) => match (
+            input.get("url").and_then(Value::as_str),
+            str_field(input, "app"),
+        ) {
+            (Some(url), _) if url.trim().to_ascii_lowercase().starts_with("ms-settings:") => {
+                format!("Open Settings ({})", url.trim())
+            }
+            (Some(url), _) => format!("Open {} in your browser", url.trim()),
+            (None, app) => format!("Open the {} app", app.trim()),
+        },
+        _ => display_tool(tool),
+    };
+    truncate(&summary, MAX_SUMMARY)
+}
+
+enum TextArg {
+    Short(String),
+    Long(String, usize),
+    Count(u64),
+}
+
+fn tools_text(input: &Value) -> TextArg {
+    match input.get("text") {
+        Some(Value::String(t)) if t.chars().count() <= 60 && !t.trim_end().contains('\n') => {
+            TextArg::Short(t.clone())
+        }
+        Some(Value::String(t)) => TextArg::Long(t.clone(), t.chars().count()),
+        Some(v) => TextArg::Count(v["chars"].as_u64().unwrap_or(0)),
+        None => TextArg::Count(0),
+    }
+}
+
+fn keys_field(input: &Value) -> Vec<&str> {
+    match input.get("keys") {
+        Some(Value::Array(a)) => a.iter().filter_map(Value::as_str).collect(),
+        Some(Value::String(s)) => vec![s.as_str()],
+        _ => vec![],
+    }
+}
+
+/// What the island's acting activity says: "Clicking "Save"", "Typing into Notepad", "Pressing Ctrl+S".
+pub fn acting_step(
+    tool: &str,
+    input: &Value,
+    target: Option<&str>,
+    element: Option<&str>,
+) -> String {
+    let window = target
+        .map(|t| t.split(" · ").next().unwrap_or(t).to_string())
+        .unwrap_or_else(|| "a window".into());
+    let thing = element.map_or_else(|| window.clone(), str::to_string);
+    let step = match actions::short_name(tool) {
+        Some(actions::FOCUS_WINDOW) => format!("Bringing {window} forward"),
+        Some(actions::INVOKE) => format!("Pressing {thing}"),
+        Some(actions::SET_VALUE) => format!("Setting {thing}"),
+        Some(actions::CLICK) => match element {
+            Some(e) => format!("Clicking {e}"),
+            None => format!("Clicking in {window}"),
+        },
+        Some(actions::TYPE_TEXT) => format!("Typing into {window}"),
+        Some(actions::PRESS_KEYS) => {
+            let keys: Vec<String> = keys_field(input)
+                .iter()
+                .map(|k| plan::parse_chord(k).map_or(k.to_string(), |c| c.label()))
+                .collect();
+            format!("Pressing {}", keys.join(", "))
+        }
+        Some(actions::LAUNCH) => "Opening".to_string(),
+        _ => "Acting".to_string(),
+    };
+    truncate(&step, MAX_LABEL)
 }
 
 /// The approval line for a desktop look; `target` names the window ("Chrome · GitHub").
@@ -71,7 +226,7 @@ pub fn desktop_summary(tool: &str, input: &Value, target: Option<&str>) -> Strin
 /// `mcp__github__create_issue` → `github · create_issue`; built-ins stay as they are. TopBar's desktop tools
 /// read as `desktop · screenshot`.
 pub fn display_tool(tool: &str) -> String {
-    if let Some(name) = tools::short_name(tool) {
+    if let Some(name) = tools::short_name(tool).or_else(|| actions::short_name(tool)) {
         return format!("desktop · {name}");
     }
     match tool
@@ -126,6 +281,13 @@ pub fn step_label(tool: &str, input: &Value, cwd: &str) -> String {
         "mcp__topbar__focused_window" => "Checking the front window".to_string(),
         "mcp__topbar__screenshot" => "Taking a screenshot".to_string(),
         "mcp__topbar__ui_tree" => "Reading a window's UI".to_string(),
+        "mcp__topbar__focus_window" => "Bringing a window forward".to_string(),
+        "mcp__topbar__invoke" => "Using a control".to_string(),
+        "mcp__topbar__set_value" => "Setting a field".to_string(),
+        "mcp__topbar__click" => "Clicking".to_string(),
+        "mcp__topbar__type_text" => "Typing".to_string(),
+        "mcp__topbar__press_keys" => "Pressing keys".to_string(),
+        "mcp__topbar__launch" => "Opening".to_string(),
         _ => summary(tool, input, cwd),
     };
     truncate(label.trim(), MAX_LABEL)
@@ -300,6 +462,134 @@ mod tests {
     }
 
     #[test]
+    fn action_summaries() {
+        let np = Some("Notepad · notes.txt");
+        let s = |tool: &str, input: Value, element: Option<&str>| {
+            action_summary(&format!("mcp__topbar__{tool}"), &input, np, element)
+        };
+        assert_eq!(
+            s(
+                "invoke",
+                json!({ "hwnd": 1, "element": 3 }),
+                Some("\"Save\"")
+            ),
+            "Press \"Save\" in Notepad · notes.txt"
+        );
+        assert_eq!(
+            s(
+                "invoke",
+                json!({ "element": 3, "action": "toggle" }),
+                Some("\"Word wrap\"")
+            ),
+            "Toggle \"Word wrap\" in Notepad · notes.txt"
+        );
+        assert_eq!(
+            s("click", json!({ "element": 3 }), Some("\"Save\"")),
+            "Click \"Save\" in Notepad · notes.txt"
+        );
+        assert_eq!(
+            s(
+                "click",
+                json!({ "x": 812, "y": 40, "button": "right" }),
+                None
+            ),
+            "Right-click at 812, 40 in Notepad · notes.txt"
+        );
+        assert_eq!(
+            s(
+                "click",
+                json!({ "x": 8, "y": 4, "from": "screenshot" }),
+                None
+            ),
+            "Click at 8, 4 (screenshot px) in Notepad · notes.txt"
+        );
+        assert_eq!(
+            s("type_text", json!({ "text": "hello world" }), None),
+            "Type \"hello world\" into Notepad · notes.txt"
+        );
+        assert_eq!(
+            s("type_text", json!({ "text": "hi\n" }), None),
+            "Type \"hi⏎\" into Notepad · notes.txt"
+        );
+        let long = s(
+            "type_text",
+            json!({ "text": "Dear team,\nthe release is out." }),
+            None,
+        );
+        assert!(
+            long.starts_with("Type 30 characters into Notepad · notes.txt: \"Dear team,⏎"),
+            "{long}"
+        );
+        assert_eq!(
+            s(
+                "type_text",
+                json!({ "text": { "chars": 42, "lines": 1 } }),
+                None
+            ),
+            "Type 42 characters into Notepad · notes.txt",
+            "redacted for the audit"
+        );
+        assert_eq!(
+            s(
+                "set_value",
+                json!({ "element": 2, "value": "weather" }),
+                Some("\"Search\"")
+            ),
+            "Set \"Search\" to \"weather\" in Notepad · notes.txt"
+        );
+        assert_eq!(
+            s("press_keys", json!({ "keys": ["ctrl+s"] }), None),
+            "Press Ctrl+S in Notepad · notes.txt"
+        );
+        assert_eq!(
+            s(
+                "press_keys",
+                json!({ "keys": ["Ctrl+A", "Delete", "alt+f4"] }),
+                None
+            ),
+            "Press Ctrl+A, then Delete, then Alt+F4 (closes the window) in Notepad · notes.txt"
+        );
+        assert_eq!(
+            s("focus_window", json!({ "hwnd": 1 }), None),
+            "Bring Notepad · notes.txt to the front"
+        );
+        assert_eq!(
+            s("launch", json!({ "url": "https://github.com" }), None),
+            "Open https://github.com in your browser"
+        );
+        assert_eq!(
+            s("launch", json!({ "app": "Calculator" }), None),
+            "Open the Calculator app"
+        );
+        assert_eq!(
+            s("launch", json!({ "url": "ms-settings:display" }), None),
+            "Open Settings (ms-settings:display)"
+        );
+        assert_eq!(
+            acting_step("mcp__topbar__type_text", &json!({}), np, None),
+            "Typing into Notepad"
+        );
+        assert_eq!(
+            acting_step("mcp__topbar__click", &json!({}), np, Some("\"Save\"")),
+            "Clicking \"Save\""
+        );
+        assert_eq!(
+            acting_step(
+                "mcp__topbar__press_keys",
+                &json!({ "keys": ["ctrl+s"] }),
+                np,
+                None
+            ),
+            "Pressing Ctrl+S"
+        );
+        assert_eq!(display_tool("mcp__topbar__click"), "desktop · click");
+        assert_eq!(
+            step_label("mcp__topbar__type_text", &json!({}), CWD),
+            "Typing"
+        );
+    }
+
+    #[test]
     fn summaries() {
         let bash = json!({ "command": "git   push origin main", "description": "Push" });
         assert_eq!(summary("Bash", &bash, CWD), "git push origin main");
@@ -361,6 +651,15 @@ mod tests {
             Some("WebFetch:docs.rs".into())
         );
         assert_eq!(key("mcp__topbar__type_text", json!({})), None);
+        for name in actions::NAMES {
+            let tool = format!("mcp__topbar__{name}");
+            assert_eq!(risk(&tool), AgentRisk::Input);
+            assert_eq!(
+                key(&tool, json!({ "hwnd": 1 })),
+                None,
+                "{name} is never remembered"
+            );
+        }
         assert_eq!(remember_scope("Bash:git"), "git");
         assert_eq!(remember_scope("edit"), "edits");
     }

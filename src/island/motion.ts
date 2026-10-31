@@ -26,3 +26,6 @@ export const claudeCheckDraw: Transition = {
 
 /** Claude activities: the waiting dots fade out (faster than things come in) when needs-input turns into done. */
 export const claudeDotsOut: Transition = { duration: 0.12, ease: "easeIn" };
+
+/** Agent acting: the hint line crossfades in place when waiting turns into acting (the row itself stays). */
+export const actingHintIn: Transition = { duration: 0.2, ease: "easeOut" };

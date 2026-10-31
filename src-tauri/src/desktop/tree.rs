@@ -1,7 +1,9 @@
 //! A window's UI Automation tree as Claude reads it: nodes in depth-first order, capped, and written as a short
-//! indented outline (fewer tokens than JSON). Password fields never carry a value. Pure; unit-tested.
+//! indented outline (fewer tokens than JSON). Each line starts with its ref (`[12]`), which the action tools
+//! (2.7d) take to name an element. Password fields never carry a value. Pure; unit-tested.
 
 use super::logic::Rect;
+use super::plan::Element;
 
 pub const DEFAULT_DEPTH: u32 = 12;
 pub const MAX_DEPTH: u32 = 25;
@@ -47,6 +49,22 @@ pub struct Node {
     pub focused: bool,
     pub offscreen: bool,
     pub password: bool,
+    /// UIA's runtime id, to find the element again for an action.
+    pub runtime_id: Vec<i32>,
+}
+
+/// The nodes as action targets, in ref order.
+pub fn elements(nodes: &[Node]) -> Vec<Element> {
+    nodes
+        .iter()
+        .map(|n| Element {
+            runtime_id: n.runtime_id.clone(),
+            control_type: n.control_type,
+            name: n.name.clone(),
+            automation_id: n.automation_id.clone(),
+            rect: n.rect,
+        })
+        .collect()
 }
 
 /// Why the walk stopped early.
@@ -56,13 +74,13 @@ pub enum Cut {
     Time,
 }
 
-/// The outline: one line per node, two spaces per level, e.g.
-/// `button "Save" #saveBtn @812,40 96x32 focusable`. Stops at `caps.bytes` and says so.
+/// The outline: one line per node, two spaces per level, then its ref, e.g.
+/// `  [3] button "Save" #saveBtn @812,40 96x32 focusable`. Stops at `caps.bytes` and says so.
 pub fn render(nodes: &[Node], cut: Option<Cut>, caps: &Caps) -> String {
     let mut out = String::new();
     let mut shown = 0usize;
-    for node in nodes {
-        let line = line(node);
+    for (i, node) in nodes.iter().enumerate() {
+        let line = line(i, node);
         if out.len() + line.len() + 1 > caps.bytes {
             break;
         }
@@ -89,8 +107,9 @@ pub fn render(nodes: &[Node], cut: Option<Cut>, caps: &Caps) -> String {
     out
 }
 
-fn line(n: &Node) -> String {
+fn line(i: usize, n: &Node) -> String {
     let mut s = "  ".repeat(n.depth as usize);
+    s.push_str(&format!("[{i}] "));
     s.push_str(control_type_name(n.control_type));
     if !n.name.trim().is_empty() {
         s.push_str(&format!(" {}", quoted(&n.name)));
@@ -236,16 +255,16 @@ mod tests {
             &Caps::new(None, None),
         );
         let lines: Vec<_> = text.lines().collect();
-        assert_eq!(lines[0], "window \"notes.txt - Notepad\"");
+        assert_eq!(lines[0], "[0] window \"notes.txt - Notepad\"");
         assert_eq!(
             lines[1],
-            "  button \"Save\" #saveBtn @812,40 96x32 focusable"
+            "  [1] button \"Save\" #saveBtn @812,40 96x32 focusable"
         );
         assert_eq!(
             lines[2],
-            "  edit \"Text editor\" = \"hello \\\"world\\\" line 2\" focused"
+            "  [2] edit \"Text editor\" = \"hello \\\"world\\\" line 2\" focused"
         );
-        assert_eq!(lines[3], "    text \"x\" disabled offscreen");
+        assert_eq!(lines[3], "    [3] text \"x\" disabled offscreen");
         assert_eq!(lines.len(), 4);
     }
 
@@ -256,7 +275,7 @@ mod tests {
         pw.password = true;
         let text = render(&[pw], None, &Caps::new(None, None));
         assert!(!text.contains("hunter2"));
-        assert!(text.contains("edit \"Password\" password"));
+        assert!(text.contains("[0] edit \"Password\" password"));
     }
 
     #[test]
@@ -272,7 +291,10 @@ mod tests {
         let text = render(&nodes[..2], Some(Cut::Time), &caps);
         assert!(text.contains("slow to answer"));
         let long = node(0, 50020, &"y".repeat(500));
-        assert_eq!(line(&long).chars().count(), "text \"\"".len() + MAX_FIELD);
+        assert_eq!(
+            line(0, &long).chars().count(),
+            "[0] text \"\"".len() + MAX_FIELD
+        );
     }
 
     #[test]

@@ -140,14 +140,31 @@ impl LookError {
 /// When the screen-edge glow shows: from the start of a look until `HOLD` after the last one ends, so even a
 /// 50 ms look is visible.
 pub const GLOW_HOLD: Duration = Duration::from_millis(1500);
+/// While acting (2.7d) the hold is short: you shouldn't be told "hands off" once you have control back.
+pub const ACT_GLOW_HOLD: Duration = Duration::from_millis(600);
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct GlowState {
     active: u32,
     hold_until: Option<Instant>,
+    hold: Duration,
+}
+
+impl Default for GlowState {
+    fn default() -> Self {
+        Self::with_hold(GLOW_HOLD)
+    }
 }
 
 impl GlowState {
+    pub fn with_hold(hold: Duration) -> Self {
+        Self {
+            active: 0,
+            hold_until: None,
+            hold,
+        }
+    }
+
     pub fn start(&mut self) {
         self.active += 1;
         self.hold_until = None;
@@ -156,7 +173,7 @@ impl GlowState {
     pub fn end(&mut self, now: Instant) {
         self.active = self.active.saturating_sub(1);
         if self.active == 0 {
-            self.hold_until = Some(now + GLOW_HOLD);
+            self.hold_until = Some(now + self.hold);
         }
     }
 
@@ -228,5 +245,10 @@ mod tests {
         g.end(now);
         g.end(now);
         assert!(!g.visible(now + GLOW_HOLD), "extra ends don't underflow");
+        let mut act = GlowState::with_hold(ACT_GLOW_HOLD);
+        act.start();
+        act.end(now);
+        assert!(act.visible(now + Duration::from_millis(599)));
+        assert!(!act.visible(now + ACT_GLOW_HOLD));
     }
 }

@@ -3,6 +3,7 @@ import type { ActivityPayload, PowerActivity } from "../../lib/types";
 import { endLabel } from "../agent/labels";
 import { openRun } from "../agent/useAgentRuns";
 import { focusClaudeSession } from "../claude/useClaudeSessions";
+import { AgentActing } from "./AgentActing";
 import { AgentApproval } from "./AgentApproval";
 import { ClaudeActivity } from "./ClaudeActivity";
 import { BatteryIcon, CapsLockIcon, HeadphonesIcon, SpeakerIcon, SunIcon } from "./icons";
@@ -66,6 +67,8 @@ export function ActivityView({ activity }: { activity: ActivityPayload }) {
     }
     case "agentApproval":
       return <AgentApproval approval={activity.payload} />;
+    case "agentActing":
+      return <AgentActing acting={activity.payload} />;
     case "agentFinished": {
       const { runId, project, status, reason } = activity.payload;
       // Only a completed run gets the check; limits, failures and stops read as "stopped" (no mark).

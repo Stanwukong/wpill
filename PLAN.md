@@ -17,8 +17,12 @@ island, approvals (Allow / Deny) in the island, Cascadia Mono for Claude content
 **Phase 2.7c is complete (2026-10-30): read-only desktop tools (`list_windows`,
 `focused_window`, `screenshot`, `ui_tree`), each approved in the island with an eye in the `read` badge, and a glow on
 the screen's edges while Claude looks, with all 12 manual checks passed.**
-See [Phase 2.7](#phase-27-local-automation-agent). **Next: stage 2.7d (desktop actions)**, kick-off prompt
-[prompts/phase-2.7d-desktop-actions.md](prompts/phase-2.7d-desktop-actions.md).
+**Phase 2.7d is built (2026-10-31): seven desktop actions (`focus_window`, `invoke`, `set_value`, `click`,
+`type_text`, `press_keys`, `launch`), UI Automation first with `[n]` refs from `ui_tree`, each approved on its own
+and never for the run, stopped by any input of yours; verified with haiku runs and direct actions. Manual checklist
+pending.**
+See [Phase 2.7](#phase-27-local-automation-agent). **Next: sign off 2.7d (manual check below), then stage 2.7e
+(routines).**
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -262,6 +266,23 @@ not shown after Stop). `rememberAs` ("git", "edits") replaces the planned `canRe
 | MCP tool | `screenshot` | `{ hwnd? }` → image block + text `{ source, width, height, origin, scale, format }` | No hwnd: the primary monitor. ≤1568 px long edge, ≤500 KB (PNG, else JPEG q80/q60). |
 | MCP tool | `ui_tree` | `{ hwnd, maxDepth? (12, ≤25), maxNodes? (400, ≤1000) }` → text outline | `button "Save" #id @x,y wxh flags`, ≤60 KB, says when it was cut. Password fields: no value. |
 | errors | (all four) | `isError` text `code: advice` | `windowGone`, `topbarWindow`, `notOnThisDesktop`, `minimized`, `notResponding`, `elevated`, `screenLocked`, `failed`. |
+
+### Phase 2.7d
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| activity | `agentActing` | `{ runId, project, step, phase: "waiting" \| "acting" }` | Sticky, not interactive, shown before approvals; one key (`acting`), so the phase updates in place. Not for `launch`. |
+| activity field | `agentApproval.detail` | `string \| null` | The full text `type_text` / `set_value` would enter, for the command window's card. `desktop` + risk `input` = an action (pointer glyph). |
+| MCP tool | `ui_tree` (changed) | each line starts with `[n]` | The ref the actions take as `element`; valid until the next `ui_tree` of that window (≤10 min), per run. |
+| MCP tool | `focus_window` | `{ hwnd }` | `apps::bring_to_front` on the main thread. |
+| MCP tool | `invoke` | `{ hwnd, element, action?: invoke \| toggle \| select \| expand \| collapse \| scrollIntoView \| focus }` | UIA patterns; no input, window may stay behind. |
+| MCP tool | `set_value` | `{ hwnd, element, value }` | Value pattern, ≤1000 chars; reply says whether the field holds it. |
+| MCP tool | `click` | `{ hwnd, element }` or `{ hwnd, x, y, from?: screen \| screenshot }`, `button?: left \| right \| double` | `SendInput`; brings the window forward; the point must be on it. |
+| MCP tool | `type_text` | `{ hwnd, text }` | ≤500 chars, real keys from the window's layout (Unicode packets only for what it can't type), paced. |
+| MCP tool | `press_keys` | `{ hwnd, keys: string[] }` | ≤5 chords; Win-key chords, Alt+Tab, Alt/Ctrl+Esc, Ctrl+Shift+Esc refused. |
+| MCP tool | `launch` | `{ url }` or `{ app }` | https/http/`ms-settings:` links; Start-menu apps by name. |
+| reply | (all seven) | text "Invoked button "Save" in Notepad · notes.txt. In front now: …" | Errors `isError` `code: advice`: `windowGone`, `elementGone`, `staleView`, `topbarWindow`, `notOnThisDesktop`, `notResponding`, `elevated`, `screenLocked`, `notForeground`, `covered`, `disabled`, `unsupported`, `passwordField`, `refused`, `notFound`, `aborted`, `failed`. |
+| MCP notification | `notifications/cancelled` | `{ requestId }` | Withdraws that call's approval or aborts its running action. |
 
 ### Reserved for later phases (names fixed now so they slot in)
 
@@ -685,13 +706,74 @@ folder)
 11. **Audit:** the run's `.jsonl` has `look` lines with target, size and format, and no image data.
 12. **Text size 100 / 120 / 150 %:** the eye sits in the badge without changing the approval's size.
 
-**Stage 2.7d: desktop actions** (next). Kick-off prompt:
-[prompts/phase-2.7d-desktop-actions.md](prompts/phase-2.7d-desktop-actions.md)
-- [ ] `focus_window` (reuse `activate.rs`), `invoke(element)` / `set_value(element)` through UI Automation first,
-      `click(x, y)` / `type_text` / `press_keys` with `SendInput` as the fallback, `launch(app or URL)`
-- [ ] Every action is risk `input`: one approval per action (or per short, listed batch), never remembered. Refused for
-      password fields, for elevated windows (UIPI blocks them anyway; say so), and for TopBar's own windows
-- [ ] Physical input from you while an action runs aborts it (research how to tell real input from ours)
+**Stage 2.7d: desktop actions** (built 2026-10-31; manual check pending). Kick-off prompt:
+[prompts/phase-2.7d-desktop-actions.md](prompts/phase-2.7d-desktop-actions.md). Decision: CASESTUDY D27; challenge C11.
+
+*Research at kick-off (Claude Code 2.1.123 / 2.1.159 / 2.1.314 bundles):* MCP tools still need permission in `default`
+mode, so actions reach `--permission-prompt-tool`; a user allow rule skips it, and TopBar's one-time grant check then
+asks itself (checked live with a project allow rule). `MCP_TOOL_TIMEOUT` defaults to 1e8 ms (a per-server `timeout`
+in `mcp.json` overrides it); 2.1.314 adds a 30 min idle limit for stdio servers, so a 10 min approval wait is fine.
+On abort or timeout the client sends `notifications/cancelled { requestId }`. UIA patterns don't bring windows
+forward (`SetFocus` does); a Win32 `Invoke` that opens a modal dialog can block until UIA's timeout.
+`GetLastInputInfo` counts injected input; low-level hooks' `*_INJECTED` flags tell yours from ours. No new
+`windows` features beyond `Win32_System_SystemInformation` (`GetTickCount64`).
+
+- [x] `desktop/`: `act.rs` (re-find an element by runtime id, at its old position then `FindAll`, must match type,
+      name and automation id; Invoke/Toggle/SelectionItem/ExpandCollapse/ScrollItem/focus/LegacyIAccessible default
+      action; Value), `input.rs` (`SendInput` clicks over the virtual desktop, real-key typing from the window's
+      layout, chords; target in front and point on it before every event; keys always released), `guard.rs`
+      (low-level hooks only while acting), `launch.rs`; pure and tested: `plan.rs`, `refs.rs`
+- [x] Seven MCP tools (`agent/actions.rs`, IPC table above); `ui_tree` lines carry `[n]` refs; clicks can be given in
+      the run's last screenshot's image px (`staleView` if the window moved)
+- [x] Approvals: risk `input`, one per action, never remembered (no batches: step two depends on step one); summaries
+      "Press "Save" in Notepad · notes.txt", "Set "Search" to "weather" in …", "Click at 812, 40 in …", "Type
+      "hello" into …", "Press Ctrl+A, then Delete in …", "Bring … to the front", "Open https://github.com in your
+      browser", "Open the Calculator app"; step labels; the grant check covers user allow rules; typed text in full
+      in the command window's card, only `{chars, lines}` in the audit
+- [x] Refused: TopBar's windows, elevated, other desktops, hung, locked screen / UAC, password fields (also checked
+      while typing), secret-looking text, Win-key and shell chords, `file:` and other schemes
+- [x] Your input first: waits until you've let go for 500 ms (≤10 s), then any non-injected key or mouse event aborts
+      it before its next event; Stop, Win+Alt+Escape and a cancelled call abort too; one action at a time; the island
+      stays collapsed and click-through meanwhile (`hover::set_hands_off`)
+- [x] UI (motion-designer): pointer glyph in the `input` badge, `agentActing` activity ("Waiting for you to let go…" →
+      "Move the mouse or press a key to stop"), the command window's `detail` block; acting glow (band 40 px, peak
+      0.72, 2 px rim at 0.92, 600 ms hold, act wins over look, repaint without a crossfade)
+- [x] Guidance in `--append-system-prompt`: shell and files first, then refs + `invoke`/`set_value`, then raw input,
+      `launch` for links and apps; look before and after, one action at a time, say what's next; stop after a deny
+      or an abort; never type secrets
+- [x] Verified from outside (2026-10-31, debug build, haiku on 2.1.314, approvals clicked in the island, and the new
+      debug `agent-test act <tool> <argsJson>`): `set_value` into a scratch Notepad (text read back exactly);
+      `invoke` of Notepad's Settings and Back buttons with the window behind; `focus_window`; a raw `click` on the
+      editor by ref; `press_keys` Ctrl+End and Ctrl+A, Delete; `type_text` read back exactly in Notepad and WordPad
+      after C11 (82 and 80 characters, Shift-heavy); `launch https://github.com`; Deny on `press_keys` (no `act`
+      entry, Claude stopped); a project allow rule for `focus_window` (TopBar asked itself); "for this run" never
+      offered; closed window → `windowGone`; elevated Task Manager → `elevated`; focused Chrome password field →
+      `passwordField` before any key; secret text, Win+R and `file:` refused; typing aborted by moving the mouse
+      after 269 of 391 characters with no modifier left down. 133 Rust tests pass
+- [ ] Manual check (below)
+
+**Manual check (Phase 2.7d)** (`pnpm tauri dev` with `$env:RUST_LOG='info,topbar_lib=debug'`, model `haiku`, a scratch
+folder, Notepad on a scratch file)
+1. **Set a field:** "Set the Notepad text to 'hello' using TopBar's tools": `ui_tree`, then "Set "Text editor" to
+   "hello" in Notepad · …" with a pointer in the `input` badge and no "for this run"; Notepad shows hello.
+2. **Invoke:** "Press Notepad's Settings button" while Notepad is behind another window: it works without coming
+   forward; the island shows the acting activity briefly and the screen edges glow with a rim.
+3. **Raw input:** "Click the editor, press Ctrl+End and type ' done.'": three approvals, each waiting until you let go;
+   the text arrives exactly, the island stays closed even if the cursor passes the top centre.
+4. **Command window:** a `type_text` approval shows the full text in the pending card; the island shows it short.
+5. **Deny:** deny an action; Claude stops and says what it wanted; the audit has no `act` entry.
+6. **Abort:** a long `type_text` (≈300 characters); move the mouse while it types: it stops at once, Claude is told
+   `aborted`, and Shift/Ctrl aren't left down. Repeat with Win+Alt+Escape (the run stops too).
+7. **Hands off:** keep moving the mouse after Allow: the activity says "Waiting for you to let go…"; after 10 s the
+   action is `aborted` without doing anything.
+8. **Gone / elevated / locked:** close the window between look and act (`windowGone`); an app run as administrator
+   (`elevated`); Win+L during the hands-off wait (`screenLocked`).
+9. **Password and secrets:** a browser sign-in page with the password field focused: `type_text` is refused
+   (`passwordField`); asking Claude to type a token-like string is refused.
+10. **Launch:** "Open github.com" opens your browser; "Open file:///C:/Windows/System32/calc.exe" is refused; "Open
+    the Calculator app" starts Calculator.
+11. **Audit:** the run's `.jsonl` has `act` lines with tool, target and result, and typed text only as `{chars, lines}`.
+12. **Text size 100 / 120 / 150 %:** the pointer badge, the acting activity and the pending card's text block fit.
 
 **Stage 2.7e: routines** (stretch)
 - [ ] Saved instructions (prompt + folder + limits), run from the command window or on a schedule while TopBar runs
@@ -786,6 +868,13 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
   a whole-screen screenshot still shows them). Protected video comes out black. Big browser pages can hit the `ui_tree`
   time or node cap (it says so). "Allow screenshots for this run" covers every window and the screen, not just the
   one asked about. Excluding the island during a screen capture relies on `WDA_EXCLUDEFROMCAPTURE` (Windows 10 2004+).
+- Desktop actions (2.7d): typing is paced for apps that mangle fast synthetic input (C11), so `type_text` takes
+  about 10 characters a second and at most 500 (prefer `set_value`); characters the keyboard layout can't type go as
+  Unicode packets and may still be mangled by such apps. AltGr characters are typed as packets. Input into elevated
+  windows is refused (UIPI). `click` with `from: "screenshot"` needs a screenshot of that window (not of the whole
+  screen). Some apps don't notice `set_value` (Win32 `WM_SETTEXT`, React inputs); the reply says when the value
+  didn't stick. A UIA `invoke` that opens a modal dialog may be reported as "not confirmed". Only one action runs
+  at a time across runs.
 
 ## Distribution
 - `pnpm tauri build` produces `src-tauri/target/release/bundle/nsis/TopBar_0.1.0_x64-setup.exe`:

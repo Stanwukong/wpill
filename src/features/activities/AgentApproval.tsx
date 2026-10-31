@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { AgentApprovalActivity } from "../../lib/types";
-import { ChevronGlyph, EyeGlyph } from "../agent/AgentGlyphs";
+import { ChevronGlyph, RiskGlyph } from "../agent/AgentGlyphs";
 import { RISK_LABEL } from "../agent/labels";
 import { decide, openRun } from "../agent/useAgentRuns";
 import { ClaudeMark } from "../claude/ClaudeGlyphs";
@@ -37,7 +37,7 @@ export function AgentApproval({ approval }: { approval: AgentApprovalActivity })
           <span className="approval__tool">{tool}</span>
         </span>
         <span className="agent-risk" data-risk={risk}>
-          {desktop && <EyeGlyph />}
+          <RiskGlyph desktop={desktop} risk={risk} />
           {RISK_LABEL[risk]}
         </span>
       </div>

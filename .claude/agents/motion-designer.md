@@ -50,8 +50,13 @@ Read `CLAUDE.md` first (architecture rules and Windows gotchas apply to you too)
   Prefer effects that are paused or absent when their state isn't active.
 - **Outside the webview:** the screen-edge glow shown while an agent run looks at the desktop (2.7c) is a native
   layered window drawn by Rust (`src-tauri/src/window/glow.rs`): color = `--claude`, 32 px band, `0.6·(1−t)²`,
-  220 ms ease-out cubic in, 1.5 s hold, 400 ms ease-in quad out, no fades with animations off, never pulsing. You
-  write its spec as constants; the main session implements it. If `--claude` changes (Phase 4a), its `COLOR` changes too.
+  220 ms ease-out cubic in, 1.5 s hold, 400 ms ease-in quad out, no fades with animations off, never pulsing. While
+  Claude *acts* (2.7d) it is stronger: 40 px band at 0.72 plus a 2 px rim at 0.92 (1 px anti-alias ramp), 600 ms
+  hold; acting wins over looking and switching repaints at once, no crossfade. You write its spec as constants; the
+  main session implements it. If `--claude` changes (Phase 4a), its `COLOR` changes too.
+- **Desktop actions in the island (2.7d):** a pointer glyph (`PointerGlyph`) leads the `input` risk badge (the eye
+  stays for looks); `agentActing` is a calm, non-interactive activity with the steady orange edge (`data-claude`
+  "done"), no loops.
 
 ## Contracts you must keep
 

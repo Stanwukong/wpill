@@ -74,8 +74,26 @@ export interface AgentApprovalActivity {
   risk: AgentRisk;
   /** What "allow for this run" covers ("git", "edits"); `null` where it isn't offered. */
   rememberAs: string | null;
-  /** One of TopBar's desktop tools (Claude looking at the screen: windows, screenshot, UI tree). */
+  /**
+   * One of TopBar's desktop tools: with `risk: "read"` Claude looks (windows, screenshot, UI tree; an eye), with
+   * `risk: "input"` it acts (focus, invoke, set a field, click, type, keys, launch; a pointer).
+   */
   desktop: boolean;
+  /** The full text an action would type or set, for the command window's card (the island shows `summary`). */
+  detail: string | null;
+}
+
+/**
+ * TopBar is acting on the desktop for a run (Phase 2.7d). Sticky, not interactive; Rust withdraws it when the
+ * action ends. `waiting`: it acts once you've let go of the mouse and keyboard; `acting`: it's clicking or typing.
+ * Any input of yours stops it.
+ */
+export interface AgentActingActivity {
+  runId: string;
+  project: string;
+  /** "Clicking Save", "Typing into Notepad". */
+  step: string;
+  phase: "waiting" | "acting";
 }
 
 export interface AgentFinishedActivity {
@@ -95,6 +113,7 @@ export type Activity =
   | { kind: "claudeDone"; payload: ClaudeDoneActivity }
   | { kind: "claudeNeedsInput"; payload: ClaudeNeedsInputActivity }
   | { kind: "agentApproval"; payload: AgentApprovalActivity }
+  | { kind: "agentActing"; payload: AgentActingActivity }
   | { kind: "agentFinished"; payload: AgentFinishedActivity };
 
 /** `activity:show`. The same `id` again means the activity was updated in place (e.g. another volume step). */

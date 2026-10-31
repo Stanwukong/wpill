@@ -77,3 +77,12 @@ export function BatteryIcon({ level, charging }: { level: number; charging: bool
     </Icon>
   );
 }
+
+/** TopBar acting on the desktop for an agent run: a pointer. */
+export function PointerIcon() {
+  return (
+    <Icon>
+      <path d="M6 2.75v15.5l4.3-4 2.75 6 2.8-1.3-2.75-5.9h5.7z" />
+    </Icon>
+  );
+}

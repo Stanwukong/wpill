@@ -49,9 +49,10 @@ pub fn definitions() -> Vec<Value> {
             "name": UI_TREE,
             "description": "A window's UI Automation tree as an indented outline: control type, \"name\", \
                 = \"value\", #automationId, @x,y width x height (physical screen px) and flags (focused, \
-                disabled, offscreen…). Cheaper and more exact than a screenshot for text, buttons and fields. \
-                Password fields never show a value. Read-only; the user approves it and sees the screen \
-                edges glow.",
+                disabled, offscreen…), each line starting with its [n] ref, which invoke, set_value and \
+                click take as `element` (refs last until the next ui_tree of that window). Cheaper and more \
+                exact than a screenshot for text, buttons and fields. Password fields never show a value. \
+                Read-only; the user approves it and sees the screen edges glow.",
             "inputSchema": { "type": "object", "properties": {
                 "hwnd": hwnd,
                 "maxDepth": { "type": "integer", "description": "Levels to walk (default 12, at most 25)." },
@@ -311,6 +312,7 @@ mod tests {
             nodes: 1,
             cut: Some(Cut::Time),
             target: chrome(),
+            elements: vec![],
         });
         assert!(reply(json!(4), &tree)
             .to_string()

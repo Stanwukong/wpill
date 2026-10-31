@@ -5,7 +5,11 @@
 use std::time::{Duration, Instant};
 
 use windows::core::Interface;
-use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
+use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER, SAFEARRAY};
+use windows::Win32::System::Ole::{
+    SafeArrayAccessData, SafeArrayDestroy, SafeArrayGetLBound, SafeArrayGetUBound,
+    SafeArrayUnaccessData,
+};
 use windows::Win32::System::Variant::{VariantClear, VT_BSTR};
 use windows::Win32::UI::Accessibility::{
     CUIAutomation8, IUIAutomation, IUIAutomation2, IUIAutomationCacheRequest, IUIAutomationElement,
@@ -23,8 +27,8 @@ use crate::win32;
 const BUDGET: Duration = Duration::from_secs(3);
 const UIA_TIMEOUT_MS: u32 = 2000;
 
-pub fn walk(hwnd: isize, caps: &Caps) -> windows::core::Result<(Vec<Node>, Option<Cut>)> {
-    let started = Instant::now();
+/// UI Automation with TopBar's timeouts, so a hung provider can't hold a thread for long. Needs COM (MTA).
+pub fn automation() -> windows::core::Result<IUIAutomation> {
     // SAFETY: COM calls on smart pointers released on drop; the caller initialised COM (MTA) on this thread.
     unsafe {
         let uia: IUIAutomation = CoCreateInstance(&CUIAutomation8, None, CLSCTX_INPROC_SERVER)?;
@@ -32,6 +36,49 @@ pub fn walk(hwnd: isize, caps: &Caps) -> windows::core::Result<(Vec<Node>, Optio
             let _ = uia2.SetConnectionTimeout(UIA_TIMEOUT_MS);
             let _ = uia2.SetTransactionTimeout(UIA_TIMEOUT_MS);
         }
+        Ok(uia)
+    }
+}
+
+/// An element's UIA runtime id (empty if it has none).
+pub fn runtime_id(e: &IUIAutomationElement) -> Vec<i32> {
+    // SAFETY: GetRuntimeId returns a SAFEARRAY of VT_I4 that we own; it's read within its bounds, then destroyed.
+    unsafe {
+        let Ok(array) = e.GetRuntimeId() else {
+            return Vec::new();
+        };
+        let ids = read_i32s(array);
+        let _ = SafeArrayDestroy(array);
+        ids
+    }
+}
+
+unsafe fn read_i32s(array: *const SAFEARRAY) -> Vec<i32> {
+    if array.is_null() {
+        return Vec::new();
+    }
+    // SAFETY: a one-dimensional VT_I4 array (what UIA returns); the data pointer is valid between access and
+    // unaccess, for `len` elements.
+    unsafe {
+        let (Ok(lo), Ok(hi)) = (SafeArrayGetLBound(array, 1), SafeArrayGetUBound(array, 1)) else {
+            return Vec::new();
+        };
+        let len = (hi - lo + 1).max(0) as usize;
+        let mut data = std::ptr::null_mut();
+        if len == 0 || SafeArrayAccessData(array, &mut data).is_err() {
+            return Vec::new();
+        }
+        let ids = std::slice::from_raw_parts(data as *const i32, len).to_vec();
+        let _ = SafeArrayUnaccessData(array);
+        ids
+    }
+}
+
+pub fn walk(hwnd: isize, caps: &Caps) -> windows::core::Result<(Vec<Node>, Option<Cut>)> {
+    let started = Instant::now();
+    let uia = automation()?;
+    // SAFETY: COM calls on smart pointers released on drop; the caller initialised COM (MTA) on this thread.
+    unsafe {
         let cache = uia.CreateCacheRequest()?;
         for id in [
             UIA_NamePropertyId,
@@ -120,6 +167,7 @@ unsafe fn node(e: &IUIAutomationElement, depth: u32) -> Node {
             focused: e.CachedHasKeyboardFocus().is_ok_and(|b| b.as_bool()),
             offscreen: e.CachedIsOffscreen().is_ok_and(|b| b.as_bool()),
             password,
+            runtime_id: runtime_id(e),
         }
     }
 }

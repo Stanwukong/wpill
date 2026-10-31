@@ -25,9 +25,9 @@ export function Island() {
   const mode = expanded ? "panel" : activity ? "activity" : "pill";
   // Drives the orbiting charge ring on the island's edge (features/activities/activities.css).
   const charging = activity?.kind === "power" && activity.payload.event === "pluggedIn";
-  // Drives the Claude orange edge (activities.css): steady when done, breathing while it needs the user.
+  // Drives the Claude orange edge (activities.css): steady when done or acting, breathing while it needs the user.
   const claude =
-    activity?.kind === "claudeDone" || activity?.kind === "agentFinished"
+    activity?.kind === "claudeDone" || activity?.kind === "agentFinished" || activity?.kind === "agentActing"
       ? "done"
       : activity?.kind === "claudeNeedsInput" || activity?.kind === "agentApproval"
         ? "needsInput"
@@ -126,6 +126,8 @@ function activityKey(activity: ActivityPayload): string {
   }
   // Each approval is its own card (the next one crossfades in); the finished notice never morphs out of one.
   if (activity.kind === "agentApproval") return `activity-agent-approval-${activity.payload.requestId}`;
+  // Per run, so waiting → acting (same activity) updates in place.
+  if (activity.kind === "agentActing") return `activity-agent-acting-${activity.payload.runId}`;
   if (activity.kind === "agentFinished") return `activity-agent-finished-${activity.payload.runId}`;
   return `activity-${activity.kind}`;
 }

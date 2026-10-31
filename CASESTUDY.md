@@ -370,6 +370,46 @@ animation effects are off. The spec came from the motion-designer agent.
 *Alternatives:* only the island's approval (gone by the time the look runs); a pulsing or red border (alarming);
 four thin edge windows (less overdraw, four times the window management for one effect).
 
+### D27: Desktop actions: UI Automation first, one approval each, and your hands come first (Phase 2.7d)
+*Why:* in a TopBar run Claude can now act on the desktop through seven more tools on TopBar's MCP server:
+`focus_window`, `invoke`, `set_value`, `click`, `type_text`, `press_keys`, `launch`. They're ordered by how little can
+go wrong. `invoke` (Invoke, Toggle, SelectionItem, ExpandCollapse, ScrollItem, focus, and LegacyIAccessible's default
+action) and `set_value` (Value pattern) go through UI Automation: no cursor, no keyboard focus, and the window can
+stay behind. `click`, `type_text` and `press_keys` use `SendInput` only when UIA can't do it. `launch` opens
+https/http/`ms-settings:` links and Start-menu apps by name (`shell:AppsFolder\<AUMID>`), never paths or arguments,
+which stay with the shell tool and its approvals. Claude names an element by the `[n]` ref its latest `ui_tree` of
+that window printed. TopBar keeps each run's last tree per window (runtime id, type, name, automation id, bounds) and
+finds the element again at act time: by runtime id under its old centre, then by `FindAll` on type + automation id
+(or name). The match must agree on all three, or the reply is `elementGone` ("call ui_tree again"). It never acts
+on a guess. A click can also be given in image px of the run's last screenshot of the window, refused as
+`staleView` if the window has moved since. Before every `SendInput` batch TopBar checks that the target is still in
+front, the screen is unlocked, and the point is on the target (`WindowFromPoint`). Text is typed as real key presses
+from the target's keyboard layout, one paced event at a time (C11). Keys that went down are always released.
+*Approvals:* every action is risk `input`. It's asked about once per call and never remembered for the run,
+with a summary that says exactly what will happen: "Press "Save" in Notepad · notes.txt", "Type "hello" into …",
+"Press Ctrl+A, then Delete in …", "Open https://github.com in your browser". The one-time grant check from D25
+covers a user allow rule. Typed and set text shows short in the island and in full in the command window's card.
+The audit keeps only its size (`{chars, lines}`). Batches were left out: what step two does depends on what step one
+did, so approving both at once is approving blind. `press_keys` takes up to five chords for the common short
+sequences. Win-key chords, Alt+Tab, Alt/Ctrl+Esc and Ctrl+Shift+Esc are refused, because they act on the shell rather
+than the approved window. Text that looks like a secret (known token shapes, PEM keys, JWTs, long high-entropy words)
+is refused, and so are password fields (checked before typing and between chunks).
+*Your hands come first:* while an action runs, low-level keyboard and mouse hooks on their own thread watch for
+events without `LLKHF_INJECTED`/`LLMHF_INJECTED`. `GetLastInputInfo` can't tell yours from ours. The callback only
+stores atomics, because Windows silently drops slow low-level hooks. The Allow click is itself your input, so an
+action first waits until you've let go for 500 ms (giving up as `aborted` after 10 s), then any input of yours stops
+it before its next event. Stop, Win+Alt+Escape (a key press, so it aborts anyway) and `notifications/cancelled`
+abort it too. While acting, the island stays collapsed and click-through (`hover::set_hands_off`), so a synthetic
+click near the top centre lands on the app. An `agentActing` activity says "Waiting for you to let go…" then "Move
+the mouse or press a key to stop", and the glow gets stronger with a crisp rim (motion-designer spec). One action
+runs at a time across all runs.
+*Alternatives:* raw coordinates only (brittle with DPI, scrolling and layout changes; refs plus a UIA re-find are
+exact); runtime ids alone (some providers regenerate them, so automation id + type + name is the fallback, and must
+be unique); short listed batches (approving blind); aborting the moment input arrives after Allow (the mouse moving
+off the Allow button would abort every action); `GetLastInputInfo` polling (counts injected input); a permanent
+low-level hook (system-wide cost while idle); arbitrary `ShellExecute` targets (would bypass the shell tool's
+approvals).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -471,6 +511,23 @@ also showed that Claude Code keeps every tool image in its own session transcrip
 which is now a documented limitation. *Lesson:* check the precondition (is the thing you expect to be hidden
 actually on screen?) before trusting an absence.
 
+### C11: Typed text arrived as dots, then scrambled
+*Symptom:* the first `type_text` into Windows 11 Notepad turned " typed by TopBar." into a space and sixteen dots.
+Sending one character per `SendInput` call gave "Typed y opBar,aaaaaaaaaat ......."; real key presses (from
+`VkKeyScanExW`) gave "ped y opBar 2.7d;" (Shift lost, keys dropped); one event per call with an 8 ms gap gave
+"@>&D" for "2.7d" (Shift stuck) and a "." after the next line's Enter (reordered). The UI Automation reply said "Typed
+82 characters" every time. *Diagnosis:* the same code typed the same text exactly into WordPad (classic RichEdit), so
+the input was right and Notepad's XAML input stack was the problem. A `KEYEVENTF_UNICODE` (`VK_PACKET`) character is
+only read back when the app translates the message, so in an app that handles input late, every queued packet comes
+out as the latest one: the dots were the final ".". Real keys carry their state with the message, but the new
+Notepad still drops keys and reads Shift late when events arrive close together. *Fix:* characters are typed as
+real keys from the target window's keyboard layout (Shift added, Caps Lock allowed for), Unicode packets only for
+what the layout can't type, every key event sent on its own 25 ms apart, and 60 ms after a modifier goes down. Two
+Shift-heavy strings (80 and 152 characters) then arrived exactly in Notepad. Typing is now about 10 characters a
+second, so `type_text` takes at most 500 and the guidance prefers `set_value`. *Lesson:* "the API accepted the
+input" says nothing about what the app saw; read the result back (UIA or a screenshot) and try a second app before
+blaming either side.
+
 ### Still open
 - **Foreground-lock rules** in practice: the fallback chain is implemented but not yet exercised
   against elevated or minimized targets (manual test 7).
@@ -510,6 +567,7 @@ actually on screen?) before trusting an absence.
 | 2026-10-30 | Phase 2.7a–b signed off: all 12 manual checks pass (hotkey, read-only task, deny, allow and "for this run", Stop and the stop hotkey, limits, two runs, panel and fullscreen, follow-up, quit mid-run, audit, text sizes). Stage 2.7c kick-off prompt written. |
 | 2026-10-30 | Stage 2.7c built: read-only desktop tools with a second, TopBar-side approval check (D25), a glow on the screen's edges while Claude looks (D26), an eye in the approval's `read` badge (motion-designer). Verified from outside with haiku runs and direct looks (C10); manual checklist pending. |
 | 2026-10-30 | Stage 2.7c signed off: all 12 manual checks pass (window list, glow, UI tree, password field, covered window, island not captured, deny, for this run, gone/minimized/elevated, locked screen, audit, text sizes). |
+| 2026-10-31 | Stage 2.7d built: seven desktop actions, UI Automation first with `[n]` refs, one approval each, aborted by your input (D27); pointer badge, acting activity and acting glow (motion-designer). Verified with haiku runs; manual checklist pending. |
 
 ## 7. Results & metrics
 

@@ -63,6 +63,7 @@ pub enum Activity {
     ClaudeDone(ClaudeDoneActivity),
     ClaudeNeedsInput(ClaudeNeedsInputActivity),
     AgentApproval(AgentApprovalActivity),
+    AgentActing(AgentActingActivity),
     AgentFinished(AgentFinishedActivity),
 }
 
@@ -202,8 +203,30 @@ pub struct AgentApprovalActivity {
     /// What "allow for this run" would cover ("git", "edits"), or `None` where it isn't offered (`input`
     /// actions, compound shell commands).
     pub remember_as: Option<String>,
-    /// One of TopBar's desktop looks (2.7c): the island shows an eye, and the screen edges glow while it runs.
+    /// One of TopBar's desktop tools: a look (2.7c, risk `read`, an eye) or an action (2.7d, risk `input`, a
+    /// pointer). The screen edges glow while it runs.
     pub desktop: bool,
+    /// The full text an action would type or set, for the command window (the island shows `summary`).
+    pub detail: Option<String>,
+}
+
+/// TopBar is acting on the desktop for a run (2.7d). Sticky and not interactive; withdrawn when the action ends.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentActingActivity {
+    pub run_id: String,
+    pub project: String,
+    /// "Clicking Save", "Typing into Notepad".
+    pub step: String,
+    pub phase: AgentActingPhase,
+}
+
+/// `waiting`: TopBar acts once you've let go of the mouse and keyboard. `acting`: it's acting now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AgentActingPhase {
+    Waiting,
+    Acting,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

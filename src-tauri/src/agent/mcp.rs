@@ -38,6 +38,14 @@ pub enum Action {
         name: &'static str,
         args: Value,
     },
+    /// One of the desktop actions (2.7d, `actions.rs`): check its approval, then act.
+    Act {
+        rpc_id: Value,
+        name: &'static str,
+        args: Value,
+    },
+    /// Claude Code gave up on a call (`notifications/cancelled`): withdraw its approval or stop its action.
+    Cancel { request_id: Value },
     /// A notification or response: nothing to send.
     Ignore,
 }
@@ -46,6 +54,14 @@ pub fn handle(msg: &Value) -> Action {
     let Some(method) = msg.get("method").and_then(Value::as_str) else {
         return Action::Ignore;
     };
+    if method == "notifications/cancelled" {
+        return match msg.pointer("/params/requestId") {
+            Some(id) if !id.is_null() => Action::Cancel {
+                request_id: id.clone(),
+            },
+            _ => Action::Ignore,
+        };
+    }
     // Requests have an id; notifications (`notifications/initialized`, `…/cancelled`) don't.
     let Some(id) = msg.get("id").cloned() else {
         return Action::Ignore;
@@ -70,6 +86,7 @@ pub fn handle(msg: &Value) -> Action {
         "tools/list" => {
             let mut tools = vec![approve_tool()];
             tools.extend(super::tools::definitions());
+            tools.extend(super::actions::definitions());
             Action::Reply(result(id, json!({ "tools": tools })))
         }
         "tools/call" => {
@@ -93,6 +110,15 @@ pub fn handle(msg: &Value) -> Action {
                 (Some(name), _) if super::tools::NAMES.contains(&name) => Action::Look {
                     rpc_id: id,
                     name: super::tools::NAMES
+                        .iter()
+                        .copied()
+                        .find(|n| *n == name)
+                        .unwrap_or_default(),
+                    args: args.cloned().unwrap_or(json!({})),
+                },
+                (Some(name), _) if super::actions::NAMES.contains(&name) => Action::Act {
+                    rpc_id: id,
+                    name: super::actions::NAMES
                         .iter()
                         .copied()
                         .find(|n| *n == name)
@@ -220,6 +246,18 @@ mod tests {
                 rpc_id: json!(4),
                 name: "ui_tree",
                 args: json!({ "hwnd": 5 }),
+            }
+        );
+
+        let act = json!({ "jsonrpc": "2.0", "id": 5, "method": "tools/call",
+            "params": { "name": "click", "arguments": { "hwnd": 5, "element": 2 } } });
+        assert!(matches!(handle(&act), Action::Act { name: "click", .. }));
+        let cancel = json!({ "jsonrpc": "2.0", "method": "notifications/cancelled",
+            "params": { "requestId": 5, "reason": "AbortError" } });
+        assert_eq!(
+            handle(&cancel),
+            Action::Cancel {
+                request_id: json!(5)
             }
         );
 
