@@ -17,8 +17,8 @@ island, approvals (Allow / Deny) in the island, Cascadia Mono for Claude content
 **Phase 2.7c is complete (2026-10-30): read-only desktop tools (`list_windows`,
 `focused_window`, `screenshot`, `ui_tree`), each approved in the island with an eye in the `read` badge, and a glow on
 the screen's edges while Claude looks, with all 12 manual checks passed.**
-See [Phase 2.7](#phase-27-local-automation-agent). **Next: use 2.7a–c for a while, then 2.7d** (desktop
-actions; its kick-off prompt comes once 2.7c has been lived with).
+See [Phase 2.7](#phase-27-local-automation-agent). **Next: stage 2.7d (desktop actions)**, kick-off prompt
+[prompts/phase-2.7d-desktop-actions.md](prompts/phase-2.7d-desktop-actions.md).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -685,7 +685,8 @@ folder)
 11. **Audit:** the run's `.jsonl` has `look` lines with target, size and format, and no image data.
 12. **Text size 100 / 120 / 150 %:** the eye sits in the badge without changing the approval's size.
 
-**Stage 2.7d: desktop actions** (only after 2.7a–c have been used for a while)
+**Stage 2.7d: desktop actions** (next). Kick-off prompt:
+[prompts/phase-2.7d-desktop-actions.md](prompts/phase-2.7d-desktop-actions.md)
 - [ ] `focus_window` (reuse `activate.rs`), `invoke(element)` / `set_value(element)` through UI Automation first,
       `click(x, y)` / `type_text` / `press_keys` with `SendInput` as the fallback, `launch(app or URL)`
 - [ ] Every action is risk `input`: one approval per action (or per short, listed batch), never remembered. Refused for
