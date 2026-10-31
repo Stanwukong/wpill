@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 
 use super::describe;
 use super::stream::{StreamEvent, TurnResult};
-use crate::ipc::{AgentEndReason, AgentEntry, AgentEvent, AgentRun, AgentStatus};
+use crate::ipc::{AgentEndReason, AgentEntry, AgentEvent, AgentRun, AgentRunRoutine, AgentStatus};
 
 /// Entries kept per run for the command window (oldest dropped first).
 const MAX_ENTRIES: usize = 400;
@@ -37,6 +37,8 @@ pub struct Run {
     /// Set by `stop`: the exit that follows is the user's doing.
     stopping: bool,
     transcript: VecDeque<AgentEntry>,
+    /// The routine that started it (2.7e).
+    pub routine: Option<AgentRunRoutine>,
 }
 
 /// What `apply` asks the owner to do.
@@ -69,6 +71,7 @@ impl Run {
             queued: 0,
             stopping: false,
             transcript: VecDeque::new(),
+            routine: None,
         }
     }
 
@@ -261,6 +264,7 @@ impl Run {
             error: self.error.clone(),
             started_at_ms: self.started_at_ms,
             updated_at_ms: self.updated_at_ms,
+            routine: self.routine.clone(),
         }
     }
 

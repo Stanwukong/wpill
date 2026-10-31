@@ -70,11 +70,11 @@ export function ActivityView({ activity }: { activity: ActivityPayload }) {
     case "agentActing":
       return <AgentActing acting={activity.payload} />;
     case "agentFinished": {
-      const { runId, project, status, reason } = activity.payload;
+      const { runId, project, routineName, status, reason } = activity.payload;
       // Only a completed run gets the check; limits, failures and stops read as "stopped" (no mark).
       return (
         <ClaudeActivity
-          project={project}
+          project={routineName ?? project}
           state={reason === "completed" || (reason === null && status === "done") ? "done" : "stopped"}
           label={endLabel(status, reason)}
           onOpen={() => openRun(runId)}

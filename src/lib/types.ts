@@ -81,6 +81,8 @@ export interface AgentApprovalActivity {
   desktop: boolean;
   /** The full text an action would type or set, for the command window's card (the island shows `summary`). */
   detail: string | null;
+  /** Set for a routine's run (2.7e): show it in place of `project`. */
+  routineName: string | null;
 }
 
 /**
@@ -99,6 +101,8 @@ export interface AgentActingActivity {
 export interface AgentFinishedActivity {
   runId: string;
   project: string;
+  /** Set for a routine's run (2.7e): show it in place of `project`. */
+  routineName: string | null;
   status: AgentStatus;
   reason: AgentEndReason | null;
 }
@@ -211,6 +215,95 @@ export interface AgentRun {
   error: string | null;
   startedAtMs: number;
   updatedAtMs: number;
+  /** The routine that started it (2.7e). */
+  routine: AgentRunRoutine | null;
+}
+
+export interface AgentRunRoutine {
+  id: string;
+  name: string;
+  trigger: RoutineTrigger;
+}
+
+/** How a routine's run started: Run now, or its schedule. */
+export type RoutineTrigger = "manual" | "schedule";
+
+export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+
+/** When a routine runs by itself, while TopBar is running. Times are local `HH:MM`. */
+export type Schedule =
+  | { kind: "off" }
+  | { kind: "days"; time: string; days: Weekday[] }
+  /** Every `hours` (1–24) hours, counted from `from` on the day the schedule was saved. */
+  | { kind: "every"; hours: number; from: string }
+  /** Two minutes after TopBar starts. */
+  | { kind: "start" };
+
+/** A due time missed while TopBar was closed or the PC slept: run once when back, or skip it. */
+export type IfMissed = "once" | "skip";
+
+export type SkipReason = "missed" | "paused" | "stillRunning" | "tooMany" | "folderMissing" | "startFailed";
+
+export interface RoutineLastRun {
+  runId: string;
+  trigger: RoutineTrigger;
+  atMs: number;
+  /** `null` while it runs. */
+  status: AgentStatus | null;
+  reason: AgentEndReason | null;
+  costUsd: number | null;
+}
+
+export interface RoutineSkip {
+  atMs: number;
+  /** The due time that was skipped. */
+  dueMs: number;
+  why: SkipReason;
+}
+
+/** What `routine_save` takes: a new routine (`id: null`) or an edit. Rust checks and clamps it. */
+export interface RoutineDraft {
+  id: string | null;
+  name: string;
+  prompt: string;
+  cwd: string;
+  model: string | null;
+  maxTurns: number;
+  /** Required: routines always have a budget ($0.05–$20). */
+  maxBudgetUsd: number;
+  claudePath: string | null;
+  schedule: Schedule;
+  /** The schedule is on (Run now works either way). */
+  enabled: boolean;
+  ifMissed: IfMissed;
+  /** Scheduled runs: an approval's timeout pauses while you're away (locked, or no input for 5 min; 12 h at most). */
+  waitForMe: boolean;
+  /** TopBar's desktop looks and actions. Off by default. */
+  desktopTools: boolean;
+}
+
+/** A saved routine, as Rust stores it. */
+export interface Routine extends Omit<RoutineDraft, "id"> {
+  id: string;
+  createdAtMs: number;
+  updatedAtMs: number;
+  scheduleSinceMs: number;
+  lastDueMs: number;
+  lastRun: RoutineLastRun | null;
+  lastSkip: RoutineSkip | null;
+}
+
+export interface RoutineView extends Routine {
+  /** When its schedule runs it next (`null`: off, disabled, paused, or "at start" saved after this start). */
+  nextRunAtMs: number | null;
+  /** Its run going now, if any. */
+  runningRunId: string | null;
+}
+
+/** `routines:changed` and `routines_list`. */
+export interface Routines {
+  routines: RoutineView[];
+  paused: boolean;
 }
 
 export interface AgentRuns {

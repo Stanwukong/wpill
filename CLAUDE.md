@@ -42,6 +42,7 @@ pnpm typecheck              # tsc --noEmit
 .\src-tauri\target\debug\topbar.exe agent-test decide <requestId> allow|deny [run]   # also: send, stop, stop-all, show, hide, quit
 .\src-tauri\target\debug\topbar.exe agent-test look screenshot '{"hwnd":123}' C:\tmp\shot.png   # a desktop look without Claude (also list_windows, focused_window, ui_tree)
 .\src-tauri\target\debug\topbar.exe agent-test act type_text '{"hwnd":123,"text":"hi"}'   # an action without Claude or approvals (no refs; real input: ask first)
+.\src-tauri\target\debug\topbar.exe agent-test routine list|save '<draftJson>'|run <id>|due <id>|delete <id>|pause on|off   # JSON args: from Git Bash (C12)
 ```
 
 The first `cargo build` compiles ~370 crates (several minutes); later rebuilds of the
@@ -73,6 +74,9 @@ the drive once); `cargo clean --profile dev` when space runs low.
   (picker + long paths), `installs.rs` (find `claude.exe`, recent folders), `audit.rs` (jsonl trail, run ids),
   `settings.rs` (`agent` block in settings.json). Pure and unit-tested: `stream.rs` (stream-json), `lifecycle.rs`
   (run state), `approvals.rs`, `describe.rs` (risk, summaries, remember keys), `mcp.rs`.
+  Routines (2.7e): `routines.rs` (`routines.json` store, validation, the Windows time zone) and `schedule.rs` (pure:
+  due times, DST, missed/overlap verdicts); the `agent-routines` thread and `start_run` (shared with `agent_start`) are
+  in `mod.rs`.
   `window/command.rs` creates the focusable `command` window (`command.html` → `src/command/`).
   `desktop/` (Phase 2.7c looks, 2.7d actions): `mod.rs` = `run(Look)` on a per-look MTA thread and `act(…)` on a
   per-action one (one action at a time), `windows.rs` (Alt+Tab list from `apps/`, target checks: gone, ours, cloaked,
@@ -100,7 +104,8 @@ the drive once); `cargo clean --profile dev` when space runs low.
   panel's `ClaudeSection`; `--claude` is a fixed token like `--charge`; Claude content uses `--font-claude`,
   Cascadia Mono), `features/agent/` (`useAgentRuns` lives in `Island`, panel rows `AgentRunItems` in ClaudeSection's
   `agent` slot; the `agentApproval` view is `features/activities/AgentApproval.tsx`), `command/` (the command window's
-  own page: new task form, run list, transcript, follow-ups).
+  own page: new task form, run list, transcript, follow-ups; routines: `RoutineList`, `RoutineEditor`, `TaskFields`
+  shared with `NewTask`, `useRoutines`, `routineLabels`).
   The island has three shapes (`data-mode`: `pill` | `activity` | `panel`), all driven by Rust events.
 
 ## Architecture rules
@@ -242,6 +247,12 @@ the drive once); `cargo clean --profile dev` when space runs low.
   max turns. Don't send synthetic keystrokes while the user is at the machine; they land in whatever has focus.
   UI Automation actions (`invoke`, `set_value`) send no input and work with the window behind; ask before testing
   `focus_window`, `click`, `type_text`, `press_keys` or `launch`.
+- **Routines never pre-approve.** A routine's run goes through `start_run` like a new task; its only differences are
+  `--name`, the desktop tools disallowed unless the routine allows them, and patient approvals (timeout paused while
+  you're away, 12 h cap) for scheduled runs. Don't add allow lists or permission modes to routines. Schedules are
+  checked by the `agent-routines` thread (at least once a minute; never a JS timer). `routines.json` is TopBar's file:
+  test with `agent-test routine …`, and test due times with `routine due <id>` or a time two minutes ahead, never by
+  changing the clock.
 - **Windows PowerShell 5.1 can't list GSMTC sessions** (`GetSessions()` comes back empty). Check media state with the
   `topbar_lib=debug` log instead.
 

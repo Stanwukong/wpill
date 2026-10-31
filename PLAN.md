@@ -20,8 +20,10 @@ the screen's edges while Claude looks, with all 12 manual checks passed.**
 **Phase 2.7d is complete (2026-10-31): seven desktop actions (`focus_window`, `invoke`, `set_value`, `click`,
 `type_text`, `press_keys`, `launch`), UI Automation first with `[n]` refs from `ui_tree`, each approved on its own
 and never for the run, stopped by any input of yours, with all 12 manual checks passed.**
-See [Phase 2.7](#phase-27-local-automation-agent). **Next: stage 2.7e (routines)**, kick-off prompt
-[prompts/phase-2.7e-routines.md](prompts/phase-2.7e-routines.md).
+**Stage 2.7e is built (2026-10-31): routines (saved instructions run from the command window or on a schedule while
+TopBar runs), verified from outside with haiku runs; the manual check list below is pending.**
+See [Phase 2.7](#phase-27-local-automation-agent). **Next: sign off 2.7e**; then Phase 2.7 is complete and
+[Phase 4a](#phase-4a-release-readiness) (release readiness) is next.
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -282,6 +284,27 @@ not shown after Stop). `rememberAs` ("git", "edits") replaces the planned `canRe
 | MCP tool | `launch` | `{ url }` or `{ app }` | https/http/`ms-settings:` links; Start-menu apps by name. |
 | reply | (all seven) | text "Invoked button "Save" in Notepad · notes.txt. In front now: …" | Errors `isError` `code: advice`: `windowGone`, `elementGone`, `staleView`, `topbarWindow`, `notOnThisDesktop`, `notResponding`, `elevated`, `screenLocked`, `notForeground`, `covered`, `disabled`, `unsupported`, `passwordField`, `refused`, `notFound`, `aborted`, `failed`. |
 | MCP notification | `notifications/cancelled` | `{ requestId }` | Withdraws that call's approval or aborts its running action. |
+
+### Phase 2.7e
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| command | `routines_list` | `() → { routines: RoutineView[], paused }` | `RoutineView` = `Routine` + `nextRunAtMs` (null: off, disabled, paused) + `runningRunId`. |
+| command | `routine_save` | `({ routine: RoutineDraft }) → Routine` | No `id` = new. Rust checks: name 1–60, prompt ≤32 KB, folder exists (long path), turns 1–100, budget required ($0.05–$20), schedule fields; ≤50 routines. A new, changed or re-enabled schedule counts from now. Error `agentInvalid`. |
+| command | `routine_delete` | `(id) → void` | A run it started keeps going. |
+| command | `routine_run` | `(id) → { runId }` | Run now (schedule on or off). `agentInvalid` if it's already running. |
+| command | `routines_pause` | `(paused) → void` | Also the tray's "Pause routines". Due times while paused are skipped, not caught up. |
+| event | `routines:changed` | `{ routines, paused }` | On save, delete, pause, a run starting or ending, a skip. |
+| field | `AgentRun.routine` | `{ id, name, trigger: "manual" \| "schedule" } \| null` | |
+| activity field | `agentApproval.routineName`, `agentFinished.routineName` | `string \| null` | Shown in place of `project`. |
+| file | `routines.json` | `{ version: 1, paused, routines: Routine[] }` | `%APPDATA%\dev.wpill.topbar\`, written by TopBar (temp file + rename); an unreadable file is moved aside to `routines.unreadable.json`. |
+| audit | `start` line | `routine: { id, name }`, `trigger`, `desktopTools` | Plus `agent\routines.jsonl`: `started` (`dueMs`, `late`, `runId`, `trigger`) and `skipped` (`why`). |
+
+`Routine { id, name, prompt, cwd, model, maxTurns, maxBudgetUsd, claudePath, schedule, enabled, ifMissed: "once" |
+"skip", waitForMe, desktopTools, createdAtMs, updatedAtMs, scheduleSinceMs, lastDueMs, lastRun, lastSkip }`.
+`Schedule`: `{ kind: "off" }`, `{ kind: "days", time: "HH:MM", days: ["mon", …] }`, `{ kind: "every", hours: 1–24,
+from: "HH:MM" }`, `{ kind: "start" }`. `SkipReason`: `missed | paused | stillRunning | tooMany | folderMissing |
+startFailed`.
 
 ### Reserved for later phases (names fixed now so they slot in)
 
@@ -774,8 +797,69 @@ folder, Notepad on a scratch file)
 11. **Audit:** the run's `.jsonl` has `act` lines with tool, target and result, and typed text only as `{chars, lines}`.
 12. **Text size 100 / 120 / 150 %:** the pointer badge, the acting activity and the pending card's text block fit.
 
-**Stage 2.7e: routines** (next). Kick-off prompt: [prompts/phase-2.7e-routines.md](prompts/phase-2.7e-routines.md)
-- [ ] Saved instructions (prompt + folder + limits), run from the command window or on a schedule while TopBar runs
+**Stage 2.7e: routines** (built 2026-10-31, manual check pending). Kick-off prompt:
+[prompts/phase-2.7e-routines.md](prompts/phase-2.7e-routines.md). Decisions: CASESTUDY D28, D29.
+
+*Research at kick-off (2.1.123 / 2.1.159 / 2.1.314):* Claude Code's own scheduling doesn't cover this. `/loop` and
+`CronCreate` live in one open interactive session (in memory only, fire only while it's idle, up to half a period
+late, recurring jobs expire after 7 days). Cloud routines (`/schedule`, remote triggers) run on Anthropic's servers
+against a repo clone, so they can't see local folders, the desktop or TopBar's approvals. `--bg` sessions (2.1.314
+only) aren't scheduled. All three take `--name` (used: routine runs are easy to find in `/resume`),
+`--max-budget-usd` (always set for routines) and `--no-session-persistence` (not used: it breaks follow-ups).
+`--disallowedTools` takes a comma-separated list. Every routine run starts a fresh session: resuming would carry a
+growing, stale history at full price.
+
+- [x] `agent/schedule.rs` (pure, fake-zone tests): days at a time, every N hours (1–24, real hours from an anchor),
+      at TopBar start (+2 min); DST gaps run at the first minute after, repeated times run once; `check` → fire on
+      time (≤2 min), catch up once (latest missed time only, ≤24 h, after a 2-minute settle) or skip; paused, still
+      running and the limit of 2 scheduled runs skip
+- [x] `agent/routines.rs`: `routines.json` (atomic writes, unreadable file kept aside), Rust-side validation and
+      clamps, the Windows time zone (`SystemTimeToTzSpecificLocalTime`)
+- [x] `agent-routines` thread: sleeps until the next due time, at most 60 s (notices sleep, resume and clock jumps:
+      a jump of more than 2 min starts a settle period), woken by an event on any change
+- [x] Routine runs are ordinary runs (`start_run`): `--permission-mode default` and the prompt tool as always,
+      `--name`, the desktop tools in `--disallowedTools` unless the routine allows them; `AgentRun.routine`;
+      the island shows the routine's name; audit `start` gets `routine` and `trigger`; `routines.jsonl`
+- [x] "Approvals wait for me" (scheduled runs): an approval's timeout pauses while the screen is locked or you've been
+      idle 5 min, up to 12 h after it was asked
+- [x] Tray "Pause routines" (mirrors the command window); Stop and Win+Alt+Escape stop routine runs like any other
+- [x] UI (motion-designer): Routines section in the command window's sidebar (schedule in words, next run, last
+      result or skip, Run), the routine editor (schedule picker, If missed, wait for me, desktop tools, Delete),
+      "Save as routine" from a new task or an ended run, the routine's name and a clock glyph on its runs
+- [x] Debug `agent-test routine list | save <json> | run <id> | due <id> | delete <id> | pause on|off`
+- [x] Verified from outside (2026-10-31, debug build, haiku on 2.1.314): saved a routine (8.3 folder stored as its
+      long path); Run now (1¢, `lastRun` done, audit `routine` + `trigger: manual`); edited to a daily time two
+      minutes ahead: fired once at 18:26:00 (`late: false`) and not again; a scheduled run waiting on an approval
+      (island showed the routine's name, Deny / Allow, nothing pre-approved), denied (no file); due again while
+      running → `stillRunning`, Run now refused; Stop and stop-all (the hotkey's path) on scheduled runs → `stopped`;
+      paused → `paused`; quit TopBar before two routines' due time and restarted 3 min after: "skip" one skipped as
+      `missed` at once, "once" one caught up once 2 min after launch (`late: true`), no burst; deleted routines with
+      schedules (gone from the file, nothing more fired); desktop tools off → Claude had no `list_windows`, nothing
+      asked; the command window live with the routines list. 145 Rust tests pass
+- [ ] Manual check (below)
+
+**Manual check (Phase 2.7e)** (`pnpm tauri dev` with `$env:RUST_LOG='info,topbar_lib=debug'`, model `haiku`, a scratch
+folder)
+1. **Save as routine:** type a task in the command window, Save as routine: the editor opens prefilled; save it; it's
+   listed with its schedule in words and "next in …".
+2. **Run now:** Run on the row: the run appears in the run list under the routine's name, the island shows the
+   routine's name, and the row shows the result and cost when it ends.
+3. **Edit:** change the prompt and save: the next run uses it; changing the time recomputes "next in …".
+4. **Schedule:** set Days with today and a time two minutes ahead: it runs once at that minute (clock on the run).
+5. **Approval in a scheduled run:** a routine needing a shell command (`echo hi > x.txt`): the island asks as usual
+   with the routine's name; Allow and Deny behave as for any run; no "for this routine" anywhere.
+6. **Away:** a scheduled run with an approval, then lock the PC (Win+L) for longer than 10 minutes: the approval is
+   still waiting when you're back and then times out 10 minutes later if unanswered (turn "Approvals wait for me" off
+   to see it time out while locked).
+7. **Overlap:** a routine whose run is still going when it's due again: the row says "Skipped HH:MM: still running".
+8. **Missed while closed:** schedule a time two minutes ahead, quit TopBar, start it after that time: with "Run once
+   when back" it runs once about two minutes after start; with "Skip" it says "Skipped … missed".
+9. **Pause:** tray → Pause routines: the command window shows Paused, a due time is skipped as paused, and Resume in
+   the window unticks the tray item.
+10. **Stop:** Stop a scheduled run from the panel, and another with Win+Alt+Escape: both read Stopped.
+11. **Delete:** delete a routine with a schedule: it's gone, its earlier runs stay in the run list, nothing runs at
+    its time.
+12. **Text size 100 / 120 / 150 %:** the routines list and the editor fit; the editor scrolls with its buttons kept.
 
 **Out of scope:** cloud or remote sessions, WSL sessions, voice input, other machines, running TopBar elevated,
 approving prompts of interactive terminal sessions from the island (possible later through the `PermissionRequest`
@@ -874,6 +958,13 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
   screen). Some apps don't notice `set_value` (Win32 `WM_SETTEXT`, React inputs); the reply says when the value
   didn't stick. A UIA `invoke` that opens a modal dialog may be reported as "not confirmed". Only one action runs
   at a time across runs.
+- Routines (2.7e): schedules run only while TopBar runs (no Task Scheduler entry); a run due while the PC sleeps runs
+  once after it wakes (if set to), and the lock screen doesn't stop a run (approvals wait, looks and actions are
+  refused while locked). Your own allow rules still auto-approve steps in routine runs, as in any run. A run whose
+  background shell outlives its result still counts as running (its process is alive), so its next due time is
+  skipped as `stillRunning`. "Every N hours" counts real hours, so its local times shift by an hour across a DST
+  change. Times use Windows' current time zone; changing the zone moves the schedule with it. `routines.json` is
+  written by TopBar, not by hand.
 
 ## Distribution
 - `pnpm tauri build` produces `src-tauri/target/release/bundle/nsis/TopBar_0.1.0_x64-setup.exe`:

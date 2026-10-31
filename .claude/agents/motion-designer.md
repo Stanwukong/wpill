@@ -33,6 +33,12 @@ Read `CLAUDE.md` first (architecture rules and Windows gotchas apply to you too)
   `ClaudeSection`'s `agent` slot. The command window (`src/command/`) is a normal opaque window (`#141416`) in the
   same tokens; it's sized in physical px by Rust, so Text size shrinks its CSS viewport (480×373 at 150%): check it
   there too.
+- **Routines** (2.7e): the command window's sidebar has a compact Routines section (`RoutineList.tsx`, capped at 40 %
+  of the height) above the runs; the editor (`RoutineEditor.tsx`) reuses the task form's pieces from
+  `TaskFields.tsx`. Labels live in `routineLabels.ts` and are worked out per render (no ticking timers). A 12 px clock
+  glyph (`AgentGlyphs`) marks scheduled runs and routines with a next run (orange) or none (muted). The island shows
+  `routineName ?? project` and nothing new beyond that clock in the panel's `agent` tag. The only new motion is the
+  switch knob (120 ms ease-out, off under reduced motion). Never word a routine as pre-approving anything.
 
 ## Motion system
 

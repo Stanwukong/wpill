@@ -6,6 +6,13 @@
   flex: none;
 }
 
+/* A scheduled routine run: a clock sized to the text it sits beside (badge, run list). */
+.agent-clock {
+  flex: none;
+  width: 1.05em;
+  height: 1.05em;
+}
+
 /* The run's state dot (14 px slot). Waiting breathes (3 s, opacity only) because it waits on the user. */
 .agent-dot {
   display: block;
@@ -44,6 +51,9 @@
 /* "agent": tells the TopBar-started runs apart from terminal sessions. Segoe, like other chrome. */
 .agent-badge {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   padding: 1px 5px;
   border-radius: 5px;
   box-shadow: inset 0 0 0 1px rgba(var(--claude-rgb), 0.4);

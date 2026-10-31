@@ -9,12 +9,12 @@ import "../agent/agent.css";
 type Choice = "allow" | "deny" | "run";
 
 /**
- * An agent run asks to use a tool: ✻ · project · tool · risk, the command or path on its own line (click it for
+ * An agent run asks to use a tool: ✻ · project (or routine) · tool · risk, the command or path on its own line (click it for
  * the command window), then Deny / Allow and, where Rust offers it, "Allow … for this run". Sticky: Rust withdraws
  * it once answered, so a click only marks the choice as pending. Interactive while hovered (Rust's hit test).
  */
 export function AgentApproval({ approval }: { approval: AgentApprovalActivity }) {
-  const { requestId, runId, project, tool, summary, risk, rememberAs, desktop } = approval;
+  const { requestId, runId, project, routineName, tool, summary, risk, rememberAs, desktop } = approval;
   const [chosen, setChosen] = useState<Choice | null>(null);
 
   const answer = (choice: Choice) => {
@@ -33,7 +33,7 @@ export function AgentApproval({ approval }: { approval: AgentApprovalActivity })
       <div className="approval__head">
         <ClaudeMark />
         <span className="approval__title">
-          <span className="activity__title">{project}</span>
+          <span className="activity__title">{routineName ?? project}</span>
           <span className="approval__tool">{tool}</span>
         </span>
         <span className="agent-risk" data-risk={risk}>

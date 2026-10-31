@@ -12,6 +12,9 @@
 //!   press keys and launch. Each is approved on its own (never "for this run"), waits until you let go of the
 //!   mouse and keyboard, shows `agentActing` and the acting glow, and stops at once if you touch either.
 //! - Hotkeys (`hotkey.rs`) open the command window or stop everything. Everything is logged (`audit.rs`).
+//! - Routines (2.7e, `routines.rs`, `schedule.rs`) are saved instructions, run from the command window or by the
+//!   `agent-routines` thread on a schedule while TopBar runs. A routine's run is an ordinary run: same approvals,
+//!   same Stop, same audit; nothing about it is pre-approved.
 //!
 //! Rust owns runs, approvals and timeouts; React only renders `agent:runs`, `agent:output` and the activities.
 
@@ -27,13 +30,15 @@ mod job;
 mod lifecycle;
 mod mcp;
 mod pipe;
+mod routines;
 mod run;
+mod schedule;
 mod settings;
 mod stream;
 mod tools;
 
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
@@ -41,22 +46,27 @@ use std::time::{Duration, Instant};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, State};
-use windows::Win32::Foundation::WAIT_TIMEOUT;
-use windows::Win32::System::Threading::{SetEvent, WaitForSingleObject, INFINITE};
+use windows::Win32::Foundation::{WAIT_OBJECT_0, WAIT_TIMEOUT};
+use windows::Win32::System::Threading::{
+    ResetEvent, SetEvent, WaitForMultipleObjects, WaitForSingleObject, INFINITE,
+};
 
 use crate::activity::{approval_key, Activities, Signal, Watcher, ACTING_KEY};
 use crate::desktop::{self, refs::Refs};
 use crate::error::{AppError, AppResult};
 use crate::ipc::{
     events, Activity, AgentActingActivity, AgentActingPhase, AgentEntry, AgentEvent,
-    AgentFinishedActivity, AgentOptions, AgentOutputPayload, AgentRunsPayload, AgentStarted,
-    AgentStatus, ClaudeInstall,
+    AgentFinishedActivity, AgentOptions, AgentOutputPayload, AgentRunRoutine, AgentRunsPayload,
+    AgentStarted, AgentStatus, ClaudeInstall, Routine, RoutineLastRun, RoutineSkip, RoutineTrigger,
+    RoutineView, RoutinesPayload, SkipReason,
 };
 use crate::win32::Handle;
 use crate::window::{self, glow};
 use approvals::{Approvals, Asked, Pending, Purpose, ReplyTo, Request};
 use audit::{now_ms, Audit};
 use lifecycle::Run;
+use routines::RoutineDraft;
+use schedule::{Check, Times, Verdict};
 use settings::AgentSettings;
 
 /// A bridge gets this long to say hello after connecting.
@@ -64,6 +74,12 @@ const HELLO_TIMEOUT_MS: u32 = 2000;
 /// Ended runs kept for the panel and the command window.
 const MAX_ENDED: usize = 20;
 const MAX_PROMPT: usize = 32 * 1024;
+/// The routine scheduler looks again at least this often, which also notices sleep, resume and clock changes.
+const SCHEDULER_TICK_MS: i64 = 60_000;
+/// The wall clock jumping this far past the expected wake-up means the PC slept (or the clock was changed).
+const RESUME_JUMP_MS: i64 = 2 * 60_000;
+/// "Approvals wait for me": you count as away while the screen is locked or after this long without input.
+const AWAY_IDLE_MS: u64 = 5 * 60_000;
 
 /// `topbar.exe mcp`: `main.rs` calls this before anything else starts.
 pub fn mcp_bridge() -> i32 {
@@ -78,6 +94,14 @@ struct Slot {
     /// Bumped per process, so a late line or exit from an earlier process is ignored.
     generation: u32,
     dir: PathBuf,
+    /// A scheduled routine's run with "Approvals wait for me": its approvals wait while you're away.
+    patient: bool,
+}
+
+impl Slot {
+    fn is_going(&self) -> bool {
+        self.run.is_live() || self.process.is_some()
+    }
 }
 
 struct Conn {
@@ -102,6 +126,12 @@ struct Inner {
     refs: Refs,
     /// The action running now (one at a time): its run and call, so Stop or a cancel can abort it.
     acting: Option<(String, u64, Value)>,
+    routines: routines::Store,
+    /// Wakes the `agent-routines` thread after a change.
+    routines_wake: Option<Arc<Handle>>,
+    launched_ms: i64,
+    /// Missed routines wait until then to catch up (TopBar's start or the PC's wake, plus a little).
+    settle_until_ms: i64,
 }
 
 /// Tauri-managed agent state. Every thread and command goes through it; replies to bridges are written after
@@ -127,6 +157,7 @@ struct After {
     signals: Vec<Signal>,
     outputs: Vec<AgentOutputPayload>,
     runs_changed: bool,
+    routines_changed: bool,
 }
 
 impl After {
@@ -155,6 +186,13 @@ impl After {
                 log::warn!("emit {} failed: {e}", events::AGENT_RUNS);
             }
         }
+        if self.routines_changed {
+            let payload = agents.routines_payload();
+            crate::tray::show_routines_paused(payload.paused);
+            if let Err(e) = app.emit(events::ROUTINES_CHANGED, payload) {
+                log::warn!("emit {} failed: {e}", events::ROUTINES_CHANGED);
+            }
+        }
     }
 }
 
@@ -172,6 +210,33 @@ impl Agents {
             .collect();
         runs.sort_by_key(|r| std::cmp::Reverse(r.started_at_ms));
         AgentRunsPayload { runs }
+    }
+
+    fn routines_payload(&self) -> RoutinesPayload {
+        let inner = self.lock();
+        let now = now_ms();
+        let paused = inner.routines.file.paused;
+        let routines = inner
+            .routines
+            .file
+            .routines
+            .iter()
+            .map(|r| RoutineView {
+                next_run_at_ms: (!paused && r.enabled)
+                    .then(|| {
+                        let times = Times {
+                            since_ms: r.schedule_since_ms,
+                            launched_ms: inner.launched_ms,
+                        };
+                        schedule::next(&r.schedule, times, now, &routines::LocalZone)
+                    })
+                    .flatten()
+                    .filter(|&n| n > r.schedule_since_ms),
+                running_run_id: inner.running_run_of(&r.id),
+                routine: r.clone(),
+            })
+            .collect();
+        RoutinesPayload { routines, paused }
     }
 
     /// Kills every run's process tree. Called on exit; the jobs would also die with TopBar.
@@ -200,6 +265,47 @@ impl Inner {
         if let Some(audit) = &self.audit {
             audit.log(run_id, kind, fields);
         }
+    }
+
+    /// A line in `routines.jsonl`: due times run or skipped.
+    fn audit_routine(&self, kind: &str, fields: Value) {
+        if let Some(audit) = &self.audit {
+            audit.log_routine(kind, fields);
+        }
+    }
+
+    /// The run of routine `id` going now, if any.
+    fn running_run_of(&self, id: &str) -> Option<String> {
+        self.slots
+            .iter()
+            .find(|s| s.is_going() && s.run.routine.as_ref().is_some_and(|r| r.id == id))
+            .map(|s| s.run.id.clone())
+    }
+
+    fn wake_scheduler(&self) {
+        if let Some(wake) = &self.routines_wake {
+            // SAFETY: signals our own event.
+            let _ = unsafe { SetEvent(wake.0) };
+        }
+    }
+
+    /// A due time of routine `id` didn't start a run: noted on the routine and in `routines.jsonl`.
+    fn record_skip(&mut self, id: &str, due_ms: i64, why: SkipReason, now: i64) {
+        let Some(r) = self.routines.get_mut(id) else {
+            return;
+        };
+        r.last_due_ms = r.last_due_ms.max(due_ms);
+        r.last_skip = Some(RoutineSkip {
+            at_ms: now,
+            due_ms,
+            why,
+        });
+        let name = r.name.clone();
+        log::info!("routine {id} ({name}) skipped: {why:?}");
+        self.audit_routine(
+            "skipped",
+            json!({ "routine": id, "name": name, "dueMs": due_ms, "why": why }),
+        );
     }
 
     /// Answers and withdraws approvals (denied unless `allow`), noting the decision in the transcript.
@@ -270,14 +376,31 @@ impl Inner {
         };
         let (status, reason) = (slot.run.status, slot.run.reason);
         let project = slot.run.project.clone();
+        let routine = slot.run.routine.clone();
+        let cost_usd = slot.run.ipc(vec![]).cost_usd;
         let fields = json!({ "status": status, "reason": reason, "turns": slot.run.ipc(vec![]).turns,
-                             "costUsd": slot.run.ipc(vec![]).cost_usd, "error": slot.run.ipc(vec![]).error });
+                             "costUsd": cost_usd, "error": slot.run.ipc(vec![]).error });
         self.audit(run_id, "result", fields);
+        if let Some(tag) = &routine {
+            let last = self
+                .routines
+                .get_mut(&tag.id)
+                .and_then(|r| r.last_run.as_mut())
+                .filter(|l| l.run_id == run_id);
+            if let Some(last) = last {
+                last.status = Some(status);
+                last.reason = reason;
+                last.cost_usd = cost_usd;
+                self.routines.save();
+            }
+            after.routines_changed = true;
+        }
         if status != AgentStatus::Stopped {
             after.signals.push(Signal::Offer(Activity::AgentFinished(
                 AgentFinishedActivity {
                     run_id: run_id.to_string(),
                     project,
+                    routine_name: routine.map(|r| r.name),
                     status,
                     reason,
                 },
@@ -317,6 +440,12 @@ pub fn spawn(app: &AppHandle, activities: &Activities) {
             return;
         }
     };
+    let routines_path = app
+        .path()
+        .app_config_dir()
+        .map(|d| d.join("routines.json"))
+        .ok();
+    let wake = Handle::event().ok().map(Arc::new);
     {
         let agents = app.state::<Agents>();
         let mut inner = agents.lock();
@@ -324,6 +453,13 @@ pub fn spawn(app: &AppHandle, activities: &Activities) {
         inner.audit = Some(audit);
         inner.signals = Some(activities.sender());
         inner.stop = Some(stop.clone());
+        if let Some(path) = routines_path {
+            inner.routines = routines::Store::load(path);
+        }
+        inner.routines_wake = wake.clone();
+        let now = now_ms();
+        inner.launched_ms = now;
+        inner.settle_until_ms = now + schedule::SETTLE;
     }
 
     // Probe the installs now (each runs `claude.exe --version`), so the command window opens with them ready.
@@ -347,9 +483,14 @@ pub fn spawn(app: &AppHandle, activities: &Activities) {
         Some(Err(e)) => log::warn!("glow unavailable: {e}"),
         None => log::warn!("glow unavailable: no island window"),
     }
-    match start_timer(app.clone(), stop) {
+    match start_timer(app.clone(), stop.clone()) {
         Ok(watcher) => activities.add_watcher(watcher),
         Err(e) => log::warn!("agent timer unavailable: {e}"),
+    }
+    match wake.map(|wake| start_scheduler(app.clone(), stop, wake)) {
+        Some(Ok(watcher)) => activities.add_watcher(watcher),
+        Some(Err(e)) => log::warn!("routine scheduler unavailable: {e}"),
+        None => log::warn!("routine scheduler unavailable: no event"),
     }
     let handle = app.clone();
     match hotkey::start(
@@ -828,6 +969,8 @@ fn ask(
         target: a.target.0,
         target_pid: a.target.1,
         element: a.element,
+        routine_name: slot.run.routine.as_ref().map(|r| r.name.clone()),
+        patient: slot.patient,
     };
     match inner.approvals.ask(request, Instant::now(), timeout) {
         Asked::Remembered {
@@ -961,27 +1104,209 @@ fn start_timer(app: AppHandle, stop: Arc<Handle>) -> AppResult<Watcher> {
     let signal = stop.clone();
     Watcher::spawn(
         "agent-timer",
-        move || loop {
-            // SAFETY: waits on our own event.
-            if unsafe { WaitForSingleObject(stop.0, 1000) } != WAIT_TIMEOUT {
-                return;
-            }
-            let agents = app.state::<Agents>();
-            let mut after = After::default();
-            {
-                let mut inner = agents.lock();
-                let expired = inner.approvals.expired(Instant::now());
-                if !expired.is_empty() {
-                    inner.settle(expired, false, "timeout", &mut after);
+        move || {
+            let mut last = Instant::now();
+            loop {
+                // SAFETY: waits on our own event.
+                if unsafe { WaitForSingleObject(stop.0, 1000) } != WAIT_TIMEOUT {
+                    return;
                 }
+                let agents = app.state::<Agents>();
+                let mut after = After::default();
+                let now = Instant::now();
+                let elapsed = now - last;
+                last = now;
+                {
+                    let mut inner = agents.lock();
+                    // "Approvals wait for me": a scheduled routine's approvals don't time out while you're away.
+                    if inner.approvals.has_patient()
+                        && (desktop::screen_locked() || desktop::idle_ms() >= AWAY_IDLE_MS)
+                    {
+                        inner.approvals.postpone(elapsed);
+                    }
+                    let expired = inner.approvals.expired(now);
+                    if !expired.is_empty() {
+                        inner.settle(expired, false, "timeout", &mut after);
+                    }
+                }
+                after.run(&app, &agents);
             }
-            after.run(&app, &agents);
         },
         move || {
             // SAFETY: as in `start_server`.
             let _ = unsafe { SetEvent(signal.0) };
         },
     )
+}
+
+/// The `agent-routines` thread: one look at every routine per wake-up, sleeping until the next due time (at
+/// most a minute, so sleep, resume and clock changes are noticed) or a change wakes it.
+fn start_scheduler(app: AppHandle, stop: Arc<Handle>, wake: Arc<Handle>) -> AppResult<Watcher> {
+    let signal = stop.clone();
+    Watcher::spawn(
+        "agent-routines",
+        move || {
+            let mut expected = now_ms();
+            loop {
+                let now = now_ms();
+                if now > expected + RESUME_JUMP_MS {
+                    log::info!(
+                        "routines: the clock jumped {} s (sleep or a clock change)",
+                        (now - expected) / 1000
+                    );
+                    app.state::<Agents>().lock().settle_until_ms = now + schedule::SETTLE;
+                }
+                let next = scheduler_tick(&app, now);
+                let wait = (next - now).clamp(1000, SCHEDULER_TICK_MS);
+                expected = now + wait;
+                // SAFETY: waits on our own events.
+                let woke = unsafe { WaitForMultipleObjects(&[stop.0, wake.0], false, wait as u32) };
+                if woke == WAIT_OBJECT_0 {
+                    return;
+                }
+                if woke.0 == WAIT_OBJECT_0.0 + 1 {
+                    // SAFETY: our own manual-reset event.
+                    let _ = unsafe { ResetEvent(wake.0) };
+                    expected = now_ms();
+                }
+            }
+        },
+        move || {
+            // SAFETY: as in `start_server`.
+            let _ = unsafe { SetEvent(signal.0) };
+        },
+    )
+}
+
+/// Runs or skips what's due; returns when to look again.
+fn scheduler_tick(app: &AppHandle, now: i64) -> i64 {
+    let agents = app.state::<Agents>();
+    let zone = routines::LocalZone;
+    let mut next = now + SCHEDULER_TICK_MS;
+    let mut fire = Vec::new();
+    let mut after = After::default();
+    {
+        let mut guard = agents.lock();
+        let inner = &mut *guard;
+        let going: HashSet<String> = inner
+            .slots
+            .iter()
+            .filter(|s| s.is_going())
+            .filter_map(|s| s.run.routine.as_ref())
+            .map(|r| r.id.clone())
+            .collect();
+        let mut scheduled = inner
+            .slots
+            .iter()
+            .filter(|s| s.is_going())
+            .filter(|s| {
+                s.run
+                    .routine
+                    .as_ref()
+                    .is_some_and(|r| r.trigger == RoutineTrigger::Schedule)
+            })
+            .count();
+        let mut skips = Vec::new();
+        let mut changed = false;
+        for r in &mut inner.routines.file.routines {
+            let times = Times {
+                since_ms: r.schedule_since_ms,
+                launched_ms: inner.launched_ms,
+            };
+            let check = Check {
+                schedule: &r.schedule,
+                times,
+                enabled: r.enabled,
+                if_missed: r.if_missed,
+                last_due_ms: r.last_due_ms,
+                settle_until_ms: inner.settle_until_ms,
+                paused: inner.routines.file.paused,
+                running: going.contains(&r.id),
+                at_limit: scheduled >= schedule::MAX_SCHEDULED,
+            };
+            match schedule::check(&check, now, &zone) {
+                Verdict::Idle => {}
+                Verdict::Hold { until_ms } => next = next.min(until_ms),
+                Verdict::Skip { due_ms, why } => skips.push((r.id.clone(), due_ms, why)),
+                Verdict::Fire { due_ms, .. } if !Path::new(&r.cwd).is_dir() => {
+                    skips.push((r.id.clone(), due_ms, SkipReason::FolderMissing))
+                }
+                Verdict::Fire { due_ms, late } => {
+                    r.last_due_ms = due_ms;
+                    scheduled += 1;
+                    changed = true;
+                    fire.push((r.id.clone(), r.name.clone(), due_ms, late));
+                }
+            }
+            if let Some(n) = schedule::next(&r.schedule, times, now, &zone) {
+                next = next.min(n);
+            }
+        }
+        for (id, due_ms, why) in skips {
+            inner.record_skip(&id, due_ms, why, now);
+            changed = true;
+        }
+        if changed {
+            inner.routines.save();
+            after.routines_changed = true;
+        }
+    }
+    after.run(app, &agents);
+    for (id, name, due_ms, late) in fire {
+        let started = run_routine(app, &id, RoutineTrigger::Schedule);
+        let mut inner = agents.lock();
+        match started {
+            Ok(run_id) => {
+                log::info!("routine {id} ({name}) started run {run_id} (late: {late})");
+                inner.audit_routine(
+                    "started",
+                    json!({ "routine": id, "name": name, "dueMs": due_ms, "late": late,
+                            "runId": run_id, "trigger": RoutineTrigger::Schedule }),
+                );
+            }
+            Err(e) => {
+                log::warn!("routine {id} ({name}) didn't start: {e}");
+                inner.record_skip(&id, due_ms, SkipReason::StartFailed, now_ms());
+                inner.routines.save();
+                drop(inner);
+                After {
+                    routines_changed: true,
+                    ..After::default()
+                }
+                .run(app, &agents);
+            }
+        }
+    }
+    next
+}
+
+/// Starts routine `id`'s run: an ordinary run with the routine's prompt, folder and limits.
+fn run_routine(app: &AppHandle, id: &str, trigger: RoutineTrigger) -> AppResult<String> {
+    let r = app
+        .state::<Agents>()
+        .lock()
+        .routines
+        .get(id)
+        .cloned()
+        .ok_or_else(|| AppError::AgentInvalid("That routine was deleted.".into()))?;
+    let request = AgentStartRequest {
+        prompt: r.prompt,
+        cwd: r.cwd,
+        model: r.model,
+        max_turns: Some(r.max_turns),
+        max_budget_usd: Some(r.max_budget_usd),
+        claude_path: r.claude_path,
+    };
+    let routine = RoutineStart {
+        tag: AgentRunRoutine {
+            id: r.id,
+            name: r.name,
+            trigger,
+        },
+        wait_for_me: r.wait_for_me,
+        desktop_tools: r.desktop_tools,
+    };
+    start_run(app, request, Some(routine))
 }
 
 /// Starts `slot`'s next process (the first, or a `--resume` follow-up) and writes `text` to it.
@@ -1169,11 +1494,135 @@ pub struct AgentStartRequest {
 }
 
 #[tauri::command]
-pub async fn agent_start(
+pub async fn agent_start(app: AppHandle, request: AgentStartRequest) -> AppResult<AgentStarted> {
+    let run_id = start_run(&app, request, None)?;
+    Ok(AgentStarted { run_id })
+}
+
+#[tauri::command]
+pub fn routines_list(agents: State<'_, Agents>) -> RoutinesPayload {
+    agents.routines_payload()
+}
+
+/// Saves a new routine (no `id`) or an edit, checked in Rust.
+#[tauri::command]
+pub fn routine_save(
     app: AppHandle,
     agents: State<'_, Agents>,
+    routine: RoutineDraft,
+) -> AppResult<Routine> {
+    let saved =
+        {
+            let mut inner = agents.lock();
+            let existing =
+                match &routine.id {
+                    Some(id) => Some(inner.routines.get(id).cloned().ok_or_else(|| {
+                        AppError::AgentInvalid("That routine was deleted.".into())
+                    })?),
+                    None => None,
+                };
+            let folder = |p: &str| Path::new(p).is_dir().then(|| folder::long_path(p));
+            let saved = routines::validate(routine, existing.as_ref(), now_ms(), folder)
+                .map_err(AppError::AgentInvalid)?;
+            inner
+                .routines
+                .upsert(saved.clone())
+                .map_err(AppError::AgentInvalid)?;
+            inner.routines.save();
+            inner.wake_scheduler();
+            log::info!("routine {} ({}) saved", saved.id, saved.name);
+            saved
+        };
+    After {
+        routines_changed: true,
+        ..After::default()
+    }
+    .run(&app, &agents);
+    Ok(saved)
+}
+
+/// Deletes a routine. A run it started keeps going (it's an ordinary run).
+#[tauri::command]
+pub fn routine_delete(app: AppHandle, agents: State<'_, Agents>, id: String) -> AppResult<()> {
+    {
+        let mut inner = agents.lock();
+        if !inner.routines.delete(&id) {
+            return Err(AppError::AgentInvalid(
+                "That routine was already deleted.".into(),
+            ));
+        }
+        inner.routines.save();
+        inner.wake_scheduler();
+        log::info!("routine {id} deleted");
+    }
+    After {
+        routines_changed: true,
+        ..After::default()
+    }
+    .run(&app, &agents);
+    Ok(())
+}
+
+/// Run now (works whether or not its schedule is on).
+#[tauri::command]
+pub async fn routine_run(app: AppHandle, id: String) -> AppResult<AgentStarted> {
+    if app.state::<Agents>().lock().running_run_of(&id).is_some() {
+        return Err(AppError::AgentInvalid(
+            "This routine is already running.".into(),
+        ));
+    }
+    let run_id = run_routine(&app, &id, RoutineTrigger::Manual)?;
+    app.state::<Agents>().lock().audit_routine(
+        "started",
+        json!({ "routine": id, "runId": run_id, "trigger": RoutineTrigger::Manual }),
+    );
+    Ok(AgentStarted { run_id })
+}
+
+/// Pauses or resumes every schedule (the tray's "Pause routines" and the command window). Due times while
+/// paused are skipped, not caught up.
+#[tauri::command]
+pub fn routines_pause(app: AppHandle, paused: bool) {
+    set_routines_paused(&app, paused);
+}
+
+pub fn routines_paused(app: &AppHandle) -> bool {
+    app.state::<Agents>().lock().routines.file.paused
+}
+
+pub fn set_routines_paused(app: &AppHandle, paused: bool) {
+    let agents = app.state::<Agents>();
+    {
+        let mut inner = agents.lock();
+        if inner.routines.file.paused != paused {
+            inner.routines.file.paused = paused;
+            inner.routines.save();
+            log::info!("routines paused: {paused}");
+        }
+        inner.wake_scheduler();
+    }
+    After {
+        routines_changed: true,
+        ..After::default()
+    }
+    .run(app, &agents);
+}
+
+/// How a routine's run differs from a new task's: its name and trigger, and its two switches.
+struct RoutineStart {
+    tag: AgentRunRoutine,
+    wait_for_me: bool,
+    desktop_tools: bool,
+}
+
+/// Starts a run (from the new-task form, or a routine). Blocks while Claude Code installs are probed the
+/// first time.
+fn start_run(
+    app: &AppHandle,
     request: AgentStartRequest,
-) -> AppResult<AgentStarted> {
+    routine: Option<RoutineStart>,
+) -> AppResult<String> {
+    let agents = app.state::<Agents>();
     let prompt = request.prompt.trim().to_string();
     if prompt.is_empty() || prompt.len() > MAX_PROMPT {
         return Err(AppError::AgentInvalid("Type an instruction first.".into()));
@@ -1204,6 +1653,8 @@ pub async fn agent_start(
         resume: None,
         strict_mcp_config: settings.strict_mcp_config,
         user_settings: settings.user_settings,
+        name: routine.as_ref().map(|r| r.tag.name.clone()),
+        desktop_tools: routine.as_ref().is_none_or(|r| r.desktop_tools),
     };
     let mut after = After::default();
     let result = {
@@ -1219,17 +1670,43 @@ pub async fn agent_start(
             json!({
                 "prompt": prompt, "cwd": request.cwd, "exe": exe, "model": model,
                 "maxTurns": launch.max_turns, "maxBudgetUsd": launch.max_budget_usd,
+                "routine": routine.as_ref().map(|r| json!({ "id": r.tag.id, "name": r.tag.name })),
+                "trigger": routine.as_ref().map(|r| r.tag.trigger),
+                "desktopTools": launch.desktop_tools,
             }),
         );
+        let mut run = Run::new(run_id.clone(), request.cwd, model, at);
+        run.routine = routine.as_ref().map(|r| r.tag.clone());
+        let patient = routine
+            .as_ref()
+            .is_some_and(|r| r.wait_for_me && r.tag.trigger == RoutineTrigger::Schedule);
         inner.slots.push(Slot {
-            run: Run::new(run_id.clone(), request.cwd, model, at),
+            run,
             token: audit::random_hex(16),
             launch,
             process: None,
             generation: 0,
             dir,
+            patient,
         });
-        let result = start_process(&app, &mut inner, &run_id, &prompt, &mut after);
+        if let Some(r) = inner
+            .routines
+            .get_mut(routine.as_ref().map_or("", |r| &r.tag.id))
+        {
+            r.last_run = Some(RoutineLastRun {
+                run_id: run_id.clone(),
+                trigger: routine
+                    .as_ref()
+                    .map_or(RoutineTrigger::Manual, |r| r.tag.trigger),
+                at_ms: at,
+                status: None,
+                reason: None,
+                cost_usd: None,
+            });
+            inner.routines.save();
+            after.routines_changed = true;
+        }
+        let result = start_process(app, &mut inner, &run_id, &prompt, &mut after);
         if let Err(e) = &result {
             log::warn!("agent run {run_id} didn't start: {e}");
             if let Some(slot) = inner.slot(&run_id) {
@@ -1245,10 +1722,10 @@ pub async fn agent_start(
         }
         result
     };
-    after.run(&app, &agents);
+    after.run(app, &agents);
     result?;
     log::info!("agent run {run_id} started");
-    Ok(AgentStarted { run_id })
+    Ok(run_id)
 }
 
 #[tauri::command]
@@ -1416,7 +1893,6 @@ pub fn debug_command(app: &AppHandle, args: &[String]) {
         let result: AppResult<String> = match arg(0).as_str() {
             "start" => agent_start(
                 app.clone(),
-                agents,
                 AgentStartRequest {
                     cwd: arg(1),
                     prompt: arg(2),
@@ -1524,6 +2000,27 @@ pub fn debug_command(app: &AppHandle, args: &[String]) {
                     None => Err(AppError::AgentInvalid("unknown tool".into())),
                 }
             }
+            // `routine list | save <draftJson> | run <id> | due <id> | delete <id> | pause on|off`. `due` fires it
+            // as its schedule would right now (same checks: paused, still running, the limit, the folder).
+            "routine" => match arg(1).as_str() {
+                "list" => Ok(serde_json::to_string(&agents.routines_payload()).unwrap_or_default()),
+                "save" => serde_json::from_str::<RoutineDraft>(&arg(2))
+                    .map_err(|e| AppError::AgentInvalid(e.to_string()))
+                    .and_then(|draft| routine_save(app.clone(), agents, draft))
+                    .map(|r| format!("saved {} {}", r.id, r.name)),
+                "run" => routine_run(app.clone(), arg(2))
+                    .await
+                    .map(|s| format!("routine run {}", s.run_id)),
+                "due" => debug_due(&app, &arg(2)),
+                "delete" => routine_delete(app.clone(), agents, arg(2)).map(|()| "deleted".into()),
+                "pause" => {
+                    set_routines_paused(&app, arg(2) != "off");
+                    Ok(format!("paused: {}", routines_paused(&app)))
+                }
+                other => Err(AppError::AgentInvalid(format!(
+                    "unknown routine command {other:?}"
+                ))),
+            },
             // A clean quit (tray "Quit TopBar" does the same), to check runs stop with it.
             "quit" => {
                 app.exit(0);
@@ -1538,4 +2035,61 @@ pub fn debug_command(app: &AppHandle, args: &[String]) {
             Err(e) => log::warn!("agent-test failed: {e}"),
         }
     });
+}
+
+/// Debug builds only: routine `id` is due now, as if its schedule said so.
+#[cfg(debug_assertions)]
+fn debug_due(app: &AppHandle, id: &str) -> AppResult<String> {
+    let agents = app.state::<Agents>();
+    let now = now_ms();
+    let why = {
+        let mut inner = agents.lock();
+        let r = inner
+            .routines
+            .get(id)
+            .cloned()
+            .ok_or_else(|| AppError::AgentInvalid("no such routine".into()))?;
+        let scheduled = inner
+            .slots
+            .iter()
+            .filter(|s| s.is_going())
+            .filter(|s| {
+                s.run
+                    .routine
+                    .as_ref()
+                    .is_some_and(|t| t.trigger == RoutineTrigger::Schedule)
+            })
+            .count();
+        let why = if inner.routines.file.paused {
+            Some(SkipReason::Paused)
+        } else if inner.running_run_of(id).is_some() {
+            Some(SkipReason::StillRunning)
+        } else if scheduled >= schedule::MAX_SCHEDULED {
+            Some(SkipReason::TooMany)
+        } else if !Path::new(&r.cwd).is_dir() {
+            Some(SkipReason::FolderMissing)
+        } else {
+            None
+        };
+        if let Some(why) = why {
+            inner.record_skip(id, now, why, now);
+            inner.routines.save();
+        }
+        why
+    };
+    if let Some(why) = why {
+        After {
+            routines_changed: true,
+            ..After::default()
+        }
+        .run(app, &agents);
+        return Ok(format!("skipped: {why:?}"));
+    }
+    let run_id = run_routine(app, id, RoutineTrigger::Schedule)?;
+    agents.lock().audit_routine(
+        "started",
+        json!({ "routine": id, "dueMs": now, "late": false, "runId": run_id,
+                "trigger": RoutineTrigger::Schedule, "debug": true }),
+    );
+    Ok(format!("scheduled run {run_id}"))
 }

@@ -12,9 +12,11 @@ use windows::Win32::Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVAT
 use windows::Win32::System::StationsAndDesktops::{
     CloseDesktop, OpenInputDesktop, DESKTOP_CONTROL_FLAGS, DESKTOP_READOBJECTS,
 };
+use windows::Win32::System::SystemInformation::GetTickCount;
 use windows::Win32::System::Threading::{
     GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
 };
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
 use windows::Win32::UI::WindowsAndMessaging::{
     GetAncestor, GetForegroundWindow, GetWindowRect, IsHungAppWindow, IsIconic, IsWindow, GA_ROOT,
 };
@@ -172,6 +174,21 @@ pub fn screen_locked() -> bool {
             Err(_) => true,
         }
     }
+}
+
+/// How long since your last mouse or keyboard input (TopBar's own injected input counts too).
+pub fn idle_ms() -> u64 {
+    let mut info = LASTINPUTINFO {
+        cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
+        dwTime: 0,
+    };
+    // SAFETY: fills our struct; `cbSize` is set.
+    if !unsafe { GetLastInputInfo(&mut info) }.as_bool() {
+        return 0;
+    }
+    // SAFETY: plain query. `dwTime` is the low 32 bits of the tick count, so compare in u32.
+    let now = unsafe { GetTickCount() };
+    u64::from(now.wrapping_sub(info.dwTime))
 }
 
 /// The visible frame (DWM's extended frame bounds), falling back to the window rect.

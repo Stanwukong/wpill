@@ -85,6 +85,11 @@ pub fn run() {
             agent::agent_pick_folder,
             agent::command_window_show,
             agent::command_window_hide,
+            agent::routines_list,
+            agent::routine_save,
+            agent::routine_delete,
+            agent::routine_run,
+            agent::routines_pause,
         ])
         .build(tauri::generate_context!())
         .expect("error while building TopBar")

@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { commands, errorMessage } from "../lib/ipc";
 import type { AgentApprovalActivity, AgentEntry, AgentEvent, AgentRun } from "../lib/types";
-import { RiskGlyph, StopGlyph } from "../features/agent/AgentGlyphs";
+import { ClockGlyph, RiskGlyph, StopGlyph } from "../features/agent/AgentGlyphs";
 import { endLabel, RISK_LABEL, runLabel } from "../features/agent/labels";
 import { decide, isLive, stopRun } from "../features/agent/useAgentRuns";
+import type { RoutineSeed } from "./routineLabels";
 import type { Transcript } from "./useTranscripts";
 
 type Decision = Extract<AgentEvent, { kind: "decision" }>;
@@ -20,12 +21,14 @@ export function RunView({
   run,
   transcript,
   focusTick,
+  onSaveAsRoutine,
 }: {
   runId: string;
   /** Missing for a moment right after the run starts (until `agent:runs` arrives). */
   run: AgentRun | undefined;
   transcript: Transcript | undefined;
   focusTick: number;
+  onSaveAsRoutine: (seed: RoutineSeed) => void;
 }) {
   const entries = transcript?.entries ?? [];
   const live = run ? isLive(run.status) : true;
@@ -51,7 +54,10 @@ export function RunView({
   return (
     <div className="run">
       <div className="run__head">
-        <span className="run__project">{run?.project ?? "Starting…"}</span>
+        <span className="run__project">
+          {run?.routine?.trigger === "schedule" && <ClockGlyph />}
+          {run ? (run.routine?.name ?? run.project) : "Starting…"}
+        </span>
         <span className="run__cwd" title={run?.cwd}>
           {run?.cwd}
         </span>
@@ -59,6 +65,22 @@ export function RunView({
           <span className="run__status" data-status={run.status}>
             {runLabel(run)}
           </span>
+        )}
+        {run && !live && !run.routine && (
+          <button
+            className="cmd-btn cmd-btn--quiet run__stop"
+            title="Save this task with a schedule"
+            onClick={() =>
+              onSaveAsRoutine({
+                // The run's prompt is shortened; the transcript has it whole.
+                prompt: entries.find((e): e is Extract<AgentEntry, { kind: "user" }> => e.kind === "user")?.text ?? run.prompt,
+                cwd: run.cwd,
+                model: run.model,
+              })
+            }
+          >
+            Save as routine
+          </button>
         )}
         {run && live && (
           <button className="cmd-btn cmd-btn--quiet run__stop" onClick={() => stopRun(runId)}>

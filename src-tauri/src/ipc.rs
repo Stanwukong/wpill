@@ -1,6 +1,6 @@
 //! IPC contract shared with `src/lib/ipc.ts` and `src/lib/types.ts`. Change both sides together.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub mod events {
     pub const HOVER_ENTER: &str = "island:hover-enter";
@@ -15,6 +15,7 @@ pub mod events {
     pub const AGENT_OUTPUT: &str = "agent:output";
     /// Sent to the `command` window only: which run to select when it opens.
     pub const COMMAND_FOCUS_RUN: &str = "command:focus-run";
+    pub const ROUTINES_CHANGED: &str = "routines:changed";
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -208,6 +209,8 @@ pub struct AgentApprovalActivity {
     pub desktop: bool,
     /// The full text an action would type or set, for the command window (the island shows `summary`).
     pub detail: Option<String>,
+    /// Set for a routine's run (2.7e): shown in place of `project`.
+    pub routine_name: Option<String>,
 }
 
 /// TopBar is acting on the desktop for a run (2.7d). Sticky and not interactive; withdrawn when the action ends.
@@ -234,11 +237,13 @@ pub enum AgentActingPhase {
 pub struct AgentFinishedActivity {
     pub run_id: String,
     pub project: String,
+    /// Set for a routine's run (2.7e): shown in place of `project`.
+    pub routine_name: Option<String>,
     pub status: AgentStatus,
     pub reason: Option<AgentEndReason>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum AgentStatus {
     Starting,
@@ -250,7 +255,7 @@ pub enum AgentStatus {
     Stopped,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum AgentEndReason {
     Completed,
@@ -292,6 +297,146 @@ pub struct AgentRun {
     pub error: Option<String>,
     pub started_at_ms: i64,
     pub updated_at_ms: i64,
+    /// The routine that started it (2.7e), if any.
+    pub routine: Option<AgentRunRoutine>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRunRoutine {
+    pub id: String,
+    pub name: String,
+    pub trigger: RoutineTrigger,
+}
+
+/// How a routine's run started: Run now, or its schedule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RoutineTrigger {
+    Manual,
+    Schedule,
+}
+
+/// When a routine runs by itself, while TopBar is running (2.7e). Times are local `HH:MM`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Schedule {
+    /// Only by hand.
+    Off,
+    /// At `time` on each of `days`.
+    Days { time: String, days: Vec<Weekday> },
+    /// Every `hours` hours (1–24), counted from `from` on the day the schedule was saved.
+    Every { hours: u32, from: String },
+    /// Two minutes after TopBar starts.
+    Start,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Weekday {
+    Mon,
+    Tue,
+    Wed,
+    Thu,
+    Fri,
+    Sat,
+    Sun,
+}
+
+/// A due time that passed while TopBar wasn't running or the PC slept: run once when back, or skip it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum IfMissed {
+    Once,
+    Skip,
+}
+
+/// Why a due time didn't start a run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SkipReason {
+    /// Missed (TopBar closed, asleep) and set to skip, or more than a day ago.
+    Missed,
+    Paused,
+    /// Its previous run hadn't ended.
+    StillRunning,
+    /// Two scheduled runs were already running.
+    TooMany,
+    FolderMissing,
+    StartFailed,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoutineLastRun {
+    pub run_id: String,
+    pub trigger: RoutineTrigger,
+    pub at_ms: i64,
+    /// `None` while it runs.
+    pub status: Option<AgentStatus>,
+    pub reason: Option<AgentEndReason>,
+    pub cost_usd: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoutineSkip {
+    pub at_ms: i64,
+    /// The due time that was skipped.
+    pub due_ms: i64,
+    pub why: SkipReason,
+}
+
+/// A saved instruction (2.7e), as stored in `routines.json` and sent to the command window.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Routine {
+    pub id: String,
+    pub name: String,
+    pub prompt: String,
+    /// Long-path normalised.
+    pub cwd: String,
+    pub model: Option<String>,
+    pub max_turns: u32,
+    /// Always set: routines have a budget.
+    pub max_budget_usd: f64,
+    pub claude_path: Option<String>,
+    pub schedule: Schedule,
+    /// The schedule is on (Run now works either way).
+    pub enabled: bool,
+    pub if_missed: IfMissed,
+    /// Scheduled runs: an approval's timeout is paused while you're away (locked, or no input for 5 min).
+    pub wait_for_me: bool,
+    /// TopBar's desktop looks and actions; off passes them in `--disallowedTools`.
+    pub desktop_tools: bool,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+    /// When the schedule was last set or turned on: due times before it don't count; anchors `every`.
+    pub schedule_since_ms: i64,
+    /// The latest due time handled (run or skipped).
+    pub last_due_ms: i64,
+    pub last_run: Option<RoutineLastRun>,
+    pub last_skip: Option<RoutineSkip>,
+}
+
+/// One routine in `routines:changed`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoutineView {
+    #[serde(flatten)]
+    pub routine: Routine,
+    /// When its schedule runs it next (`None`: off, disabled or paused).
+    pub next_run_at_ms: Option<i64>,
+    /// Its run going now, if any.
+    pub running_run_id: Option<String>,
+}
+
+/// `routines:changed` and `routines_list`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoutinesPayload {
+    pub routines: Vec<RoutineView>,
+    pub paused: bool,
 }
 
 /// One transcript entry: what the command window shows for a run.

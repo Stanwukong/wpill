@@ -12,6 +12,7 @@ use windows::Win32::System::Threading::{CREATE_NO_WINDOW, CREATE_SUSPENDED};
 
 use super::job::Job;
 use super::mcp::{APPROVE_TOOL, SERVER_NAME};
+use super::{actions, tools};
 
 /// A stdout line longer than this (a huge tool result) is skipped.
 const MAX_LINE: usize = 16 * 1024 * 1024;
@@ -54,6 +55,10 @@ pub struct Launch {
     pub resume: Option<String>,
     pub strict_mcp_config: bool,
     pub user_settings: bool,
+    /// Claude Code's display name for the session (a routine's name, 2.7e).
+    pub name: Option<String>,
+    /// TopBar's desktop looks and actions; off disallows them.
+    pub desktop_tools: bool,
 }
 
 /// The arguments after `claude.exe`. Never `bypassPermissions`: every prompt goes to `approve`.
@@ -82,8 +87,21 @@ pub fn args(l: &Launch, mcp_config: &Path) -> Vec<String> {
         a.push("project,local".into());
     }
     // Nobody can type an answer mid-run; Claude asks in its final message instead.
+    let mut disallowed = vec!["AskUserQuestion".to_string()];
+    if !l.desktop_tools {
+        disallowed.extend(
+            tools::NAMES
+                .iter()
+                .chain(actions::NAMES)
+                .map(|n| format!("mcp__{SERVER_NAME}__{n}")),
+        );
+    }
     a.push("--disallowedTools".into());
-    a.push("AskUserQuestion".into());
+    a.push(disallowed.join(","));
+    if let Some(name) = l.name.as_deref().filter(|n| !n.trim().is_empty()) {
+        a.push("--name".into());
+        a.push(name.trim().into());
+    }
     a.push("--max-turns".into());
     a.push(l.max_turns.max(1).to_string());
     if let Some(budget) = l.max_budget_usd.filter(|b| *b > 0.0) {
@@ -205,6 +223,8 @@ mod tests {
             resume: None,
             strict_mcp_config: true,
             user_settings: true,
+            name: None,
+            desktop_tools: true,
         }
     }
 
@@ -255,5 +275,24 @@ mod tests {
         assert!(has_pair(&a, "--setting-sources", "project,local"));
         assert!(has_pair(&a, "--resume", "sid"));
         assert!(has_pair(&a, "--max-turns", "1"));
+    }
+
+    #[test]
+    fn routines_name_the_session_and_can_drop_desktop_tools() {
+        let l = Launch {
+            name: Some("Tidy Downloads".into()),
+            desktop_tools: false,
+            ..launch()
+        };
+        let a = args(&l, Path::new("m.json"));
+        assert!(has_pair(&a, "--name", "Tidy Downloads"));
+        let i = a.iter().position(|x| x == "--disallowedTools").unwrap();
+        let list: Vec<&str> = a[i + 1].split(',').collect();
+        assert_eq!(list.len(), 1 + tools::NAMES.len() + actions::NAMES.len());
+        assert!(list.contains(&"AskUserQuestion"));
+        assert!(list.contains(&"mcp__topbar__screenshot"));
+        assert!(list.contains(&"mcp__topbar__type_text"));
+        // The approval tool is never disallowed.
+        assert!(!list.iter().any(|t| t.ends_with("approve")));
     }
 }

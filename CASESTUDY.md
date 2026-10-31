@@ -410,6 +410,48 @@ off the Allow button would abort every action); `GetLastInputInfo` polling (coun
 low-level hook (system-wide cost while idle); arbitrary `ShellExecute` targets (would bypass the shell tool's
 approvals).
 
+### D28: Routines are local, fresh runs on a small schedule TopBar owns (Phase 2.7e)
+*Why:* a routine is a saved instruction (name, prompt, folder, model, turns, budget, install) that runs from the
+command window in one click or on a schedule while TopBar runs. Claude Code's own scheduling doesn't fit: `/loop` and
+`CronCreate` live inside one open interactive session (in memory, idle-only, expiring after 7 days), and cloud
+routines run on Anthropic's servers against a repo clone, with no local folders, desktop or island approvals. So a
+routine run is an ordinary TopBar run started by `start_run`, the same path as a new task: same command line
+(`--permission-mode default`, the prompt tool), same island status, Stop, hotkey and audit. It adds `--name` with the
+routine's name and records `routine` and `trigger` in `AgentRun` and the audit's `start` line. Each run starts a fresh
+session: resuming yesterday's would carry a growing, stale history at full price (the cache has long expired), and a
+follow-up on a routine's run still resumes that run. Schedules are deliberately small: days at a time (covers daily
+and weekdays), every N hours (1–24), and at TopBar start (which, with launch at startup, also covers "after login");
+no cron syntax. `schedule.rs` is pure and tested with fake time zones: local times go through a `Zone` (Windows'
+`SystemTimeToTzSpecificLocalTime` in production), a time skipped by DST runs at the first minute after it, a repeated
+time runs once, and "every" counts real hours. One `agent-routines` thread sleeps until the next due time but never
+more than a minute, so sleep, resume and clock changes need no power-broadcast hook: a wall-clock jump of more than
+two minutes starts a two-minute settle period. A due time older than two minutes was missed; with "Run once when back"
+(the default) only the latest one runs, at most 24 h late and after the settle period, so a PC asleep all weekend
+never produces a burst. A routine still running when it's due again, more than two scheduled runs at once, a missing
+folder and "Pause routines" all skip that time and say why, on the routine's row and in `routines.jsonl`. Routines
+live in their own `routines.json`, which TopBar writes (temp file + rename); `settings.json` stays hand-edited.
+Saving resets the schedule's clock when the schedule changes or is turned on, so saving never runs a time that already
+passed.
+*Alternatives:* Windows Task Scheduler entries (run without TopBar, but then nothing shows status or answers
+approvals, and they outlive an uninstall); cron expressions (powerful, unreadable in a list); catching up every missed
+time (bursts after a holiday); resuming one long session per routine (context and cost growth, stale state); storing
+routines in `settings.json` (TopBar would rewrite a hand-edited file on every save, and `lastRun` churns).
+
+### D29: Unattended runs: approvals wait for you; nothing is pre-approved (Phase 2.7e)
+*Why:* a run at 03:00 hits approvals nobody answers, and they deny after 10 minutes. A per-routine allow list ticked
+when saving (`Bash:git`, edits) was weighed and rejected: it is exactly the pre-approval the goal rules out, and its
+scope drifts as the prompt or the folder changes. Instead, a scheduled routine's approvals are *patient* ("Approvals
+wait for me", on by default): while the screen is locked or there has been no input for 5 minutes, the agent timer
+pushes their deadline back by the time that passed, so the 10 minutes only run while you're there; a hard limit of
+12 h from asking still denies eventually. The approval itself is unchanged: the same sticky island notice (with the
+routine's name), Allow / Deny, and "for this run" where it was offered before. Desktop tools are off by default per
+routine (all eleven passed in `--disallowedTools`), since most routines are shell and file work and nobody is there
+to watch an action; when a routine allows them, each look and action is still approved one at a time and actions
+still wait for you to let go of the mouse and keyboard. Budgets are required for routines ($0.05–$20).
+*Alternatives:* leaving the timeout as is (a 03:00 run is always denied by 03:10); no timeout for routines (a run
+could hold a tool call for days); a per-routine allow list (pre-approval); disabling approvals' "for this run" in
+routine runs (unneeded: you still click it yourself).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -528,6 +570,17 @@ second, so `type_text` takes at most 500 and the guidance prefers `set_value`. *
 input" says nothing about what the app saw; read the result back (UIA or a screenshot) and try a second app before
 blaming either side.
 
+### C12: Driving routines from outside: arguments and a run that "finished" but was still running
+*Symptom:* `agent-test routine save '{…}'` from Windows PowerShell 5.1 failed with "key must be a string", then "EOF
+while parsing a string": PowerShell drops the inner double quotes when it passes a string to a native exe, and
+escaping them still split the JSON at spaces. Later a routine whose run had reported "done" was skipped as
+`stillRunning`. *Diagnosis:* the first is PowerShell's native argument passing (the same family as C7); Git Bash
+passes the argument whole. The second was real: Claude had started `sleep 90` with `run_in_background`, so
+`claude.exe` stayed alive after its `result` until the shell ended, and TopBar counts a run with a live process as
+going. *Fix:* the tests drive `agent-test` from Git Bash; the skip is correct (the process still holds the Job
+Object, and Stop is what ends it) and is listed as a known limitation. *Lesson:* "done" in the transcript and "no
+process" are different facts; scheduling decisions use the process.
+
 ### Still open
 - **Foreground-lock rules** in practice: the fallback chain is implemented but not yet exercised
   against elevated or minimized targets (manual test 7).
@@ -569,6 +622,7 @@ blaming either side.
 | 2026-10-30 | Stage 2.7c signed off: all 12 manual checks pass (window list, glow, UI tree, password field, covered window, island not captured, deny, for this run, gone/minimized/elevated, locked screen, audit, text sizes). |
 | 2026-10-31 | Stage 2.7d built: seven desktop actions, UI Automation first with `[n]` refs, one approval each, aborted by your input (D27); pointer badge, acting activity and acting glow (motion-designer). Verified with haiku runs; manual checklist pending. |
 | 2026-10-31 | Stage 2.7d signed off: all 12 manual checks pass (set a field, invoke behind, raw input, command window text, deny, abort, hands off, gone/elevated/locked, password and secrets, launch, audit, text sizes). Stage 2.7e kick-off prompt written. |
+| 2026-10-31 | Stage 2.7e built: routines saved in `routines.json`, run now or on a schedule by one Rust thread (D28), patient approvals and desktop tools off by default for unattended runs (D29), the routines list and editor in the command window (motion-designer). Verified from outside with haiku runs (run now, a schedule firing once, approval and deny, overlap, Stop and stop-all, pause, a missed time caught up once and one skipped, delete); manual checklist pending. |
 
 ## 7. Results & metrics
 

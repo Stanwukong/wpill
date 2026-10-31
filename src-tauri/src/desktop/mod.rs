@@ -31,7 +31,7 @@ use ::windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTI
 pub use guard::abort as abort_action;
 pub use logic::{LookError, Rect};
 pub use plan::{ActError, Action};
-pub use windows::{Target, WindowEntry};
+pub use windows::{idle_ms, screen_locked, Target, WindowEntry};
 
 use crate::win32;
 use tree::{Caps, Cut};

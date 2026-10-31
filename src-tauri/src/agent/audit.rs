@@ -12,6 +12,9 @@ use windows::Win32::Security::Cryptography::{BCryptGenRandom, BCRYPT_USE_SYSTEM_
 use super::describe::truncate;
 
 const KEEP: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+/// The routines trail; trimmed to its newer half once it passes `MAX_ROUTINES_LOG` (it's never 30 days old).
+const ROUTINES_LOG: &str = "routines.jsonl";
+const MAX_ROUTINES_LOG: u64 = 1024 * 1024;
 /// Tool input kept per line (a `Write` carries a whole file).
 const MAX_INPUT: usize = 4096;
 
@@ -30,7 +33,17 @@ impl Audit {
 
     /// Appends `{ at, run, kind, …fields }`. Failures are logged, never fatal.
     pub fn log(&self, run_id: &str, kind: &str, fields: Value) {
-        let mut line = json!({ "at": now_ms(), "run": run_id, "kind": kind });
+        let line = json!({ "at": now_ms(), "run": run_id, "kind": kind });
+        self.append(&format!("{run_id}.jsonl"), line, fields);
+    }
+
+    /// Appends `{ at, kind, …fields }` to `routines.jsonl`: routine due times run or skipped (2.7e).
+    pub fn log_routine(&self, kind: &str, fields: Value) {
+        let line = json!({ "at": now_ms(), "kind": kind });
+        self.append(ROUTINES_LOG, line, fields);
+    }
+
+    fn append(&self, name: &str, mut line: Value, fields: Value) {
         if let (Some(line), Value::Object(fields)) = (line.as_object_mut(), fields) {
             line.extend(fields);
         }
@@ -38,7 +51,7 @@ impl Audit {
             let mut file = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
-                .open(self.dir.join(format!("{run_id}.jsonl")))?;
+                .open(self.dir.join(name))?;
             writeln!(file, "{line}")
         });
         if let Err(e) = result {
@@ -60,6 +73,18 @@ impl Audit {
                 .is_ok_and(|t| t < cutoff);
             if old && path.extension().is_some_and(|e| e == "jsonl") {
                 let _ = std::fs::remove_file(&path);
+            }
+        }
+        let routines = self.dir.join(ROUTINES_LOG);
+        if std::fs::metadata(&routines).is_ok_and(|m| m.len() > MAX_ROUTINES_LOG) {
+            if let Ok(text) = std::fs::read_to_string(&routines) {
+                let lines: Vec<&str> = text.lines().collect();
+                let kept = lines[lines.len() / 2..].join(
+                    "
+",
+                ) + "
+";
+                let _ = std::fs::write(&routines, kept);
             }
         }
     }

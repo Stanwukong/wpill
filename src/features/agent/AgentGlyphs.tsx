@@ -10,6 +10,25 @@ export function StopGlyph() {
   );
 }
 
+/** A routine's run started by its schedule: a small clock (no hands moving; it's a label, not a timer). */
+export function ClockGlyph() {
+  return (
+    <svg
+      className="agent-clock"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="5.75" />
+      <path d="M8 5v3.25l2 1.25" />
+    </svg>
+  );
+}
+
 /** "Open in the command window". */
 export function ChevronGlyph() {
   return (

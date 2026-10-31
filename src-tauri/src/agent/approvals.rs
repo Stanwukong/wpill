@@ -18,6 +18,8 @@ use crate::ipc::{AgentApprovalActivity, AgentRisk};
 
 /// Grants kept per run at most (approved prompts whose call never came).
 const MAX_GRANTS: usize = 32;
+/// A patient approval (a scheduled routine's, 2.7e) is denied after this long however long you're away.
+pub const MAX_PATIENT_WAIT: Duration = Duration::from_secs(12 * 60 * 60);
 
 /// Where the answer goes: the bridge connection and the JSON-RPC id of its `tools/call`.
 #[derive(Debug, Clone, PartialEq)]
@@ -47,6 +49,10 @@ pub struct Request {
     pub target_pid: Option<u32>,
     /// For an action on an element: how it's named (`"Save"`), from the run's latest `ui_tree`.
     pub element: Option<String>,
+    /// The routine the run belongs to, shown in place of the project.
+    pub routine_name: Option<String>,
+    /// Its timeout pauses while you're away (a scheduled routine with "Approvals wait for me").
+    pub patient: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -60,6 +66,8 @@ pub struct Pending {
     pub target_pid: Option<u32>,
     key: Option<String>,
     deadline: Instant,
+    patient: bool,
+    asked_at: Instant,
 }
 
 #[derive(Debug)]
@@ -136,6 +144,7 @@ impl Approvals {
                 remember_as: key.as_deref().map(describe::remember_scope),
                 desktop,
                 detail: actions::detail(&req.tool, &req.input),
+                routine_name: req.routine_name,
             },
             input: req.input,
             reply: req.reply,
@@ -144,6 +153,8 @@ impl Approvals {
             target_pid: req.target_pid,
             key,
             deadline: now + timeout,
+            patient: req.patient,
+            asked_at: now,
         };
         self.pending.push(pending.clone());
         Asked::Waiting(pending)
@@ -197,6 +208,17 @@ impl Approvals {
             input: input.clone(),
             pid,
         });
+    }
+
+    /// You were away for `by`: patient requests get that much longer, up to `MAX_PATIENT_WAIT` after asking.
+    pub fn postpone(&mut self, by: Duration) {
+        for p in self.pending.iter_mut().filter(|p| p.patient) {
+            p.deadline = (p.deadline + by).min(p.asked_at + MAX_PATIENT_WAIT);
+        }
+    }
+
+    pub fn has_patient(&self) -> bool {
+        self.pending.iter().any(|p| p.patient)
     }
 
     /// Requests past their deadline (to deny).
@@ -264,6 +286,8 @@ mod tests {
             target: None,
             target_pid: None,
             element: None,
+            routine_name: None,
+            patient: false,
         }
     }
 
@@ -415,5 +439,37 @@ mod tests {
         let gone = a.drop_conn(2);
         assert_eq!(gone[0].activity.request_id, p2.activity.request_id);
         assert!(a.expired(now + TIMEOUT * 2).is_empty());
+    }
+
+    #[test]
+    fn patient_requests_wait_while_you_are_away() {
+        let mut a = Approvals::default();
+        let now = Instant::now();
+        let ask = |a: &mut Approvals, patient| {
+            let r = Request {
+                patient,
+                routine_name: Some("Tidy".into()),
+                ..req("r1", "Bash", json!({ "command": "rm x" }), 1)
+            };
+            waiting(a.ask(r, now, TIMEOUT))
+        };
+        let p = ask(&mut a, true);
+        assert_eq!(p.activity.routine_name.as_deref(), Some("Tidy"));
+        ask(&mut a, false);
+        assert!(a.has_patient());
+        // Away for an hour: only the patient one is still waiting after the usual timeout.
+        a.postpone(Duration::from_secs(3600));
+        let expired = a.expired(now + TIMEOUT);
+        assert_eq!(expired.len(), 1);
+        assert!(!expired[0].patient);
+        assert!(a
+            .expired(now + TIMEOUT + Duration::from_secs(3599))
+            .is_empty());
+        // Never past the hard limit.
+        a.postpone(Duration::from_secs(48 * 3600));
+        assert!(a
+            .expired(now + MAX_PATIENT_WAIT - Duration::from_secs(1))
+            .is_empty());
+        assert_eq!(a.expired(now + MAX_PATIENT_WAIT).len(), 1);
     }
 }

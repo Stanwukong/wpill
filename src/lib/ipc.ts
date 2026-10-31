@@ -10,6 +10,9 @@ import type {
   AgentRuns,
   AgentStartRequest,
   ActivityPayload,
+  Routine,
+  RoutineDraft,
+  Routines,
   AppError,
   ClaudeHooksStatus,
   ClaudeSessions,
@@ -30,6 +33,7 @@ const EVENTS = {
   agentRuns: "agent:runs",
   agentOutput: "agent:output",
   commandFocusRun: "command:focus-run",
+  routinesChanged: "routines:changed",
 } as const;
 
 /** Which island shape a reported rect measures. */
@@ -72,6 +76,13 @@ export const commands = {
   /** Opens (and focuses) the command window, optionally on one run. */
   commandWindowShow: (runId?: string) => invoke<void>("command_window_show", { runId: runId ?? null }),
   commandWindowHide: () => invoke<void>("command_window_hide"),
+  routinesList: () => invoke<Routines>("routines_list"),
+  /** Creates (no `id`) or edits a routine; errors `agentInvalid` with a message to show. */
+  routineSave: (routine: RoutineDraft) => invoke<Routine>("routine_save", { routine }),
+  routineDelete: (id: string) => invoke<void>("routine_delete", { id }),
+  /** Run now. Errors `agentInvalid` if it's already running. */
+  routineRun: (id: string) => invoke<{ runId: string }>("routine_run", { id }),
+  routinesPause: (paused: boolean) => invoke<void>("routines_pause", { paused }),
 };
 
 export const on = {
@@ -95,6 +106,8 @@ export const on = {
   /** Command window only: which run to show. */
   commandFocusRun: (cb: (runId: string) => void): Promise<UnlistenFn> =>
     listen<string>(EVENTS.commandFocusRun, (e) => cb(e.payload)),
+  routinesChanged: (cb: (payload: Routines) => void): Promise<UnlistenFn> =>
+    listen<Routines>(EVENTS.routinesChanged, (e) => cb(e.payload)),
 };
 
 /** Unsubscribes listeners registered with `on.*` (safe to call before they resolve). */
