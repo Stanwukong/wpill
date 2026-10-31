@@ -23,7 +23,8 @@ and never for the run, stopped by any input of yours, with all 12 manual checks 
 **Stage 2.7e is built (2026-10-31): routines (saved instructions run from the command window or on a schedule while
 TopBar runs), verified from outside with haiku runs; the manual check list below is pending.**
 See [Phase 2.7](#phase-27-local-automation-agent). **Next: sign off 2.7e**; then Phase 2.7 is complete and
-[Phase 4a](#phase-4a-release-readiness) (release readiness) is next.
+[Phase 4a](#phase-4a-release-readiness) (release readiness) is next, kick-off prompt
+[prompts/phase-4a-release-readiness.md](prompts/phase-4a-release-readiness.md).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -887,11 +888,14 @@ hook; deliberately not mixed in here).
 12. **Text size 100 / 120 / 150 %:** the approval activity and the command window fit; the island's click area matches.
 
 ### Phase 4a: release readiness
+Kick-off prompt: [prompts/phase-4a-release-readiness.md](prompts/phase-4a-release-readiness.md) (stages 4a-1 identity,
+4a-2 monitors and DPI, 4a-3 name and repo, 4a-4 signing, 4a-5 v0.2 release).
 - [ ] Own visual identity before a public release: replace the Claude Code look-alike spinner, `✻` mark and orange
       with TopBar's own working indicator and an amber accent from the femiajanaku palette. Prompt:
       [prompts/spinner-redesign.md](prompts/spinner-redesign.md)
 - [ ] Multi-monitor + per-monitor DPI: re-read geometry on `WM_DISPLAYCHANGE` / `WM_DPICHANGED` and
       reposition. Choose the island's monitor (primary by default)
+- [ ] Final name (bundle identifier, `%APPDATA%` migration), README, LICENSE, privacy note
 - [ ] Code signing (certificate or Azure Trusted Signing) wired into `tauri build`
 - [ ] Rerun the manual checklist; publish v0.2 installer
 
