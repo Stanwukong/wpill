@@ -20,11 +20,11 @@ the screen's edges while Claude looks, with all 12 manual checks passed.**
 **Phase 2.7d is complete (2026-10-31): seven desktop actions (`focus_window`, `invoke`, `set_value`, `click`,
 `type_text`, `press_keys`, `launch`), UI Automation first with `[n]` refs from `ui_tree`, each approved on its own
 and never for the run, stopped by any input of yours, with all 12 manual checks passed.**
-**Stage 2.7e is built (2026-10-31): routines (saved instructions run from the command window or on a schedule while
-TopBar runs), verified from outside with haiku runs; the manual check list below is pending.**
-See [Phase 2.7](#phase-27-local-automation-agent). **Next: sign off 2.7e**; then Phase 2.7 is complete and
-[Phase 4a](#phase-4a-release-readiness) (release readiness) is next, kick-off prompt
-[prompts/phase-4a-release-readiness.md](prompts/phase-4a-release-readiness.md).
+**Phase 2.7e is complete (2026-10-31): routines (saved instructions run from the command window or on a schedule while
+TopBar runs), with all 12 manual checks passed. Phase 2.7 is complete.**
+**Next: [Phase 4a](#phase-4a-release-readiness) (release readiness)**, kick-off prompt
+[prompts/phase-4a-release-readiness.md](prompts/phase-4a-release-readiness.md), starting with stage 4a-1 (own visual
+identity).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -568,7 +568,7 @@ restart any open Claude Code sessions)
 
 Only sessions that run on this machine and fire hooks are covered; claude.ai/code cloud sessions don't run here.
 
-### Phase 2.7: local automation agent
+### Phase 2.7: local automation agent (complete 2026-10-31)
 **Goal:** press a hotkey, type an instruction ("build the release installer and copy it to Drafts", "rename these
 screenshots by date", "open the PR page for this branch"), pick a folder, and walk away. TopBar runs a headless Claude
 Code session for it, the island shows it working, asks you to approve risky steps right there (Allow / Deny), and tells
@@ -798,7 +798,7 @@ folder, Notepad on a scratch file)
 11. **Audit:** the run's `.jsonl` has `act` lines with tool, target and result, and typed text only as `{chars, lines}`.
 12. **Text size 100 / 120 / 150 %:** the pointer badge, the acting activity and the pending card's text block fit.
 
-**Stage 2.7e: routines** (built 2026-10-31, manual check pending). Kick-off prompt:
+**Stage 2.7e: routines** (complete 2026-10-31). Kick-off prompt:
 [prompts/phase-2.7e-routines.md](prompts/phase-2.7e-routines.md). Decisions: CASESTUDY D28, D29.
 
 *Research at kick-off (2.1.123 / 2.1.159 / 2.1.314):* Claude Code's own scheduling doesn't cover this. `/loop` and
@@ -837,9 +837,9 @@ growing, stale history at full price.
       `missed` at once, "once" one caught up once 2 min after launch (`late: true`), no burst; deleted routines with
       schedules (gone from the file, nothing more fired); desktop tools off → Claude had no `list_windows`, nothing
       asked; the command window live with the routines list. 145 Rust tests pass
-- [ ] Manual check (below)
+- [x] Manual check (below): signed off 2026-10-31
 
-**Manual check (Phase 2.7e)** (`pnpm tauri dev` with `$env:RUST_LOG='info,topbar_lib=debug'`, model `haiku`, a scratch
+**Manual check (Phase 2.7e, signed off 2026-10-31)** (`pnpm tauri dev` with `$env:RUST_LOG='info,topbar_lib=debug'`, model `haiku`, a scratch
 folder)
 1. **Save as routine:** type a task in the command window, Save as routine: the editor opens prefilled; save it; it's
    listed with its schedule in words and "next in …".

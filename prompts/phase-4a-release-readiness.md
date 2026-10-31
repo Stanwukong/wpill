@@ -6,9 +6,7 @@ physical px), D8 (self-healing visibility), D10 and C5 (autostart registers the 
 window per monitor) and §7 (results and metrics). CLAUDE.md is loaded; follow its rules and Windows gotchas, above
 all rule 1 (Rust owns window state), the DPI / Text size gotcha and "Never use Tauri's `show()` on the island".
 
-Phase 2.7 is built through 2.7e (routines, committed 2026-10-31). **2.7e's manual check list (PLAN.md, 12 items) has
-not been run yet.** Before changing anything, ask me whether I've signed it off; if not, we run it together first and
-fix what fails, then mark 2.7e and Phase 2.7 complete in PLAN.md and CASESTUDY's timeline.
+Phase 2.7 (local automation agent, stages 2.7a–e) is complete; 2.7e (routines) was signed off on 2026-10-31.
 
 Goal: TopBar can be published as an open-source v0.2 that a stranger can install and trust: its own look (not Claude
 Code's), correct on any monitor setup and DPI, a final name, a signed installer, and a repo that explains itself.

@@ -623,6 +623,7 @@ process" are different facts; scheduling decisions use the process.
 | 2026-10-31 | Stage 2.7d built: seven desktop actions, UI Automation first with `[n]` refs, one approval each, aborted by your input (D27); pointer badge, acting activity and acting glow (motion-designer). Verified with haiku runs; manual checklist pending. |
 | 2026-10-31 | Stage 2.7d signed off: all 12 manual checks pass (set a field, invoke behind, raw input, command window text, deny, abort, hands off, gone/elevated/locked, password and secrets, launch, audit, text sizes). Stage 2.7e kick-off prompt written. |
 | 2026-10-31 | Stage 2.7e built: routines saved in `routines.json`, run now or on a schedule by one Rust thread (D28), patient approvals and desktop tools off by default for unattended runs (D29), the routines list and editor in the command window (motion-designer). Verified from outside with haiku runs (run now, a schedule firing once, approval and deny, overlap, Stop and stop-all, pause, a missed time caught up once and one skipped, delete); manual checklist pending. |
+| 2026-10-31 | Stage 2.7e signed off: all 12 manual checks pass (save as routine, run now, edit, schedule, approval, away, overlap, missed while closed, pause, stop, delete, text sizes). **Phase 2.7 complete.** Phase 4a (release readiness) starts. |
 
 ## 7. Results & metrics
 
