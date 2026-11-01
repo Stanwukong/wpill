@@ -42,6 +42,7 @@ pnpm typecheck              # tsc --noEmit
 .\src-tauri\target\debug\cay.exe agent-test decide <requestId> allow|deny [run]   # also: send, stop, stop-all, show, hide, quit
 .\src-tauri\target\debug\cay.exe agent-test look screenshot '{"hwnd":123}' C:\tmp\shot.png   # a desktop look without Claude (also list_windows, focused_window, ui_tree)
 .\src-tauri\target\debug\cay.exe agent-test act type_text '{"hwnd":123,"text":"hi"}'   # an action without Claude or approvals (no refs; real input: ask first)
+.\src-tauri\target\debug\cay.exe agent-test session-decide <requestId> allow|deny   # a terminal session's held permission request (2.8a; id in the log)
 .\src-tauri\target\debug\cay.exe agent-test routine list|save '<draftJson>'|run <id>|due <id>|delete <id>|pause on|off   # JSON args: from Git Bash (C12)
 ```
 
@@ -69,6 +70,9 @@ the drive once); `cargo clean --profile dev` when space runs low.
   per-user pipe + server loop, `process.rs` = ancestor chain/liveness, `protocol.rs` + `sessions.rs` + `hooks.rs`
   (settings.json merge) = pure and unit-tested, `focus.rs` = which window to bring forward, `mod.rs` = listener,
   commands and the tray's Connect/Disconnect dialog. It ignores hooks from sessions Cay itself started (`is_self`).
+  Permission requests (2.8a): `ask.rs` (pure: the held request, the reply, the hook output) and `asks.rs` (managed
+  `Asks`, the `claude-asks` pipe server, one thread per held request, `claudeApproval` cards).
+  `duplex.rs` = the duplex, multi-instance pipe shared by the agent pipe (`agent/pipe.rs` names it) and `claude/asks.rs`.
   `agent/` (Phase 2.7, headless Claude Code runs): `mod.rs` = managed `Agents`, pipe server + connection threads,
   approval flow, commands; `run.rs` = command line + spawn (suspended, `CREATE_NO_WINDOW`, Job Object via `job.rs`);
   `bridge.rs` = `cay.exe mcp` (run from `main.rs`, relays stdio JSON-RPC ↔ `pipe.rs`); `hotkey.rs`, `folder.rs`
@@ -94,7 +98,7 @@ the drive once); `cargo clean --profile dev` when space runs low.
 - Plugins (registered in `lib.rs`): `tauri-plugin-single-instance` (must stay first). Don't use
   `tauri-plugin-autostart`: it writes the exe path unquoted, which breaks for paths with spaces.
 - `prompts/`: kick-off prompts for starting a phase in a fresh session (one per phase, linked from PLAN.md;
-  currently 2.5, 2.6, 2.7, 2.7c, 2.7d, 2.7e and 4a, plus `spinner-redesign.md` for stage 4a-1).
+  currently 2.5, 2.6, 2.7, 2.7c, 2.7d, 2.7e, 4a and 2.8 (stages b–f), plus `spinner-redesign.md` for stage 4a-1).
   When a phase is signed off, write the next one so a new session can pick up without this conversation.
 - `src/`: `lib/ipc.ts` + `lib/types.ts`, `island/` (Island, Clock, hooks, `motion.ts`), `features/apps/`,
   `features/media/` (`useMedia` lives in `Island` so state survives the panel remounting; `MediaCard`, `PillMedia`, `useProgress`,
@@ -213,15 +217,24 @@ the drive once); `cargo clean --profile dev` when space runs low.
 - **Testing activities from outside without side effects:** toggle Caps Lock with SendInput and toggle it back; volume
   up N then down N; brightness via WMI `WmiSetBrightness` and restore; copy an image into the Screenshots folder (then
   delete it). Read `GWL_EXSTYLE` (`WS_EX_TRANSPARENT`) to check click-through.
-- **The hook forwarder must stay quiet and fast.** `cay.exe hook` runs before Tauri, never prints, never panics
-  (release is `panic = "abort"`, a non-zero exit shows as a hook error in Claude Code) and bounds every wait. Keep
+- **The hook forwarder must stay quiet and fast.** `cay.exe hook` runs before Tauri, never panics
+  (release is `panic = "abort"`, a non-zero exit shows as a hook error in Claude Code) and bounds every wait. The only
+  thing it ever prints is a `PermissionRequest` decision you made in the island (2.8a); with no decision it prints
+  nothing, so Claude Code asks as usual. Keep Cay's hold (`asks::HOLD`, 55 s) < the forwarder's wait (60 s) < the hook
+  entry's timeout (75 s), and never answer a request nobody clicked: timeouts, errors and Cay's own runs reply `pass`. Keep
   the hook entry in *shell form* with an explicit `shell`: Claude Code before 2.1.15x ignores the `args` exec form
   and would run a bare `cay.exe`, launching Cay. "Connect Claude Code…" records the exe that clicked it (as with
   autostart), so connect from the installed build.
 - **Testing Claude Code hooks without touching `~/.claude/settings.json`:** pipe hook JSON *files* into
   `target\debug\cay.exe hook` (shells mangle backslashes in inline JSON, C7), or run
   `claude -p "…" --settings <file with the hook entries>`. Never write the real settings in tests; `hooks.rs` tests
-  use a temp folder, and `CLAUDE_CONFIG_DIR` points the tray item at another folder.
+  use a temp folder, and `CLAUDE_CONFIG_DIR` points the tray item at another folder. Write hook JSON files with the
+  Write tool, not a Git Bash heredoc (it collapsed the doubled backslashes and the forwarder silently ignored the invalid
+  JSON). For `PermissionRequest` in `-p` mode use a recent Claude Code (2.1.314 under the VS Code extension runs it;
+  2.1.123 on PATH doesn't), a scratch folder and a command that really asks (`touch`, not `echo`).
+- **Editing Rust while `pnpm tauri dev` runs restarts Cay**, and a `cay.exe agent-test …` sent during the rebuild finds
+  no instance and starts a full Cay of its own; the dev build's relaunch then hands off to it and exits. Check
+  `Get-Process cay` before driving tests, and stop a stray instance.
 - **Agent runs never weaken permissions.** Cay always passes `--permission-mode default` and
   `--permission-prompt-tool mcp__cay__approve`; never `bypassPermissions` or `--dangerously-skip-permissions`, and
   never write the user's `~/.claude/settings.json` for a run (per-run files live under `%APPDATA%\io.github.stanwukong.cay\

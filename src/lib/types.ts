@@ -59,6 +59,22 @@ export interface ClaudeNeedsInputActivity {
 }
 
 export type AgentRisk = "read" | "change" | "input";
+
+/**
+ * A terminal session asks to use a tool (2.8a). Sticky: Rust withdraws it once you answer here or in the terminal,
+ * or after it hands the request back to the terminal. Allow / Deny only.
+ */
+export interface ClaudeApprovalActivity {
+  requestId: number;
+  /** The session's row (click to focus its window); `null` if Cay hasn't seen the session yet. */
+  sessionId: number | null;
+  project: string;
+  /** Display name, e.g. `Bash` or `github · create_issue`. */
+  tool: string;
+  /** One line: the command, the file, the host. */
+  summary: string;
+  risk: AgentRisk;
+}
 export type AgentStatus = "starting" | "working" | "waiting" | "done" | "failed" | "stopped";
 export type AgentEndReason = "completed" | "maxTurns" | "maxBudget" | "error" | "stopped";
 
@@ -116,6 +132,7 @@ export type Activity =
   | { kind: "screenshot"; payload: ScreenshotActivity }
   | { kind: "claudeDone"; payload: ClaudeDoneActivity }
   | { kind: "claudeNeedsInput"; payload: ClaudeNeedsInputActivity }
+  | { kind: "claudeApproval"; payload: ClaudeApprovalActivity }
   | { kind: "agentApproval"; payload: AgentApprovalActivity }
   | { kind: "agentActing"; payload: AgentActingActivity }
   | { kind: "agentFinished"; payload: AgentFinishedActivity };

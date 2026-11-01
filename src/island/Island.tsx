@@ -29,7 +29,9 @@ export function Island() {
   const claude =
     activity?.kind === "claudeDone" || activity?.kind === "agentFinished" || activity?.kind === "agentActing"
       ? "done"
-      : activity?.kind === "claudeNeedsInput" || activity?.kind === "agentApproval"
+      : activity?.kind === "claudeNeedsInput" ||
+          activity?.kind === "claudeApproval" ||
+          activity?.kind === "agentApproval"
         ? "needsInput"
         : undefined;
   const ref = useRef<HTMLDivElement>(null);
@@ -130,6 +132,7 @@ function activityKey(activity: ActivityPayload): string {
     return `activity-claude-${activity.payload.sessionId}`;
   }
   // Each approval is its own card (the next one crossfades in); the finished notice never morphs out of one.
+  if (activity.kind === "claudeApproval") return `activity-claude-approval-${activity.payload.requestId}`;
   if (activity.kind === "agentApproval") return `activity-agent-approval-${activity.payload.requestId}`;
   // Per run, so waiting → acting (same activity) updates in place.
   if (activity.kind === "agentActing") return `activity-agent-acting-${activity.payload.runId}`;

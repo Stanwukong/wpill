@@ -61,6 +61,8 @@ export const commands = {
   getClaudeSessions: () => invoke<ClaudeSessions>("get_claude_sessions"),
   /** Brings the session's terminal or editor to the front and acknowledges its activity. */
   claudeFocusSession: (sessionId: number) => invoke<void>("claude_focus_session", { sessionId }),
+  /** Answers a terminal session's permission request (2.8a). Errors `agentApprovalGone` once it's no longer held. */
+  claudeDecide: (requestId: number, answer: "allow" | "deny") => invoke<void>("claude_decide", { requestId, answer }),
   claudeHooksStatus: () => invoke<ClaudeHooksStatus>("claude_hooks_status"),
   claudeHooksInstall: () => invoke<void>("claude_hooks_install"),
   claudeHooksRemove: () => invoke<void>("claude_hooks_remove"),

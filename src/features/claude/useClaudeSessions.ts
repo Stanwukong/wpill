@@ -29,3 +29,8 @@ export function useClaudeSessions(): ClaudeSession[] {
 export function focusClaudeSession(sessionId: number) {
   commands.claudeFocusSession(sessionId).catch((err: unknown) => console.debug("claude focus", err));
 }
+
+/** Answers a terminal session's permission request (2.8a). Rust withdraws the card; rejects once it's gone. */
+export function decideClaude(requestId: number, answer: "allow" | "deny"): Promise<void> {
+  return commands.claudeDecide(requestId, answer);
+}

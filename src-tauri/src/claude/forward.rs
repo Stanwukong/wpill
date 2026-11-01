@@ -1,10 +1,14 @@
 //! `cay.exe hook`: run by Claude Code as a hook command. Reads the hook's JSON from stdin, keeps the few
 //! fields Cay uses, adds its ancestor chain, writes one message to the pipe and exits.
 //!
-//! It runs before Tauri (checked in `main.rs`), never prints, and always exits 0: if Cay isn't running
-//! the pipe doesn't exist and it returns at once. Every wait is bounded so a hook never hangs Claude Code.
+//! A `PermissionRequest` (2.8a) goes to the approval pipe instead and waits there for your answer in the island; the
+//! only thing the forwarder ever prints is that answer as hook output. With no answer (Cay closed, the request handed
+//! back, anything unexpected) it prints nothing and Claude Code asks in the terminal as usual.
+//!
+//! It runs before Tauri (checked in `main.rs`) and always exits 0: if Cay isn't running the pipe doesn't exist and it
+//! returns at once. Every wait is bounded so a hook never hangs Claude Code.
 
-use std::io::Read;
+use std::io::{Read, Write};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -16,7 +20,8 @@ use windows::Win32::Storage::FileSystem::{
 };
 use windows::Win32::System::Pipes::WaitNamedPipeW;
 
-use super::{pipe, process, protocol};
+use super::{ask, asks, pipe, process, protocol};
+use crate::duplex;
 use crate::win32::Handle;
 
 /// Hook input can carry Claude's whole last message; keep up to this much and discard the rest.
@@ -25,6 +30,9 @@ const STDIN_TIMEOUT: Duration = Duration::from_millis(1000);
 /// Total time to get past a busy pipe (another forwarder connected).
 const CONNECT_BUDGET: Duration = Duration::from_millis(1000);
 const BUSY_WAIT_MS: u32 = 200;
+/// How long to wait for your answer: a little longer than Cay holds a request (`asks::HOLD`), so its hand-back
+/// arrives first. The hook entry's own timeout is longer still (`hooks::EVENTS`).
+const ANSWER_TIMEOUT_MS: u32 = 60_000;
 
 pub fn run() {
     let at_ms = SystemTime::now()
@@ -33,7 +41,16 @@ pub fn run() {
     let Some(stdin) = read_stdin() else {
         return;
     };
-    let Some(envelope) = protocol::envelope(&stdin, at_ms, process::ancestors()) else {
+    let chain = process::ancestors();
+    if let Some(request) = ask::request(&stdin, at_ms, chain.clone()) {
+        if let Some(output) = hold(&request).and_then(ask::hook_output) {
+            let mut stdout = std::io::stdout().lock();
+            let _ = stdout.write_all(output.as_bytes());
+            let _ = stdout.flush();
+        }
+        return;
+    }
+    let Some(envelope) = protocol::envelope(&stdin, at_ms, chain) else {
         return;
     };
     let Ok(bytes) = serde_json::to_vec(&envelope) else {
@@ -44,6 +61,20 @@ pub fn run() {
     }
     if let Some(name) = pipe::name() {
         let _ = send(&name, &bytes);
+    }
+}
+
+/// Sends the request and waits for Cay's decision; `None` means no decision.
+fn hold(request: &ask::Request) -> Option<ask::Decision> {
+    let bytes = serde_json::to_vec(request).ok()?;
+    if bytes.len() > ask::MAX_REQUEST {
+        return None;
+    }
+    let pipe = duplex::Pipe::open(&asks::name()?).ok()?;
+    pipe.write(&bytes).ok()?;
+    match pipe.read(&[], ANSWER_TIMEOUT_MS).ok()? {
+        duplex::Read::Message(reply) => ask::decode_reply(&reply),
+        _ => None,
     }
 }
 

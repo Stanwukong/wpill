@@ -541,6 +541,53 @@ installer's SHA-256 and the README shows how to compare it.
 advantage since 2024, $400+ a year); waiting for SignPath or Certum before releasing (delays v0.2 for a warning that
 signing wouldn't remove yet).
 
+### D34 (proposed): Agent UX after a competitor survey; permission modes, but never bypass (Phase 2.8)
+*What:* a 2026-11-01 survey of comparable tools (Nook on Windows; Vibe Island, Open Island, Agent Notch, Notch, Vibe
+Notch, FavTray, Crest on macOS) found that all of them watch and approve terminal sessions of one or more coding CLIs,
+and none starts runs, has routines or gives the agent desktop tools. Their shared core, deciding from the island for a
+terminal session, is what Cay lacks: it only focuses the window. Phase 2.8 adds that, diffs and full commands on the
+card, questions and plans, a live step line and a Connect that previews its change. The author also asked for a
+permission-mode toggle like Claude Code's Shift+Tab: Ask → Accept edits → Plan, chosen per task and cycled from a chip
+on the island. *Why not bypass:* Claude Code itself hides `bypassPermissions` unless it's enabled by a flag, and Cay's
+rule that runs never weaken permissions behind the user's back stays; Accept edits is the user's explicit choice per
+run, covers file edits in the run's folder only, and leaves desktop tools, shell, web and MCP asking. Routines stay at
+Ask (D29). *Skipped:* keyboard approval (the author's call; it would also need global hotkeys while a card shows,
+since the island is never activated), mascots, sound packs and widget shelves (they clash with the minimal look).
+
+### D35 (proposed): Google Calendar and Gmail through Cay's own Google sign-in (Phase 6)
+*What:* upcoming events and tasks in the island (the Google Calendar icon in the pill while something is pending) and
+Gmail/Calendar tools for agent runs, "out of the box". *Why Cay's own OAuth client:* the pill needs the data in Cay
+itself, not inside a Claude session, and tools served by `cay.exe mcp` work for every backend (2.9) and go through
+Cay's approvals. A desktop client with PKCE and a loopback redirect needs no server, so data only goes from Google to
+the PC. *Costs:* Calendar and Tasks scopes need Google's verification; Gmail's read/compose scopes are restricted and
+may need a yearly security assessment, so Gmail comes last and stays opt-in (drafts only, never send). *Alternatives:*
+Google's official Workspace MCP servers (developer preview, and each user needs their own Cloud project and OAuth
+client: not out of the box); the claude.ai Gmail/Calendar connectors (no work for Cay and kept as a day-one switch for
+Claude Code runs, but they can't feed the pill and don't reach other agents); the calendar's iCal secret address
+(no sign-in, kept as a fallback, but read-only and without tasks); Windows' `AppointmentStore` (fed by the old Mail and
+Calendar app, which the new Outlook replaced; likely empty on current machines, not checked). *Icon:* Google's API brand guidance allows showing a product's icon for an
+integration without asking, unaltered; Cay's own mark stays separate.
+
+### D36: Terminal sessions' permission requests are held on their own pipe and never decided without a click (Phase 2.8a)
+*What:* a `PermissionRequest` hook (sync, 75 s) makes `cay.exe hook` send the tool and its input to a second per-user
+pipe, `cay-claude-ask-<SID>`, and wait for the answer, which it prints as the hook's `decision`. Cay shows a
+`claudeApproval` card and holds the request until the first of: your Allow / Deny, the forwarder going away (answered in
+the terminal), the session moving on, Cay shutting down, or 55 s. Only the click decides; every other ending replies
+`pass`, the forwarder prints nothing, and Claude Code's own prompt decides, exactly as without Cay. Started at the
+author's call ahead of the v0.2 release (4a-5), which resumes after 2.8. *Why a second pipe:* the hook pipe is
+inbound-only with one instance and one message per connection, so a held request would block every other hook. The
+agent pipe's duplex, multi-instance code moved to `duplex.rs` and now serves both. *Why `pass` and not deny on
+timeout:* a request you never saw must not be refused for you, and an allow would be worse; handing it back costs a
+terminal prompt at most. *Why no "for this run":* the terminal session belongs to Claude Code and its settings; Cay
+widening it would be a permission change behind the user's back (`updatedPermissions` is never sent). *Requests from
+Cay's own agent runs* pass at once: they also fire the hook, and with `--permission-prompt-tool` "whichever decides
+first applies", so holding them would race Cay's own approval. *Not held yet:* `AskUserQuestion` and `ExitPlanMode`,
+whose allow must carry the answer in `updatedInput` (2.8c). *Connect:* an install without the new entry counts as not
+connected, so the tray offers Connect to update it. *Alternatives:* holding on the existing pipe (blocks other hooks);
+a `PreToolUse` hook (fires for every tool, including those that never ask); auto-deny on timeout (FavTray hands back
+too). *Checked:* forwarder fed hook files for allow, deny and a killed forwarder, and a real `claude -p` run (2.1.314)
+that waited for Cay and ran its command. Claude Code 2.1.123 never ran the hook in `-p` mode.
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -725,6 +772,7 @@ needs the same DPI awareness as the app it measures, or it reports a consistent 
 | 2026-11-01 | Stage 4a-2: the island follows display changes (D31): the poller re-reads the primary monitor every 250 ms and re-places the island; `monitor:changed` makes React measure again. Verified at 100/125/150 %, a temporary 1280×720 and a fullscreen window (C13); the dock check is the user's. |
 | 2026-11-01 | Stage 4a-3: renamed **Cay** (D32) after name checks; MIT licence; README with install, privacy and agent-safety sections; one-time migration of TopBar's data, startup entry and hooks. Verified with the dev build (41 files copied, a haiku run approved through `mcp__cay__approve`). |
 | 2026-11-01 | Name kept although `cay.app` / `cay.dev` are taken. Stage 4a-4 decided: v0.2 ships unsigned with a published SHA-256 (D33); signing from v0.3 (Certum Open Source or SignPath). |
+| 2026-11-01 | 4a-5 (v0.2) set aside at the author's call to start Phase 2.8 (D34). Stage 2.8a: terminal sessions' permission requests answered from the island (D36), checked with a real `claude -p` run, then signed off by hand. Kick-off prompt for 2.8b–f written. |
 
 ## 7. Results & metrics
 

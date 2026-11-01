@@ -1,12 +1,12 @@
 import { useState } from "react";
-import type { AgentApprovalActivity } from "../../lib/types";
+import type { AgentApprovalActivity, AgentRisk } from "../../lib/types";
 import { ChevronGlyph, RiskGlyph } from "../agent/AgentGlyphs";
 import { RISK_LABEL } from "../agent/labels";
 import { decide, openRun } from "../agent/useAgentRuns";
 import { AgentMark } from "../claude/WorkingGlyphs";
 import "../agent/agent.css";
 
-type Choice = "allow" | "deny" | "run";
+export type ApprovalChoice = "allow" | "deny" | "run";
 
 /**
  * An agent run asks to use a tool: mark · project (or routine) · tool · risk, the command or path on its own line (click it for
@@ -15,9 +15,9 @@ type Choice = "allow" | "deny" | "run";
  */
 export function AgentApproval({ approval }: { approval: AgentApprovalActivity }) {
   const { requestId, runId, project, routineName, tool, summary, risk, rememberAs, desktop } = approval;
-  const [chosen, setChosen] = useState<Choice | null>(null);
+  const [chosen, setChosen] = useState<ApprovalChoice | null>(null);
 
-  const answer = (choice: Choice) => {
+  const answer = (choice: ApprovalChoice) => {
     setChosen(choice);
     decide(requestId, choice === "deny" ? "deny" : "allow", choice === "run" ? "run" : "once").catch(
       (err: unknown) => {
@@ -26,6 +26,53 @@ export function AgentApproval({ approval }: { approval: AgentApprovalActivity })
       },
     );
   };
+
+  return (
+    <ApprovalCard
+      title={routineName ?? project}
+      tool={tool}
+      risk={risk}
+      desktop={desktop}
+      summary={summary}
+      summaryHint="Details"
+      onSummary={() => openRun(runId)}
+      rememberAs={rememberAs}
+      chosen={chosen}
+      onAnswer={answer}
+    />
+  );
+}
+
+/**
+ * The approval card both kinds share (agent runs and terminal sessions, 2.8a). Presentational: the caller owns the
+ * pending choice and what a click does. `origin` is a quiet word after the title that tells the kinds apart;
+ * without `onSummary` the summary is plain text.
+ */
+export function ApprovalCard({
+  title,
+  origin,
+  tool,
+  risk,
+  desktop,
+  summary,
+  summaryHint,
+  onSummary,
+  rememberAs,
+  chosen,
+  onAnswer,
+}: {
+  title: string;
+  origin?: string;
+  tool: string;
+  risk: AgentRisk;
+  desktop: boolean;
+  summary: string;
+  summaryHint?: string;
+  onSummary?: () => void;
+  rememberAs?: string | null;
+  chosen: ApprovalChoice | null;
+  onAnswer: (choice: ApprovalChoice) => void;
+}) {
   const busy = chosen !== null;
 
   return (
@@ -33,7 +80,8 @@ export function AgentApproval({ approval }: { approval: AgentApprovalActivity })
       <div className="approval__head">
         <AgentMark />
         <span className="approval__title">
-          <span className="activity__title">{routineName ?? project}</span>
+          <span className="activity__title">{title}</span>
+          {origin && <span className="approval__origin">{origin}</span>}
           <span className="approval__tool">{tool}</span>
         </span>
         <span className="agent-risk" data-risk={risk}>
@@ -41,13 +89,23 @@ export function AgentApproval({ approval }: { approval: AgentApprovalActivity })
           {RISK_LABEL[risk]}
         </span>
       </div>
-      <button className="approval__summary" title={`${summary}\nDetails`} onClick={() => openRun(runId)}>
-        <span className="approval__command">{summary}</span>
-        <ChevronGlyph />
-      </button>
+      {onSummary ? (
+        <button
+          className="approval__summary"
+          title={summaryHint ? `${summary}\n${summaryHint}` : summary}
+          onClick={onSummary}
+        >
+          <span className="approval__command">{summary}</span>
+          <ChevronGlyph />
+        </button>
+      ) : (
+        <div className="approval__summary" data-static="true" title={summary}>
+          <span className="approval__command">{summary}</span>
+        </div>
+      )}
       <div className="approval__actions">
         {rememberAs && (
-          <button className="agent-link" disabled={busy} data-chosen={chosen === "run"} onClick={() => answer("run")}>
+          <button className="agent-link" disabled={busy} data-chosen={chosen === "run"} onClick={() => onAnswer("run")}>
             Allow {rememberAs} for this run
           </button>
         )}
@@ -56,7 +114,7 @@ export function AgentApproval({ approval }: { approval: AgentApprovalActivity })
             className="agent-btn agent-btn--quiet"
             disabled={busy}
             data-chosen={chosen === "deny"}
-            onClick={() => answer("deny")}
+            onClick={() => onAnswer("deny")}
           >
             Deny
           </button>
@@ -64,7 +122,7 @@ export function AgentApproval({ approval }: { approval: AgentApprovalActivity })
             className="agent-btn agent-btn--allow"
             disabled={busy}
             data-chosen={chosen === "allow"}
-            onClick={() => answer("allow")}
+            onClick={() => onAnswer("allow")}
           >
             Allow
           </button>

@@ -140,18 +140,23 @@ pub fn decode(bytes: &[u8]) -> Option<Message> {
     })
 }
 
-fn check(e: &Envelope) -> Option<Event> {
-    let id_ok = !e.session_id.is_empty()
-        && e.session_id.len() <= MAX_SESSION_ID
-        && e.session_id
+/// The checks every pipe message shares (`ask.rs` too): a plain session id, a one-line folder, a short chain.
+pub fn origin_ok(session_id: &str, cwd: &str, chain: &[Proc], at_ms: i64) -> bool {
+    let id_ok = !session_id.is_empty()
+        && session_id.len() <= MAX_SESSION_ID
+        && session_id
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
-    let cwd_ok = e.cwd.len() <= MAX_CWD && !e.cwd.chars().any(char::is_control);
-    let chain_ok = e.chain.len() <= MAX_CHAIN
-        && e.chain
+    let cwd_ok = cwd.len() <= MAX_CWD && !cwd.chars().any(char::is_control);
+    let chain_ok = chain.len() <= MAX_CHAIN
+        && chain
             .iter()
             .all(|p| !p.exe.is_empty() && p.exe.len() <= MAX_EXE);
-    if e.v != VERSION || !id_ok || !cwd_ok || !chain_ok || e.at_ms <= 0 {
+    id_ok && cwd_ok && chain_ok && at_ms > 0
+}
+
+fn check(e: &Envelope) -> Option<Event> {
+    if e.v != VERSION || !origin_ok(&e.session_id, &e.cwd, &e.chain, e.at_ms) {
         return None;
     }
     event_of(

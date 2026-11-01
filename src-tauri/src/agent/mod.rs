@@ -56,9 +56,9 @@ use crate::desktop::{self, refs::Refs};
 use crate::error::{AppError, AppResult};
 use crate::ipc::{
     events, Activity, AgentActingActivity, AgentActingPhase, AgentEntry, AgentEvent,
-    AgentFinishedActivity, AgentOptions, AgentOutputPayload, AgentRunRoutine, AgentRunsPayload,
-    AgentStarted, AgentStatus, ClaudeInstall, Routine, RoutineLastRun, RoutineSkip, RoutineTrigger,
-    RoutineView, RoutinesPayload, SkipReason,
+    AgentFinishedActivity, AgentOptions, AgentOutputPayload, AgentRisk, AgentRunRoutine,
+    AgentRunsPayload, AgentStarted, AgentStatus, ClaudeInstall, Routine, RoutineLastRun,
+    RoutineSkip, RoutineTrigger, RoutineView, RoutinesPayload, SkipReason,
 };
 use crate::win32::Handle;
 use crate::window::{self, glow};
@@ -84,6 +84,15 @@ const AWAY_IDLE_MS: u64 = 5 * 60_000;
 /// `cay.exe mcp`: `main.rs` calls this before anything else starts.
 pub fn mcp_bridge() -> i32 {
     bridge::run()
+}
+
+/// How an approval reads (display name, one-line summary, risk), shared with terminal sessions' requests (2.8a).
+pub fn describe_tool(tool: &str, input: &Value, cwd: &str) -> (String, String, AgentRisk) {
+    (
+        describe::display_tool(tool),
+        describe::summary(tool, input, cwd),
+        describe::risk(tool),
+    )
 }
 
 struct Slot {
@@ -516,7 +525,7 @@ pub fn spawn(app: &AppHandle, activities: &Activities) {
 }
 
 fn start_server(app: AppHandle, stop: Arc<Handle>) -> AppResult<Watcher> {
-    let first = pipe::Pipe::create(true)?;
+    let first = pipe::create(true)?;
     let signal = stop.clone();
     Watcher::spawn(
         "agent-server",
@@ -524,7 +533,7 @@ fn start_server(app: AppHandle, stop: Arc<Handle>) -> AppResult<Watcher> {
             log::info!("agent pipe ready");
             let mut next = Some(first);
             loop {
-                let instance = match next.take().map_or_else(|| pipe::Pipe::create(false), Ok) {
+                let instance = match next.take().map_or_else(|| pipe::create(false), Ok) {
                     Ok(instance) => instance,
                     Err(e) => {
                         log::warn!("agent pipe stopped: {e}");
@@ -1922,6 +1931,11 @@ pub fn debug_command(app: &AppHandle, args: &[String]) {
                 },
             )
             .map(|()| "decided".into()),
+            // A terminal session's permission request (2.8a); its id is in the `permission request <id>` log line.
+            "session-decide" => {
+                crate::claude::decide_for_test(&app, arg(1).parse().unwrap_or(0), arg(2) == "allow")
+                    .map(|()| "decided".into())
+            }
             "send" => agent_send(app.clone(), agents, arg(1), arg(2))
                 .await
                 .map(|()| "sent".into()),

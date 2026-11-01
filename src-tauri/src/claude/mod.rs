@@ -4,7 +4,12 @@
 //! named pipe. The `claude-listener` thread (`pipe.rs`, started through the activity `Watcher` harness)
 //! keeps session state (`sessions.rs`), offers and withdraws activities on the shared activity channel,
 //! and emits `claude:sessions` for the panel. `hooks.rs` installs the hooks from the tray.
+//!
+//! Permission requests (2.8a) have their own pipe: the forwarder holds each one open until you answer it in the
+//! island or it's handed back to the terminal (`ask.rs` on the wire, `asks.rs` in Cay).
 
+mod ask;
+mod asks;
 mod focus;
 mod forward;
 mod hooks;
@@ -33,6 +38,8 @@ use crate::hover::Island;
 use crate::ipc::{events, ClaudeHooksStatus, ClaudeSessionsPayload};
 use crate::win32::Handle;
 use crate::{apps, win32, window};
+pub use asks::Asks;
+use protocol::Event;
 use sessions::{Effect, Session, Sessions};
 
 /// With no client, the listener wakes this often to drop sessions whose process is gone.
@@ -61,6 +68,14 @@ impl Claude {
         self.lock().iter().find(|s| s.id == id).cloned()
     }
 
+    /// Our id for Claude Code's session id, if the listener has seen that session.
+    fn row_of(&self, claude_id: &str) -> Option<u32> {
+        self.lock()
+            .iter()
+            .find(|s| s.claude_id() == claude_id)
+            .map(|s| s.id)
+    }
+
     fn payload(&self) -> ClaudeSessionsPayload {
         ClaudeSessionsPayload {
             sessions: sessions::snapshot(&self.lock()),
@@ -78,6 +93,10 @@ pub fn spawn(app: &AppHandle, activities: &Activities) {
     match start(app.clone(), activities.sender()) {
         Ok(watcher) => activities.add_watcher(watcher),
         Err(e) => log::warn!("Claude Code activities unavailable: {e}"),
+    }
+    match asks::start(app.clone(), activities.sender()) {
+        Ok(watcher) => activities.add_watcher(watcher),
+        Err(e) => log::warn!("Claude Code permission requests unavailable: {e}"),
     }
 }
 
@@ -124,7 +143,24 @@ fn listen(app: &AppHandle, out: &Sender<Signal>, server: &pipe::Server, stop: &H
                         msg.event,
                         sessions::project(&msg.cwd)
                     );
+                    let asks = app.state::<Asks>();
+                    let held = asks.holds_for(&msg.session);
+                    let event = msg.event;
+                    match event {
+                        Event::Prompt
+                        | Event::Stop
+                        | Event::StopFailure
+                        | Event::SessionEnd
+                        | Event::SessionStart { compact: false } => {
+                            asks.release_session(&msg.session)
+                        }
+                        _ => {}
+                    }
                     (changed, effects) = sessions.apply(msg);
+                    // The island's card already asks; a second "needs input" would repeat it.
+                    if held && event == Event::NeedsInput {
+                        effects.retain(|e| !matches!(e, Effect::Offer(_)));
+                    }
                 }
                 None => log::debug!("ignored a malformed Claude Code message"),
             },
@@ -191,6 +227,24 @@ pub fn claude_focus_session(
     apps::bring_to_front(win32::from_raw(hwnd))?;
     island.request_collapse();
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Answer {
+    Allow,
+    Deny,
+}
+
+#[tauri::command]
+/// Your answer to a terminal session's permission request (2.8a). The request's thread replies and withdraws the card.
+pub fn claude_decide(app: AppHandle, request_id: u32, answer: Answer) -> AppResult<()> {
+    asks::decide(&app, request_id, matches!(answer, Answer::Allow))
+}
+
+/// `agent-test session-decide <requestId> allow|deny` (debug builds).
+pub fn decide_for_test(app: &AppHandle, request_id: u32, allow: bool) -> AppResult<()> {
+    asks::decide(app, request_id, allow)
 }
 
 #[tauri::command]

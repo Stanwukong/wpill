@@ -13,18 +13,39 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Map, Value};
 
-/// The hooks we register, and whether each runs in the background.
-pub const EVENTS: [(&str, bool); 7] = [
-    ("SessionStart", true),
-    ("UserPromptSubmit", true),
-    ("PostToolUse", true),
-    ("Notification", true),
-    ("Stop", true),
-    ("StopFailure", true),
+/// How Claude Code runs one of our hooks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Run {
+    /// In the background (`async`); Claude Code doesn't wait.
+    Background,
+    /// Claude Code waits, briefly.
+    Wait,
+    /// Claude Code waits for your answer in the island (2.8a): longer than the forwarder's own bound
+    /// (`forward::ANSWER_TIMEOUT_MS`), so the forwarder always ends first and never shows as a hook error.
+    Hold,
+}
+
+impl Run {
+    fn timeout_secs(self) -> u64 {
+        match self {
+            Run::Background | Run::Wait => 5,
+            Run::Hold => 75,
+        }
+    }
+}
+
+/// The hooks we register, and how each runs.
+pub const EVENTS: [(&str, Run); 8] = [
+    ("SessionStart", Run::Background),
+    ("UserPromptSubmit", Run::Background),
+    ("PostToolUse", Run::Background),
+    ("Notification", Run::Background),
+    ("Stop", Run::Background),
+    ("StopFailure", Run::Background),
     // At exit, in case Claude Code doesn't wait for background hooks.
-    ("SessionEnd", false),
+    ("SessionEnd", Run::Wait),
+    ("PermissionRequest", Run::Hold),
 ];
-const TIMEOUT_SECS: u64 = 5;
 const MARKER: &str = "cay.exe' hook";
 /// Cay was called TopBar until Phase 4a-3 (D32). Its entries are still ours to replace and remove, but they don't
 /// count as connected: they point at the old exe and pipe, so the tray offers Connect again.
@@ -48,7 +69,7 @@ pub fn command(exe: &Path, shell: Shell) -> String {
 }
 
 /// One matcher group (no matcher: every occurrence) holding our hook.
-pub fn group(command: &str, shell: Shell, background: bool) -> Value {
+pub fn group(command: &str, shell: Shell, run: Run) -> Value {
     let mut hook = Map::new();
     hook.insert("type".into(), json!("command"));
     hook.insert("command".into(), json!(command));
@@ -59,10 +80,10 @@ pub fn group(command: &str, shell: Shell, background: bool) -> Value {
             Shell::PowerShell => "powershell",
         }),
     );
-    if background {
+    if run == Run::Background {
         hook.insert("async".into(), json!(true));
     }
-    hook.insert("timeout".into(), json!(TIMEOUT_SECS));
+    hook.insert("timeout".into(), json!(run.timeout_secs()));
     json!({ "hooks": [Value::Object(hook)] })
 }
 
@@ -82,20 +103,23 @@ fn is_ours(hook: &Value) -> bool {
     runs(hook, MARKER) || runs(hook, OLD_MARKER)
 }
 
-/// Connected: at least one entry runs Cay (old TopBar entries alone don't count).
+/// Connected: every event we register has an entry that runs Cay. Old TopBar entries don't count, and nor does an
+/// install from before an event was added (2.8a's `PermissionRequest`), so the tray offers Connect to bring it up to
+/// date.
 pub fn installed(settings: &Value) -> bool {
-    settings
-        .get("hooks")
-        .and_then(Value::as_object)
-        .is_some_and(|events| {
-            events
-                .values()
-                .filter_map(Value::as_array)
-                .flatten()
-                .filter_map(|g| g.get("hooks").and_then(Value::as_array))
-                .flatten()
-                .any(|h| runs(h, MARKER))
-        })
+    let Some(events) = settings.get("hooks").and_then(Value::as_object) else {
+        return false;
+    };
+    EVENTS.iter().all(|(event, _)| {
+        events
+            .get(*event)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|g| g.get("hooks").and_then(Value::as_array))
+            .flatten()
+            .any(|h| runs(h, MARKER))
+    })
 }
 
 /// `settings` with any previous Cay hooks replaced by fresh ones.
@@ -109,13 +133,13 @@ pub fn with_hooks(settings: Value, command: &str, shell: Shell) -> Result<Value,
         .or_insert_with(|| Value::Object(Map::new()))
         .as_object_mut()
         .ok_or("\"hooks\" isn't an object")?;
-    for (event, background) in EVENTS {
+    for (event, run) in EVENTS {
         events
             .entry(event)
             .or_insert_with(|| Value::Array(Vec::new()))
             .as_array_mut()
             .ok_or_else(|| format!("\"hooks.{event}\" isn't a list"))?
-            .push(group(command, shell, background));
+            .push(group(command, shell, run));
     }
     Ok(settings)
 }
@@ -159,15 +183,18 @@ pub fn without_hooks(mut settings: Value) -> Result<Value, String> {
 /// What the confirmation dialog shows: exactly what gets added.
 pub fn preview(command: &str, shell: Shell) -> String {
     let pretty = |v: &Value| serde_json::to_string_pretty(v).unwrap_or_default();
-    let background: Vec<&str> = EVENTS.iter().filter(|e| e.1).map(|e| e.0).collect();
-    let foreground: Vec<&str> = EVENTS.iter().filter(|e| !e.1).map(|e| e.0).collect();
-    format!(
-        "{}:\n{}\n\n{}:\n{}",
-        background.join(", "),
-        pretty(&group(command, shell, true)),
-        foreground.join(", "),
-        pretty(&group(command, shell, false)),
-    )
+    [Run::Background, Run::Wait, Run::Hold]
+        .into_iter()
+        .map(|run| {
+            let events: Vec<&str> = EVENTS.iter().filter(|e| e.1 == run).map(|e| e.0).collect();
+            format!(
+                "{}:\n{}",
+                events.join(", "),
+                pretty(&group(command, shell, run))
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
 }
 
 /// `%CLAUDE_CONFIG_DIR%\settings.json`, else `%USERPROFILE%\.claude\settings.json`.
@@ -299,15 +326,35 @@ mod tests {
             "say done"
         );
         assert_eq!(merged["hooks"]["PreToolUse"][0]["matcher"], "Bash");
-        for (event, background) in EVENTS {
+        for (event, run) in EVENTS {
             assert_eq!(ours_in(&merged, event), 1, "{event}");
             let ours = merged["hooks"][event].as_array().unwrap().last().unwrap();
             assert_eq!(ours["hooks"][0]["shell"], "bash");
-            assert_eq!(ours["hooks"][0]["timeout"], TIMEOUT_SECS);
-            assert_eq!(ours["hooks"][0].get("async").is_some(), background);
+            assert_eq!(ours["hooks"][0]["timeout"], run.timeout_secs());
+            assert_eq!(
+                ours["hooks"][0].get("async").is_some(),
+                run == Run::Background
+            );
             assert!(ours.get("matcher").is_none());
         }
         assert!(installed(&merged));
+    }
+
+    #[test]
+    fn an_install_without_permission_requests_is_out_of_date() {
+        let mut settings = with_hooks(json!({}), &cmd(), Shell::Bash).unwrap();
+        assert_eq!(
+            settings["hooks"]["PermissionRequest"][0]["hooks"][0]["timeout"],
+            75
+        );
+        settings["hooks"]
+            .as_object_mut()
+            .unwrap()
+            .remove("PermissionRequest");
+        assert!(!installed(&settings));
+        assert!(installed(
+            &with_hooks(settings, &cmd(), Shell::Bash).unwrap()
+        ));
     }
 
     #[test]

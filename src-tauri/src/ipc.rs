@@ -72,6 +72,7 @@ pub enum Activity {
     Screenshot(ScreenshotActivity),
     ClaudeDone(ClaudeDoneActivity),
     ClaudeNeedsInput(ClaudeNeedsInputActivity),
+    ClaudeApproval(ClaudeApprovalActivity),
     AgentApproval(AgentApprovalActivity),
     AgentActing(AgentActingActivity),
     AgentFinished(AgentFinishedActivity),
@@ -158,6 +159,22 @@ pub struct ClaudeDoneActivity {
 pub struct ClaudeNeedsInputActivity {
     pub session_id: u32,
     pub project: String,
+}
+
+/// A terminal session asks to use a tool (2.8a), held until you answer here, answer in the terminal, or it's handed
+/// back (`claude::asks::HOLD`). Sticky. Allow / Deny only: a terminal session isn't Cay's to widen.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeApprovalActivity {
+    pub request_id: u32,
+    /// The session's row, for focusing its window; `None` if Cay hasn't seen the session yet.
+    pub session_id: Option<u32>,
+    pub project: String,
+    /// Display name, as for agent runs (`Bash`, `github · create_issue`).
+    pub tool: String,
+    /// One line built in Rust (`agent::describe`).
+    pub summary: String,
+    pub risk: AgentRisk,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

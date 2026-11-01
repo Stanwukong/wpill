@@ -5,6 +5,7 @@ import { openRun } from "../agent/useAgentRuns";
 import { focusClaudeSession } from "../claude/useClaudeSessions";
 import { AgentActing } from "./AgentActing";
 import { AgentApproval } from "./AgentApproval";
+import { ClaudeApproval } from "./ClaudeApproval";
 import { ClaudeActivity } from "./ClaudeActivity";
 import { BatteryIcon, CapsLockIcon, HeadphonesIcon, SpeakerIcon, SunIcon } from "./icons";
 import { ScreenshotActivity } from "./ScreenshotActivity";
@@ -65,6 +66,8 @@ export function ActivityView({ activity }: { activity: ActivityPayload }) {
       const { sessionId, project } = activity.payload;
       return <ClaudeActivity project={project} state="needsInput" onOpen={() => focusClaudeSession(sessionId)} />;
     }
+    case "claudeApproval":
+      return <ClaudeApproval approval={activity.payload} />;
     case "agentApproval":
       return <AgentApproval approval={activity.payload} />;
     case "agentActing":

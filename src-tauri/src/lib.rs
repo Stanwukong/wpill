@@ -4,6 +4,7 @@ mod apps;
 mod autostart;
 mod claude;
 mod desktop;
+mod duplex;
 mod error;
 mod fullscreen;
 mod hover;
@@ -45,6 +46,7 @@ pub fn run() {
         .manage(media::Media::default())
         .manage(activity::Activities::default())
         .manage(claude::Claude::default())
+        .manage(claude::Asks::default())
         .manage(agent::Agents::default())
         .setup(|app| {
             let handle = app.handle().clone();
@@ -74,6 +76,7 @@ pub fn run() {
             activity::activity_open_screenshot,
             claude::get_claude_sessions,
             claude::claude_focus_session,
+            claude::claude_decide,
             claude::claude_hooks_status,
             claude::claude_hooks_install,
             claude::claude_hooks_remove,

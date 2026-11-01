@@ -22,10 +22,15 @@ the screen's edges while Claude looks, with all 12 manual checks passed.**
 and never for the run, stopped by any input of yours, with all 12 manual checks passed.**
 **Phase 2.7e is complete (2026-10-31): routines (saved instructions run from the command window or on a schedule while
 Cay runs), with all 12 manual checks passed. Phase 2.7 is complete.**
-**Now: [Phase 4a](#phase-4a-release-readiness) (release readiness)**, kick-off prompt
-[prompts/phase-4a-release-readiness.md](prompts/phase-4a-release-readiness.md). 4a-1 (own visual identity: the amber
-wave, D30), 4a-2 (display changes followed live, D31; dock check pending) and 4a-3 (renamed **Cay**, README, MIT,
-D32) are done and 4a-4 decided (v0.2 unsigned, D33) (2026-11-01); **next: 4a-5 (release v0.2)**.
+[Phase 4a](#phase-4a-release-readiness) (release readiness): 4a-1 (own visual identity: the amber wave, D30), 4a-2
+(display changes followed live, D31; dock check pending) and 4a-3 (renamed **Cay**, README, MIT, D32) are done and 4a-4
+decided (v0.2 unsigned, D33) (2026-11-01). **4a-5 (release v0.2) and the dock check are set aside** at the author's
+call (2026-11-01) to start 2.8; they resume after it.
+**Now: [Phase 2.8 agent UX](#phase-28-agent-ux-started-2026-11-01) (D34).** 2.8a (approve terminal sessions from the
+island, D36) is signed off (2026-11-01). **Next: 2.8b–f**, kick-off prompt
+[prompts/phase-2.8-agent-ux.md](prompts/phase-2.8-agent-ux.md).
+Proposed, not started: [6 Google Calendar and Gmail](#phase-6-google-calendar-and-gmail-proposed-2026-11-01-not-started)
+(D35) and [2.9 other agents and open models](#phase-29-other-agents-and-open-models-proposed-2026-11-01-not-started).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -365,9 +370,12 @@ meaning; new phases slot in between.
 | 4 | **2.6 Claude Code activity** | Island shows when a local Claude Code session finishes or needs a decision | Added 2026-10-30 (D17). Small once 2.5's activity queue exists; high daily value while working with Claude Code. |
 | 5 | **2.7 Local automation agent** | Type an instruction; Cay runs a headless Claude Code session, shows progress in the island, asks for approvals there, and gives Claude desktop tools through its own MCP server | Added 2026-10-30 (D21). Builds directly on 2.6's pipe, sessions and activities. Staged so each stage is useful on its own. |
 | 6 | **4a Release readiness** | Multi-monitor + per-monitor DPI, code signing, v0.2 release | Docking/undocking breaks placement today; unsigned installers trigger SmartScreen. |
-| 7 | **3 Memory-heavy apps** | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
-| 8 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
-| 9 | **Spikes** | Notifications mirror, calendar peek, live window previews | Uncertain feasibility or needs sign-in; prototype before committing. |
+| 7 | **2.8 Agent UX** (started 2026-11-01, ahead of 4a-5) | Approve terminal sessions from the island, see what you approve, questions and plans, a live step line, permission modes, trustworthy Connect | Proposed 2026-11-01 after a competitor survey (D34). Approving terminal sessions is the core of every rival; Cay only focuses the window. |
+| 8 | **6 Google Calendar and Gmail** (proposed) | Upcoming events and tasks in the pill and panel; Gmail and Calendar tools for agent runs | Proposed 2026-11-01 (D35). Replaces the "calendar peek" spike. |
+| 9 | **2.9 Other agents and open models** (proposed) | Codex / OpenCode sessions in the island; agent runs through ACP (Goose + Ollama first) beside the native Claude Code path | Proposed 2026-11-01 after a competitor survey. Every rival watches several CLIs; none runs agents. Keeps Cay's lead (runs, routines, desktop tools) while closing the coverage gap. |
+| 10 | **3 Memory-heavy apps** | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
+| 11 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
+| 12 | **Spikes** | Notifications mirror, live window previews (calendar peek moved to Phase 6) | Uncertain feasibility or needs sign-in; prototype before committing. |
 
 ### Phase 1.5: shell basics (complete 2026-10-30)
 - [x] Tray icon (`tauri` `tray-icon` feature, `src-tauri/src/tray.rs`). The menu (left or right click) shows a
@@ -945,6 +953,193 @@ Kick-off prompt: [prompts/phase-4a-release-readiness.md](prompts/phase-4a-releas
 7. **Text size:** change Settings → Accessibility → Text size while the panel is open: after a moment, leaving and
    re-entering the panel still matches its edges.
 
+### Phase 2.8: agent UX (started 2026-11-01)
+From the competitor survey (D34): Nook (Windows), Vibe Island, Open Island, Agent Notch, Vibe Notch, FavTray, Crest.
+Cay leads on feel (never activated, spring motion, a general island), risk badges, narrow "for this run" grants and
+the desktop glow. It trails on the category's core: deciding from the island for sessions you run in a terminal.
+Not in scope: keyboard approval (decided 2026-11-01), mascots, sound packs, widget shelves. All UI work goes through
+the motion-designer agent.
+
+Kick-off prompt for 2.8b–f: [prompts/phase-2.8-agent-ux.md](prompts/phase-2.8-agent-ux.md).
+
+**2.8a Approve terminal sessions from the island** (signed off 2026-11-01, D36)
+- [x] `PermissionRequest` hook (sync, timeout 75 s): `cay.exe hook` sends the tool and its input (`claude/ask.rs`, long
+      strings cut to 16 KB) to its own duplex pipe `cay-claude-ask-<SID>` and waits up to 60 s for the answer, then prints
+      it as hook output. No answer (Cay closed, handed back, anything malformed) → it prints nothing and Claude Code asks
+      as today. `AskUserQuestion` / `ExitPlanMode` aren't held (2.8c); Cay's own agent runs pass at once (`is_self`)
+- [x] `claude/asks.rs`: the `claude-asks` thread gives each request its own `duplex` instance and thread, which shows a
+      `claudeApproval` card and waits for your click (`claude_decide`), the forwarder going away (answered in the
+      terminal), the session moving on (prompt, stop, end), the 55 s hand-back or shutdown. Only a click allows or
+      denies; everything else replies `pass`. At most 16 held at once. While one is held, the session's own
+      "needs input" is suppressed; on hand-back it's offered, since the terminal now asks
+- [x] Card: `ApprovalCard` shared with `AgentApproval` (motion-designer): mark · project · "session" · tool · risk badge,
+      Rust-built summary (`agent::describe_tool`); the summary focuses the session's window. Allow / Deny only (no "for
+      this run": a terminal session isn't Cay's to widen); breathing amber edge like agent approvals
+- [x] Connect installs the `PermissionRequest` entry; an install from before it counts as not connected, so the tray
+      offers Connect again (`hooks::installed` checks every event). `duplex.rs` is now shared by both pipes
+- [x] Checked (2026-11-01): forwarder fed hook files → allow and deny print the documented output; a killed
+      forwarder withdraws the card; a real `claude -p` (2.1.314, `--settings` with the hook, scratch folder) waited for
+      Cay and ran the command with no denials. 2.1.123 (the `claude` on PATH here) never ran the hook in `-p`.
+      Rust 158 tests, clippy, typecheck clean
+- [x] Manual check (below): passed, signed off by the author (2026-11-01)
+
+**Manual check (Phase 2.8a)** (`pnpm tauri dev` with `$env:RUST_LOG='info,cay_lib=debug'`; Connect Claude Code from the
+tray first, it now adds `PermissionRequest`; restart open Claude Code sessions)
+1. **Allow:** in a terminal session, ask Claude to create a file. A card shows within a moment (project · session · Write ·
+   change); Allow → the file is written and the card goes.
+2. **Deny:** the same with Deny → Claude says you denied it in Cay and carries on.
+3. **Answer in the terminal:** note whether the terminal's own prompt shows while the card is up. If it does, answer
+   there: the card goes. If it doesn't, write down how long the terminal waits.
+4. **Hand-back:** leave a card alone. After ~55 s it goes, "needs input" shows, and the terminal asks. Nothing was
+   allowed or denied.
+5. **Cay quits mid-request:** quit Cay from the tray while a card shows. The terminal asks at once.
+6. **Two sessions:** two terminals ask at the same time. The cards take turns and each answer goes to its own session.
+7. **Click the summary:** it brings that session's terminal to the front; the card stays until answered.
+8. **Agent runs unchanged:** an agent run's approval still shows its own card (with "for this run"), not a session card.
+
+**2.8b See what you approve**
+- [ ] Edits: a compact diff on the card (first few changed lines, `+n −m`), Cascadia Mono; full diff in the command
+      window (click). Shell: the whole command, wrapped, never cut mid-token. Built in Rust (`describe.rs`, unit-tested)
+- [ ] Respect the island's size limits (D2); the card grows to a cap, then says "+12 more lines"
+
+**2.8c Questions and plans**
+- [ ] `AskUserQuestion`: options as buttons on the card; a free-text answer opens the command window
+- [ ] `ExitPlanMode`: the plan rendered (Markdown, Cascadia Mono) in the command window with Approve / Send feedback;
+      the island shows "Plan ready" as an activity
+- [ ] Agent runs: the same, which removes the limitation that Claude can't ask mid-run
+
+**2.8d Live step line**
+- [ ] Current tool and target beside the wave ("Edit · hover/logic.rs"), from `PreToolUse` and stream-json; `n/m` from
+      `TodoWrite`. Panel rows show the same. No new permissions; no timers in React (Rust sends updates)
+
+**2.8e Permission modes** (like Claude Code's Shift+Tab cycle)
+- [ ] Modes for agent runs: **Ask** (`default`, as today) → **Accept edits** (`acceptEdits`) → **Plan** (`plan`).
+      `bypassPermissions` is never offered (rule kept; D34)
+- [ ] Chosen per task in the command window (default Ask), shown as a chip on the run's panel row and approval card;
+      clicking the chip cycles the mode while hovered (island click, no keyboard)
+- [ ] Switching mid-run: spike the stream-json `control_request` (`set_permission_mode`, as the SDK's streaming client
+      does; wire format unconfirmed). If it can't, the change applies to the next follow-up and the chip says so
+- [ ] Whatever the mode: desktop looks and actions, shell commands, web and MCP tools still ask (Accept edits only
+      covers file edits inside the run's folder); the audit records each mode change
+- [ ] Routines stay at Ask (D29: routines never pre-approve)
+- [ ] Terminal sessions: show the session's mode (hook payload `permission_mode`) on its row; Cay doesn't change it
+- [ ] Update CLAUDE.md's "Agent runs never weaken permissions" gotcha when this lands (the user picks Accept edits;
+      Cay never picks it for them)
+
+**2.8f Connect you can trust, and small things**
+- [ ] Connect shows the exact `settings.json` change first, keeps a dated backup, Disconnect removes only Cay's entries
+- [ ] Usage limits (5 h / 7 d) from Claude Code's status line, no network call; in the panel's Claude section
+- [ ] An optional soft sound for "needs you" (off by default; Phase 4b switch)
+- [ ] Spike: focus the Windows Terminal tab, not just the window (known limitation)
+
+### Phase 2.9: other agents and open models (proposed 2026-11-01, not started)
+Cay talks to Claude Code in two ways, and "other agents" means something different for each: **sessions** you run in
+a terminal (2.6, hooks → `claude/`) and **runs** Cay starts itself (2.7, `agent/`). Comparable tools (Nook on Windows;
+Vibe Island, Open Island, Agent Notch, Notch, Vibe Notch on macOS) all watch and approve terminal sessions of
+several CLIs; none starts runs, has routines or gives the agent desktop tools. This phase closes the coverage gap
+without giving up that lead. Not scheduled until 4a-5 ships.
+
+**Principles (carried over, not relaxed)**
+- Runs never weaken permissions. Each backend has a documented way to force "ask for everything that isn't
+  read-only", and a test that fails if the agent can auto-approve. A backend without one isn't added.
+- Desktop looks and actions stay approved in Cay's own MCP server (`cay.exe mcp`, `approvals.rs`), whatever the agent.
+- Hooks and adapters fail open: Cay closed or slow never blocks an agent (same as `cay.exe hook` today).
+- The native Claude Code path (stream-json, `--permission-prompt-tool`) stays as it is. New backends sit beside it.
+- Don't write an agent loop on raw model APIs (Ollama, OpenAI-compatible). An existing harness (Goose, OpenCode, …)
+  runs the model; Cay is the client.
+
+**2.9a Agent-neutral sessions** (smallest step, matches Nook)
+- [ ] `claude::protocol` / `sessions` take an `agent` field (`claude` | `codex` | `opencode` | …); the island and
+      panel show which agent a session belongs to (mark per agent, no vendor logos or colours; D30 still holds)
+- [ ] Codex CLI: hook entries in `~/.codex/hooks.json` (SessionStart/End, PreToolUse, PermissionRequest (v0.122+),
+      Stop, Interrupt) through the same `cay.exe hook --agent codex` forwarder; Connect/Disconnect per agent in the tray,
+      with a preview of the change, a dated backup and removal of only Cay's entries
+- [ ] Approve Codex permission requests from the island, as for Claude Code (the agent's own prompt takes over on timeout)
+- [ ] Spike: OpenCode sessions by attaching to `opencode serve` (`GET /event` SSE, `POST /session/:id/permissions/:id`)
+      instead of hooks; decide whether it's worth a watcher thread
+- [ ] Spike: transcript fallback (status only, no settings change) for agents without hooks
+
+**2.9b ACP run backend** (Agent Client Protocol: JSON-RPC to an agent subprocess)
+- [ ] `agent::backend`: a trait over what `run.rs` / `stream.rs` / `lifecycle.rs` do today (spawn, prompt, follow-up,
+      stop, events, approvals); `ClaudeCode` is the first implementation, unchanged in behaviour
+- [ ] `agent::acp` (pure, unit-tested like `stream.rs`): `initialize`, `session/new` (cwd; hand Cay's MCP server to the
+      agent if the spec's MCP-servers field does what we need: check first), `session/prompt`, `session/update` →
+      the run's events, `session/cancel`, `session/request_permission` → the island's Allow / Deny. Client fs/terminal
+      capabilities off at first (the agent uses its own tools; fewer surfaces to secure)
+- [ ] Spawn ACP agents through the same suspended start + Job Object (`job.rs`), long paths and per-run folder
+- [ ] First target: **Goose** with an Ollama model; force its approval mode, verify a write and a shell command reach
+      the island. Then OpenCode and Codex via ACP if they pass the same check
+- [ ] Command window: pick the agent and model per task and per routine (default stays Claude Code); runs list and
+      audit record which agent ran
+- [ ] Desktop tools are off for non-Claude backends until a model has passed a scripted look-and-act test; even then
+      each action is approved on its own (as today)
+
+- [ ] Permission modes (2.8e) map to each backend's own modes, or the backend offers Ask only
+
+**2.9c Settings and docs**
+- [ ] `agent.backends` block in settings.json (exe path, args, model, enabled); found automatically where possible
+      (like `installs.rs`); edited by hand until Phase 4b
+- [ ] README: which agents are supported, what each Connect writes, and that local models need ~30B+ for agent work
+
+**Open questions**
+- Is Gemini CLI worth supporting (hooks since v0.26, `BeforeTool`), given the reported move to Antigravity CLI?
+- One ACP backend or per-agent native paths for the big ones (Codex `exec --json`)? ACP first; revisit if a gap shows.
+- How to name the "agent" UI (`ClaudeSection`, `ClaudeActivity`, `--font-claude`) once it isn't only Claude.
+
+### Phase 6: Google Calendar and Gmail (proposed 2026-11-01, not started)
+Upcoming events and tasks in the island, and Gmail and Calendar for agent runs, without the user creating a Google
+Cloud project (D35). Replaces the "calendar peek" spike.
+
+**How access works: Cay signs in to Google itself**
+- One "Connect Google…" (tray, later Phase 4b settings): a desktop OAuth client registered by the project (installed
+  app flow, PKCE, loopback redirect on `127.0.0.1`, the system browser; never a webview). Tokens in Windows Credential
+  Manager (DPAPI), never in `settings.json`; Disconnect revokes the token and deletes it
+- Scopes, smallest first: `calendar.events.readonly`, `calendar.calendarlist.readonly`, `tasks.readonly` for 6a–b;
+  Gmail (`gmail.readonly`, `gmail.compose` for drafts) only in 6c and only when you turn it on. Never `gmail.send`,
+  never `mail.google.com`
+- Data goes from Google to this PC only: no Cay server, nothing stored but a small cache under `%APPDATA%`
+- Google's side: Calendar and Tasks scopes are *sensitive*: verification (privacy policy, homepage, demo video).
+  Gmail read/compose are *restricted*: verification plus a yearly security assessment (CASA), which sources say
+  applies when data passes through a server; Cay has none, so confirm with Google before 6c. Until verified the
+  consent screen warns "unverified app", users are capped at 100 and (in Testing) refresh tokens last 7 days
+- Before verification, a fallback for calendar only: paste the calendar's "secret address in iCal format" (read-only,
+  no tasks, no sign-in)
+
+**6a Calendar and Tasks watcher** (Rust)
+- [ ] `src-tauri/src/google/`: `auth.rs` (OAuth, refresh, Credential Manager), `calendar.rs` (events in the next 24 h
+      across selected calendars, incremental with sync tokens), `tasks.rs` (open tasks due today or overdue), `logic.rs`
+      (pure, unit-tested: what's "upcoming", all-day and declined events skipped, time zones, DST)
+- [ ] One `google-watcher` thread through the `activity::Watcher` harness: refresh every 5 min and on wake, network
+      change and unlock; backs off when offline. Never a JS timer (rule 1)
+- [ ] IPC: `google:state` (connected, next items) and `calendar:upcoming`; DTOs camelCase in `ipc.rs` / `types.ts`
+
+**6b In the island** (motion-designer)
+- [ ] **Pill:** the Google Calendar icon (Google's own, unaltered: allowed for an integration without asking, per
+      Google's API brand guidance; never recoloured or merged into Cay's mark) beside the clock while something is
+      pending: an event starting within 15 min or in progress, or a task due today or overdue. Gone when nothing is
+- [ ] **Activity:** at the lead time, "Standup · in 5 min" with a Join button when the event has a Meet or other link
+      (opens the browser); queued with the others in `activity::queue`
+- [ ] **Panel:** a Calendar section: the next events (time, title, calendar colour dot) and today's tasks; a click
+      opens the event or task in the browser. Read-only in 6b
+- [ ] Shares the pill with media and the agent wave: decide the order (open question)
+
+**6c Gmail and Calendar for agent runs**
+- [ ] Tools in Cay's own MCP server (`cay.exe mcp`), so every backend gets them (2.9): `calendar_list_events`,
+      `tasks_list`, `gmail_search`, `gmail_read`, `gmail_draft` (creates a draft; you send it yourself)
+- [ ] Each tool approved in the island like a desktop look (read badge for reads, write for drafts), with "for this
+      run" for reads only; off in routines unless the routine allows them (like desktop tools)
+- [ ] Mail is untrusted input: replies mark it as content from the internet; a run that has read mail can't use
+      desktop actions without a fresh approval each (prompt injection through email)
+- [ ] Day one for Claude Code users: an `agent.claudeConnectors` switch that loads the claude.ai Gmail and Calendar
+      connectors the user already connected (today `--strict-mcp-config` drops them); no Google sign-in in Cay needed
+- [ ] Later: Google's official Workspace MCP servers (`gmailmcp.googleapis.com`, `calendarmcp.googleapis.com`) are
+      in developer preview and need your own Cloud project; revisit once they're generally available
+
+**Open questions**
+- What sits in the pill when the calendar icon, media art and the agent wave all want it?
+- Tasks in the pill: overdue only, or due today too? (Proposed: both, the icon only; details in the panel)
+- Register Cay's own Google OAuth client and go through verification, or ship 6a–b with the iCal fallback first?
+
 ### Phase 3: memory-heavy apps (behind a settings toggle)
 `sysinfo` refresh every ~2 s while expanded only. Group by process name, sum memory, sort.
 End Task opens a confirm dialog, then `TerminateProcess` per pid. Protected list (csrss,
@@ -965,7 +1160,7 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
 ### Spikes (prototype before committing)
 - **Notifications mirror:** `UserNotificationListener` needs user consent and is unreliable for some apps.
   Decide go/no-go after a prototype.
-- **Calendar peek:** next meeting in the pill + join link; needs Outlook/Google sign-in.
+- ~~**Calendar peek**~~: moved to [Phase 6](#phase-6-google-calendar-and-gmail-proposed-2026-11-01-not-started).
 - **Live window previews:** `DwmRegisterThumbnail` drawn into our HWND at rects reported by React
   (the original Phase 4 item).
 
@@ -1028,6 +1223,9 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
   planned from v0.3.
 
 ## Open questions
+- After [2.8 agent UX](#phase-28-agent-ux-started-2026-11-01) (started ahead of v0.2): release v0.2 (4a-5), then
+  [6 Google](#phase-6-google-calendar-and-gmail-proposed-2026-11-01-not-started), then
+  [2.9 other agents](#phase-29-other-agents-and-open-models-proposed-2026-11-01-not-started), all before Phase 3?
 - Signing from v0.3: Certum Open Source certificate (own name, ~€69) or SignPath Foundation (free, their name)?
 - Rename the GitHub repo from `wpill` to `cay`? (GitHub redirects the old URL; the README and configs link `wpill`.)
 

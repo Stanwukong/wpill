@@ -29,6 +29,11 @@ pub struct Session {
 }
 
 impl Session {
+    /// Claude Code's session id.
+    pub fn claude_id(&self) -> &str {
+        &self.claude_id
+    }
+
     pub fn ipc(&self) -> ClaudeSession {
         ClaudeSession {
             session_id: self.id,

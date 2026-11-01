@@ -10,7 +10,7 @@ use serde_json::Value;
 use windows::Win32::System::Threading::INFINITE;
 
 use super::mcp::{self, Hello, HELLO_VERSION};
-use super::pipe::{Pipe, Read, MAX_MESSAGE};
+use super::pipe::{self, Read, MAX_MESSAGE};
 
 pub const TOKEN_ENV: &str = "CAY_AGENT_TOKEN";
 pub const RUN_ENV: &str = "CAY_AGENT_RUN";
@@ -20,7 +20,7 @@ pub fn run() -> i32 {
     let (Ok(token), Ok(run)) = (std::env::var(TOKEN_ENV), std::env::var(RUN_ENV)) else {
         return 2;
     };
-    let Ok(pipe) = Pipe::open() else {
+    let Ok(pipe) = pipe::open() else {
         return 3;
     };
     let pipe = Arc::new(pipe);

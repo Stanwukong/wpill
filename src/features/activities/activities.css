@@ -380,6 +380,14 @@
   color: var(--agent-status);
 }
 
+/* A terminal session's card (2.8a): chrome, so Segoe; it keeps its width while the tool ellipsises. */
+.approval__origin {
+  flex: none;
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-size: 11px;
+  color: var(--island-muted);
+}
+
 .approval__summary {
   margin-left: 32px;
   height: 28px;
@@ -400,6 +408,16 @@
 .approval__summary:hover {
   background: rgba(255, 255, 255, 0.1);
   color: var(--island-fg);
+}
+
+/* A session Cay hasn't seen yet: the same well, as plain text. */
+.approval__summary[data-static="true"] {
+  padding-right: 9px;
+  cursor: default;
+}
+
+.approval__summary[data-static="true"]:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .approval__command {
