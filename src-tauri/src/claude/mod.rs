@@ -242,6 +242,21 @@ pub fn claude_decide(app: AppHandle, request_id: u32, answer: Answer) -> AppResu
     asks::decide(&app, request_id, matches!(answer, Answer::Allow))
 }
 
+#[tauri::command]
+/// The session requests the island holds (2.8b), for the command window.
+pub fn claude_asks(asks: tauri::State<'_, asks::Asks>) -> crate::ipc::ClaudeAsksPayload {
+    crate::ipc::ClaudeAsksPayload { asks: asks.list() }
+}
+
+#[tauri::command]
+/// A held request's whole diff or command; `None` once it's answered or handed back.
+pub fn claude_ask_preview(
+    asks: tauri::State<'_, asks::Asks>,
+    request_id: u32,
+) -> Option<crate::ipc::ApprovalPreview> {
+    asks.preview(request_id)
+}
+
 /// `agent-test session-decide <requestId> allow|deny` (debug builds).
 pub fn decide_for_test(app: &AppHandle, request_id: u32, allow: bool) -> AppResult<()> {
     asks::decide(app, request_id, allow)

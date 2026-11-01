@@ -420,6 +420,60 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
+/*
+ * The well with a preview (2.8b): rows run edge to edge so their tint fills the well; the chevron sits top right,
+ * on the header (diff) or in the first line's reserved space (command). At most 6 lines from Rust, so no scrolling.
+ */
+.approval__preview {
+  position: relative;
+  height: auto;
+  display: block;
+  padding: 6px 0 7px;
+  overflow: hidden;
+}
+
+.approval__preview .preview {
+  --preview-pad-l: 9px;
+  --preview-pad-r: 8px;
+}
+
+.approval__preview .preview__head,
+.approval__preview .preview[data-kind="command"] {
+  --preview-pad-r: 26px;
+}
+
+.approval__preview > .agent-glyph {
+  position: absolute;
+  top: 7px;
+  right: 6px;
+}
+
+/* Large Text size: the window can't fit the indent and 48 columns side by side; the preview takes the indent. */
+@media (max-width: 500px) {
+  .approval__preview,
+  .approval__preview + .approval__actions {
+    margin-left: 0;
+  }
+}
+
+.approval__title-btn {
+  min-width: 0;
+  padding: 0 3px;
+  margin: 0 -3px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.approval__title-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .approval__command {
   flex: 1;
   min-width: 0;

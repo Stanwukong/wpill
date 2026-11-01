@@ -40,6 +40,11 @@ Read `CLAUDE.md` first (architecture rules and Windows gotchas apply to you too)
   `ClaudeSection`'s `agent` slot. The command window (`src/command/`) is a normal opaque window (`#141416`) in the
   same tokens; it's sized in physical px by Rust, so Text size shrinks its CSS viewport (480×373 at 150%): check it
   there too.
+- **Approval previews** (2.8b): `PreviewBlock` renders Rust's `ApprovalPreview` as-is: Cascadia Mono 11.5 px on
+  16 px rows, `+`/`−` signs and counts in `--charge`/`--danger`, rows tinted ~11 % with `color-mix` of the same
+  tokens, context muted, a gap as `⋯`. Command lines are pre-wrapped to 48 columns: never re-wrap or ellipsize them,
+  and keep the block ≥48ch. While such a card shows, `.island[data-wide]` is `min(460px, 100vw − 32px)`; the card
+  stays ≤6 lines plus "+n more lines".
 - **Routines** (2.7e): the command window's sidebar has a compact Routines section (`RoutineList.tsx`, capped at 40 %
   of the height) above the runs; the editor (`RoutineEditor.tsx`) reuses the task form's pieces from
   `TaskFields.tsx`. Labels live in `routineLabels.ts` and are worked out per render (no ticking timers). A 12 px clock

@@ -237,6 +237,36 @@ textarea {
   color: rgba(245, 245, 247, 0.38);
 }
 
+/* Terminal sessions' held requests (2.8b): only while there are some, right under New task (they wait on you). */
+.cmd-asks {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--island-border);
+}
+
+.cmd-asks__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 24vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.cmd-ask__tool {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-claude);
+  font-size: 11px;
+  color: var(--agent-status);
+}
+
 /* Routines: a compact block between New task and the runs. It scrolls past a few rows so runs stay in view. */
 .cmd-routines {
   flex: none;
@@ -1385,6 +1415,124 @@ textarea {
 .pending .agent-btn {
   height: 26px;
   padding: 0 12px;
+}
+
+/*
+ * The whole diff or command (2.8b): its own line under the approval, scrolling both ways past ~260 px (less when Text
+ * size leaves little height). Lines don't ellipsize here; rows stretch to the longest so their tint spans it.
+ */
+.cmd-preview {
+  flex: 1 0 100%;
+  min-width: 0;
+  max-height: min(260px, 40vh);
+  box-sizing: border-box;
+  overflow: auto;
+  scrollbar-width: thin;
+  padding: 6px 0 7px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px var(--island-border);
+  user-select: text;
+}
+
+.cmd-preview .preview {
+  width: max-content;
+  min-width: 100%;
+}
+
+.cmd-preview .preview__text {
+  overflow: visible;
+}
+
+/* A session's held request */
+.ask__head {
+  align-items: center;
+  line-height: normal;
+}
+
+.ask__head .agent-mark {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.ask__origin {
+  flex: none;
+  font-size: 11px;
+  color: var(--island-muted);
+}
+
+.ask__tool {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-claude);
+  font-size: 11.5px;
+  color: var(--agent);
+}
+
+.ask {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 18px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.ask__summary {
+  flex: none;
+  margin: 0;
+  font-family: var(--font-claude);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgba(245, 245, 247, 0.92);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.ask__preview {
+  flex: 0 1 auto;
+  max-height: none;
+  min-height: 0;
+}
+
+.ask__footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.ask__footer .cmd-error {
+  flex: 1;
+}
+
+.ask__footer .agent-btn {
+  height: 26px;
+  padding: 0 12px;
+}
+
+.ask__footer .agent-link {
+  margin: 0 0 0 -4px;
+}
+
+.ask__gone {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: 11.5px;
+  color: var(--island-muted);
+}
+
+.ask__gone--alone {
+  margin: 0;
+  padding: 14px 18px;
+  text-align: left;
 }
 
 /* Follow-up */

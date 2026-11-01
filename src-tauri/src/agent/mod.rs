@@ -30,6 +30,7 @@ mod job;
 mod lifecycle;
 mod mcp;
 mod pipe;
+mod preview;
 mod routines;
 mod run;
 mod schedule;
@@ -93,6 +94,18 @@ pub fn describe_tool(tool: &str, input: &Value, cwd: &str) -> (String, String, A
         describe::summary(tool, input, cwd),
         describe::risk(tool),
     )
+}
+
+/// A terminal session's request (2.8b): the card's and the command window's diff or command. `cut` names the input
+/// fields shortened on the way (`claude::ask`). For a `Write`, the file it replaces is read here (≤256 KB).
+pub fn preview_tool(
+    tool: &str,
+    input: &Value,
+    cwd: &str,
+    cut: &[String],
+) -> Option<(crate::ipc::ApprovalPreview, crate::ipc::ApprovalPreview)> {
+    let existing = preview::read_existing(tool, input, cwd);
+    preview::build(tool, input, cwd, &existing, cut).map(|p| (p.card, p.full))
 }
 
 struct Slot {
@@ -969,6 +982,8 @@ fn ask(
         )
     });
     let slot = inner.slot(a.run_id)?;
+    // A bounded read (256 KB) of the file a `Write` would replace, for the card's diff.
+    let existing = preview::read_existing(a.tool, &input, &slot.run.cwd);
     let request = Request {
         run_id: a.run_id.to_string(),
         project: slot.run.project.clone(),
@@ -982,6 +997,7 @@ fn ask(
         element: a.element,
         routine_name: slot.run.routine.as_ref().map(|r| r.name.clone()),
         patient: slot.patient,
+        existing,
     };
     match inner.approvals.ask(request, Instant::now(), timeout) {
         Asked::Remembered {
@@ -1827,6 +1843,16 @@ pub enum Remember {
 }
 
 #[tauri::command]
+/// The whole diff or command of a waiting approval (2.8b), for the command window; `None` once it's answered or for
+/// tools without one.
+pub fn agent_approval_preview(
+    agents: State<'_, Agents>,
+    request_id: u32,
+) -> Option<crate::ipc::ApprovalPreview> {
+    agents.lock().approvals.preview(request_id)
+}
+
+#[tauri::command]
 pub fn agent_decide(
     app: AppHandle,
     agents: State<'_, Agents>,
@@ -1882,6 +1908,17 @@ pub fn agent_pick_folder(app: AppHandle) -> AppResult<Option<String>> {
 #[tauri::command]
 pub async fn command_window_show(app: AppHandle, run_id: Option<String>) -> AppResult<()> {
     window::command::show(&app, run_id)
+}
+
+#[tauri::command]
+/// Opens the command window on a terminal session's held request (2.8b): its whole diff or command.
+pub async fn command_window_show_ask(app: AppHandle, request_id: u32) -> AppResult<()> {
+    window::command::show_ask(&app, request_id)
+}
+
+#[tauri::command]
+pub fn command_take_focus() -> Option<crate::ipc::CommandFocus> {
+    window::command::take_focus()
 }
 
 #[tauri::command]

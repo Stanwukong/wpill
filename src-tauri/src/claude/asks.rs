@@ -12,7 +12,7 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use windows::core::{Error, HSTRING};
 use windows::Win32::System::Threading::SetEvent;
 
@@ -21,7 +21,10 @@ use super::{process, sessions, Claude};
 use crate::activity::{claude_approval_key, Signal, Watcher};
 use crate::duplex::{Pipe, Read};
 use crate::error::{AppError, AppResult};
-use crate::ipc::{Activity, ClaudeApprovalActivity, ClaudeNeedsInputActivity};
+use crate::ipc::{
+    events, Activity, ApprovalPreview, ClaudeApprovalActivity, ClaudeAsksPayload,
+    ClaudeNeedsInputActivity,
+};
 use crate::win32::{self, Handle};
 
 /// How long a request waits in the island before the terminal asks instead. Below the forwarder's own wait
@@ -53,6 +56,10 @@ struct Inner {
 struct Held {
     /// Claude Code's session id.
     session: String,
+    /// The card, for the command window's list; set once it's shown.
+    card: Option<ClaudeApprovalActivity>,
+    /// The command window's copy of the preview (2.8b).
+    full: Option<ApprovalPreview>,
     /// Set once: your answer, or `Pass` when the session moved on.
     decision: Option<Decision>,
     /// Wakes the request's thread.
@@ -88,11 +95,35 @@ impl Asks {
             id,
             Held {
                 session: session.to_string(),
+                card: None,
+                full: None,
                 decision: None,
                 wake: wake.clone(),
             },
         );
         Some((id, wake))
+    }
+
+    fn show(&self, id: u32, card: ClaudeApprovalActivity, full: Option<ApprovalPreview>) {
+        if let Some(held) = self.lock().held.get_mut(&id) {
+            held.card = Some(card);
+            held.full = full;
+        }
+    }
+
+    /// The cards being held, oldest first (`claude:asks`).
+    pub fn list(&self) -> Vec<ClaudeApprovalActivity> {
+        let inner = self.lock();
+        let mut ids: Vec<&u32> = inner.held.keys().collect();
+        ids.sort_by_key(|id| **id);
+        ids.into_iter()
+            .filter_map(|id| inner.held[id].card.clone())
+            .collect()
+    }
+
+    /// The whole diff or command of a held request.
+    pub fn preview(&self, id: u32) -> Option<ApprovalPreview> {
+        self.lock().held.get(&id)?.full.clone()
     }
 
     fn release(&self, id: u32) -> Option<Decision> {
@@ -191,21 +222,30 @@ fn serve(app: &AppHandle, out: &Sender<Signal>, pipe: &Pipe, stop: &Handle) {
     let session_id = app.state::<Claude>().row_of(&request.session_id);
     let (tool, summary, risk) =
         crate::agent::describe_tool(&request.tool_name, &request.tool_input, &request.cwd);
+    let previews = crate::agent::preview_tool(
+        &request.tool_name,
+        &request.tool_input,
+        &request.cwd,
+        &request.cut,
+    );
     log::debug!("permission request {id}: {tool} ({project})");
-    let _ = out.send(Signal::Offer(Activity::ClaudeApproval(
-        ClaudeApprovalActivity {
-            request_id: id,
-            session_id,
-            project: project.clone(),
-            tool,
-            summary,
-            risk,
-        },
-    )));
+    let card = ClaudeApprovalActivity {
+        request_id: id,
+        session_id,
+        project: project.clone(),
+        tool,
+        summary,
+        risk,
+        preview: previews.as_ref().map(|p| Box::new(p.0.clone())),
+    };
+    asks.show(id, card.clone(), previews.map(|p| p.1));
+    emit(app, &asks);
+    let _ = out.send(Signal::Offer(Activity::ClaudeApproval(card)));
 
     let waited = pipe.read(&[wake.0, stop.0], HOLD.as_millis() as u32);
     // An answer that landed as the wait ended still counts.
     let decision = asks.release(id);
+    emit(app, &asks);
     let _ = out.send(Signal::Retract(claude_approval_key(id)));
     match (decision, waited) {
         (Some(decision), _) => {
@@ -230,6 +270,11 @@ fn serve(app: &AppHandle, out: &Sender<Signal>, pipe: &Pipe, stop: &Handle) {
         }
         (None, _) => reply(pipe, Decision::Pass),
     }
+}
+
+/// `claude:asks`, for the command window.
+fn emit(app: &AppHandle, asks: &Asks) {
+    let _ = app.emit(events::CLAUDE_ASKS, ClaudeAsksPayload { asks: asks.list() });
 }
 
 fn reply(pipe: &Pipe, decision: Decision) {

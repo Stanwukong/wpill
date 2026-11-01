@@ -588,6 +588,21 @@ a `PreToolUse` hook (fires for every tool, including those that never ask); auto
 too). *Checked:* forwarder fed hook files for allow, deny and a killed forwarder, and a real `claude -p` run (2.1.314)
 that waited for Cay and ran its command. Claude Code 2.1.123 never ran the hook in `-p` mode.
 
+### D37: Approval previews are built in Rust, capped on the card and whole in the command window (Phase 2.8b)
+*What:* `agent/preview.rs` turns an `Edit` / `MultiEdit` / `Write` into a line diff (common prefix and suffix, then an
+LCS table up to 1 M cells, else old then new) and a shell command into lines wrapped to 48 columns between tokens. Each
+approval gets two copies: the card's (6 lines, one line of context, then "+n more lines") inside the activity, and the
+whole one (≤2000 lines) kept in Rust and fetched by the command window. *Why Rust:* one tested place decides what you
+see, for both card kinds, and React renders it as-is (the card's block is 48ch of Cascadia Mono, so Rust's wrap holds).
+*Why not the whole diff in every event:* `agent:runs` repeats the pending approvals on every change; a 16 KB `Write` in
+each would be wasteful. *Honest counts:* 2.8a's forwarder cuts strings at 16 KB; it now records which fields it cut, a
+cut preview says "cut" with no counts, and a cut `Write` shows its new text alone (diffing a cut copy would show the old
+file's tail as deleted). *Write against disk:* Cay reads the file being replaced (≤256 KB) so an overwrite reads as a
+diff, not a new file. *Session requests in the command window* (the author's choice over focusing the terminal or a temp
+`.diff`): a "Waiting in sessions" list with the whole preview and Allow / Deny, your click as on the card; the card's
+title now focuses the terminal. *Alternatives:* a diff crate (`similar`; a dependency for ~80 lines), CSS-only wrapping
+(it breaks inside tokens or overflows, and can't be tested), growing the card past D2's window.
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -773,6 +788,7 @@ needs the same DPI awareness as the app it measures, or it reports a consistent 
 | 2026-11-01 | Stage 4a-3: renamed **Cay** (D32) after name checks; MIT licence; README with install, privacy and agent-safety sections; one-time migration of TopBar's data, startup entry and hooks. Verified with the dev build (41 files copied, a haiku run approved through `mcp__cay__approve`). |
 | 2026-11-01 | Name kept although `cay.app` / `cay.dev` are taken. Stage 4a-4 decided: v0.2 ships unsigned with a published SHA-256 (D33); signing from v0.3 (Certum Open Source or SignPath). |
 | 2026-11-01 | 4a-5 (v0.2) set aside at the author's call to start Phase 2.8 (D34). Stage 2.8a: terminal sessions' permission requests answered from the island (D36), checked with a real `claude -p` run, then signed off by hand. Kick-off prompt for 2.8b–f written. |
+| 2026-11-01 | Stage 2.8b built: diffs and whole commands on approval cards, built in Rust (D37); the whole preview and session requests in the command window (motion-designer). Manual checklist pending. |
 
 ## 7. Results & metrics
 

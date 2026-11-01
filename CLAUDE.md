@@ -78,7 +78,8 @@ the drive once); `cargo clean --profile dev` when space runs low.
   `bridge.rs` = `cay.exe mcp` (run from `main.rs`, relays stdio JSON-RPC ↔ `pipe.rs`); `hotkey.rs`, `folder.rs`
   (picker + long paths), `installs.rs` (find `claude.exe`, recent folders), `audit.rs` (jsonl trail, run ids),
   `settings.rs` (`agent` block in settings.json). Pure and unit-tested: `stream.rs` (stream-json), `lifecycle.rs`
-  (run state), `approvals.rs`, `describe.rs` (risk, summaries, remember keys), `mcp.rs`.
+  (run state), `approvals.rs`, `describe.rs` (risk, summaries, remember keys), `mcp.rs`, `preview.rs` (2.8b: the card's
+  and the command window's diff or wrapped command; `read_existing` is its one file read).
   Routines (2.7e): `routines.rs` (`routines.json` store, validation, the Windows time zone) and `schedule.rs` (pure:
   due times, DST, missed/overlap verdicts); the `agent-routines` thread and `start_run` (shared with `agent_start`) are
   in `mod.rs`.
@@ -104,6 +105,7 @@ the drive once); `cargo clean --profile dev` when space runs low.
   `features/media/` (`useMedia` lives in `Island` so state survives the panel remounting; `MediaCard`, `PillMedia`, `useProgress`,
   `artTheme` = album-art colors → `--tint-from`/`--tint-to`/`--accent`, set on `.stage`; those are `@property`-registered in
   `global.css` so they can transition. Use `var(--accent)` for highlights, not a fixed color),
+  `features/agent/PreviewBlock.tsx` renders an `ApprovalPreview` exactly as Rust built it (island and command window),
   `features/activities/` (`ActivityView` per kind, `ScreenshotActivity` with the drag/click gesture, `ClaudeActivity`,
   inline SVG `icons`), `features/claude/` (`useClaudeSessions` lives in `Island`, `WorkingGlyphs.tsx` =
   `WorkingIndicator` (the amber wave while something works) and `AgentMark` (the wave at rest), the panel's
@@ -111,7 +113,8 @@ the drive once); `cargo clean --profile dev` when space runs low.
   `COLOR` in `window/glow.rs`; never reintroduce Claude Code's spinner, `✻` or orange (D30); Claude content uses
   `--font-claude`, Cascadia Mono). The equaliser uses `--media-accent`: the art's accent, or soft white with no art, `features/agent/` (`useAgentRuns` lives in `Island`, panel rows `AgentRunItems` in ClaudeSection's
   `agent` slot; the `agentApproval` view is `features/activities/AgentApproval.tsx`), `command/` (the command window's
-  own page: new task form, run list, transcript, follow-ups; routines: `RoutineList`, `RoutineEditor`, `TaskFields`
+  own page: new task form, run list, transcript, follow-ups; `SessionAskView` + `useClaudeAsks` for terminal sessions'
+  held requests (2.8b); routines: `RoutineList`, `RoutineEditor`, `TaskFields`
   shared with `NewTask`, `useRoutines`, `routineLabels`).
   The island has three shapes (`data-mode`: `pill` | `activity` | `panel`), all driven by Rust events.
 
@@ -245,6 +248,8 @@ the drive once); `cargo clean --profile dev` when space runs low.
   real exe (`installs.rs`). Pass folders through `folder::long_path`: with an 8.3 cwd Claude Code asks before reading
   its own files.
 - **Overlapped reads that complete at once** still need `GetOverlappedResult` for the byte count (C8). Both pipes do.
+- **A newly created command window misses events sent while it loads.** `window::command` keeps the focus it was
+  opened for, and the page takes it once on load (`command_take_focus`). Do the same for anything else it must select.
 - **Building a webview window** from a sync command or the main thread deadlocks on Windows: `window::command::show`
   is called from the hotkey thread and async commands. The hotkeys use `RegisterHotKey(NULL)` on their own thread
   (`WM_HOTKEY` goes to the thread queue); receiving one is what lets the command window take the foreground.

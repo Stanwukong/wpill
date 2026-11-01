@@ -360,7 +360,7 @@ fn path_field(input: &Value) -> Option<&str> {
 }
 
 /// `path` relative to `cwd` when it's inside it (either slash, any case), else as given.
-fn relative(path: &str, cwd: &str) -> String {
+pub(super) fn relative(path: &str, cwd: &str) -> String {
     let norm = |s: &str| s.replace('\\', "/").to_lowercase();
     let base = norm(cwd.trim_end_matches(['\\', '/']));
     let lower = norm(path);

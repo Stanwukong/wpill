@@ -39,6 +39,11 @@
   width: min(340px, calc(100vw - 32px));
 }
 
+/* An approval with a diff or command (2.8b): room for Rust's 48-column wrap beside the card's indent. */
+.island[data-mode="activity"][data-wide="true"] {
+  width: min(460px, calc(100vw - 32px));
+}
+
 .island__pill {
   height: 36px;
   min-width: 132px;

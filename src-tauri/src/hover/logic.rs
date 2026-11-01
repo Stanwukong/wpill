@@ -117,6 +117,8 @@ pub fn force_collapse(phase: Phase) -> (Phase, Option<Transition>) {
 
 /// What the poller must emit, in order.
 #[derive(Debug, Clone, PartialEq)]
+// A few per tick and moved once; boxing the payload would only add an allocation per activity.
+#[allow(clippy::large_enum_variant)]
 pub enum Output {
     Expand,
     Collapse,

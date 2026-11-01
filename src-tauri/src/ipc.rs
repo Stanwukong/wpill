@@ -18,6 +18,10 @@ pub mod events {
     /// Sent to the `command` window only: which run to select when it opens.
     pub const COMMAND_FOCUS_RUN: &str = "command:focus-run";
     pub const ROUTINES_CHANGED: &str = "routines:changed";
+    /// Terminal sessions' held requests changed (2.8b): the command window lists them.
+    pub const CLAUDE_ASKS: &str = "claude:asks";
+    /// Sent to the `command` window only: which held session request to show when it opens (2.8b).
+    pub const COMMAND_FOCUS_ASK: &str = "command:focus-ask";
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -175,6 +179,27 @@ pub struct ClaudeApprovalActivity {
     /// One line built in Rust (`agent::describe`).
     pub summary: String,
     pub risk: AgentRisk,
+    /// The card's diff or wrapped command (2.8b); the whole one comes from `claude_ask_preview`.
+    pub preview: Option<Box<ApprovalPreview>>,
+}
+
+/// `command_take_focus`: what a newly created command window selects (its page missed the focus event).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum CommandFocus {
+    Run { run_id: String },
+    Ask { request_id: u32 },
+}
+
+/// `claude:asks` and `claude_asks`: the session requests the island holds, oldest first.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeAsksPayload {
+    pub asks: Vec<ClaudeApprovalActivity>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -237,6 +262,60 @@ pub struct AgentApprovalActivity {
     pub detail: Option<String>,
     /// Set for a routine's run (2.7e): shown in place of `project`.
     pub routine_name: Option<String>,
+    /// The card's diff or wrapped command (2.8b); the whole one comes from `agent_approval_preview`.
+    pub preview: Option<Box<ApprovalPreview>>,
+}
+
+/// What an approval shows beyond its one line (2.8b), built by `agent::preview`. The card's copy is capped at a few
+/// lines; the command window asks for the whole one.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ApprovalPreview {
+    Diff(DiffPreview),
+    Command(CommandPreview),
+}
+
+/// A file edit as changed lines. `added`/`removed` are `None` when the input was cut (2.8a's 16 KB per string), so
+/// the card says "cut" instead of a wrong count.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiffPreview {
+    /// Relative to the folder when inside it.
+    pub file: String,
+    pub lines: Vec<DiffLine>,
+    pub added: Option<u32>,
+    pub removed: Option<u32>,
+    /// Lines after `lines` that weren't sent ("+12 more lines").
+    pub more_lines: u32,
+    pub cut: bool,
+    /// "New file", "Every occurrence", "Replaces the whole file".
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiffLine {
+    pub op: DiffOp,
+    pub text: String,
+}
+
+/// `gap`: unchanged lines left out between two changes (its `text` is empty).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DiffOp {
+    Add,
+    Del,
+    Ctx,
+    Gap,
+}
+
+/// A shell command, wrapped at token boundaries to `preview::WRAP_COLS` (continuation lines indented two spaces).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandPreview {
+    pub lines: Vec<String>,
+    pub more_lines: u32,
+    pub cut: bool,
 }
 
 /// Cay is acting on the desktop for a run (2.7d). Sticky and not interactive; withdrawn when the action ends.

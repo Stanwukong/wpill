@@ -74,7 +74,49 @@ export interface ClaudeApprovalActivity {
   /** One line: the command, the file, the host. */
   summary: string;
   risk: AgentRisk;
+  /** The card's diff or wrapped command (2.8b); the whole one comes from `claudeAskPreview`. */
+  preview: ApprovalPreview | null;
 }
+
+/** `claude:asks` / `claude_asks`: the session requests the island holds, oldest first (command window). */
+export interface ClaudeAsks {
+  asks: ClaudeApprovalActivity[];
+}
+
+/**
+ * What an approval shows beyond its one line (2.8b), built in Rust. The card's copy holds at most a few lines
+ * (`moreLines` counts the rest); the command window fetches the whole one.
+ */
+export type ApprovalPreview = ({ kind: "diff" } & DiffPreview) | ({ kind: "command" } & CommandPreview);
+
+export interface DiffPreview {
+  /** Relative to the folder when inside it. */
+  file: string;
+  lines: DiffLine[];
+  /** `null` when the input was cut on its way to Cay: say "cut", never a count. */
+  added: number | null;
+  removed: number | null;
+  moreLines: number;
+  cut: boolean;
+  /** "New file", "Every occurrence", "Replaces the whole file". */
+  note: string | null;
+}
+
+/** `gap`: unchanged lines left out between two changes (empty `text`). */
+export interface DiffLine {
+  op: "add" | "del" | "ctx" | "gap";
+  text: string;
+}
+
+/** A shell command wrapped at token boundaries to 48 columns; continuation lines start with two spaces. */
+export interface CommandPreview {
+  lines: string[];
+  moreLines: number;
+  cut: boolean;
+}
+
+/** `command_take_focus`: what a newly created command window selects. */
+export type CommandFocus = { kind: "run"; runId: string } | { kind: "ask"; requestId: number };
 export type AgentStatus = "starting" | "working" | "waiting" | "done" | "failed" | "stopped";
 export type AgentEndReason = "completed" | "maxTurns" | "maxBudget" | "error" | "stopped";
 
@@ -99,6 +141,8 @@ export interface AgentApprovalActivity {
   detail: string | null;
   /** Set for a routine's run (2.7e): show it in place of `project`. */
   routineName: string | null;
+  /** The card's diff or wrapped command (2.8b); the whole one comes from `agentApprovalPreview`. */
+  preview: ApprovalPreview | null;
 }
 
 /**

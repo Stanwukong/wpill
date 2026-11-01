@@ -3,8 +3,10 @@ import { commands, errorMessage } from "../lib/ipc";
 import type { AgentApprovalActivity, AgentEntry, AgentEvent, AgentRun } from "../lib/types";
 import { ClockGlyph, RiskGlyph, StopGlyph } from "../features/agent/AgentGlyphs";
 import { endLabel, RISK_LABEL, runLabel } from "../features/agent/labels";
+import { PreviewBlock } from "../features/agent/PreviewBlock";
 import { decide, isLive, stopRun } from "../features/agent/useAgentRuns";
 import type { RoutineSeed } from "./routineLabels";
+import { useWholePreview } from "./useClaudeAsks";
 import type { Transcript } from "./useTranscripts";
 
 type Decision = Extract<AgentEvent, { kind: "decision" }>;
@@ -215,6 +217,7 @@ function ToolResult({ isError, text }: { isError: boolean; text: string }) {
 
 function PendingCard({ approval }: { approval: AgentApprovalActivity }) {
   const [sent, setSent] = useState(false);
+  const preview = useWholePreview(approval.requestId, approval.preview, commands.agentApprovalPreview);
   const answer = (decision: "allow" | "deny", remember: "once" | "run" = "once") => {
     setSent(true);
     decide(approval.requestId, decision, remember).catch(() => setSent(false));
@@ -232,6 +235,11 @@ function PendingCard({ approval }: { approval: AgentApprovalActivity }) {
         </span>
       </span>
       {approval.detail != null && <pre className="pending__detail">{approval.detail}</pre>}
+      {preview && (
+        <div className="cmd-preview">
+          <PreviewBlock preview={preview} />
+        </div>
+      )}
       <span className="pending__actions">
         {approval.rememberAs && (
           <button className="agent-link" disabled={sent} onClick={() => answer("allow", "run")}>

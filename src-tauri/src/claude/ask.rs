@@ -17,7 +17,13 @@ const MAX_MODE: usize = 32;
 const MAX_FIELDS: usize = 32;
 /// Per string field of the tool input, in bytes (a `Write` holds the whole file).
 const MAX_STRING: usize = 16 * 1024;
-/// Per non-string field of the tool input, serialized; larger ones are dropped.
+/// All strings of the tool input together, in bytes (a `MultiEdit` holds many).
+const MAX_STRINGS: usize = 384 * 1024;
+/// Items kept per array of the tool input.
+const MAX_ITEMS: usize = 64;
+/// Nesting kept in the tool input; anything deeper is kept whole if it's small, else dropped.
+const MAX_DEPTH: usize = 3;
+/// A value nested deeper than `MAX_DEPTH`, serialized; larger ones are dropped.
 const MAX_VALUE: usize = 16 * 1024;
 /// Tools whose answer is more than "allow" (an option, a plan): the terminal asks until 2.8c.
 const PASS_TOOLS: &[&str] = &["AskUserQuestion", "ExitPlanMode"];
@@ -38,6 +44,9 @@ pub struct Request {
     pub tool_name: String,
     /// An object, with long strings cut (`trim_input`).
     pub tool_input: Value,
+    /// Top-level fields of `tool_input` that were shortened or dropped, so the card never shows a wrong count.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cut: Vec<String>,
     /// Nearest parent first.
     #[serde(default)]
     pub chain: Vec<Proc>,
@@ -89,6 +98,7 @@ pub fn request(stdin: &[u8], at_ms: i64, chain: Vec<Proc>) -> Option<Request> {
     if input.hook_event_name != "PermissionRequest" {
         return None;
     }
+    let (tool_input, cut) = trim_input(input.tool_input);
     let request = Request {
         v: VERSION,
         at_ms,
@@ -96,7 +106,8 @@ pub fn request(stdin: &[u8], at_ms: i64, chain: Vec<Proc>) -> Option<Request> {
         cwd: input.cwd,
         permission_mode: input.permission_mode,
         tool_name: input.tool_name,
-        tool_input: trim_input(input.tool_input),
+        tool_input,
+        cut,
         chain,
     };
     check(&request).then_some(request)
@@ -154,22 +165,63 @@ fn check(r: &Request) -> bool {
         && input_ok
 }
 
-/// The input as an object of at most `MAX_FIELDS` fields: strings cut to `MAX_STRING` bytes, other values over
-/// `MAX_VALUE` dropped. Anything that isn't an object becomes an empty one.
-fn trim_input(input: Value) -> Value {
+/// The input as an object of at most `MAX_FIELDS` fields: each string cut to `MAX_STRING` bytes (and all of them to
+/// `MAX_STRINGS`), arrays to `MAX_ITEMS`, nesting to `MAX_DEPTH`. Also returns the top-level fields that lost
+/// anything. Anything that isn't an object becomes an empty one.
+fn trim_input(input: Value) -> (Value, Vec<String>) {
     let Value::Object(fields) = input else {
-        return Value::Object(Map::new());
+        return (Value::Object(Map::new()), Vec::new());
     };
+    let mut budget = MAX_STRINGS;
+    let mut cut_fields = Vec::new();
     let kept = fields
         .into_iter()
         .take(MAX_FIELDS)
-        .filter_map(|(key, value)| match value {
-            Value::String(s) => Some((key, Value::String(cut(s, MAX_STRING)))),
-            other if other.to_string().len() <= MAX_VALUE => Some((key, other)),
-            _ => None,
+        .filter_map(|(key, value)| {
+            let mut lost = false;
+            let value = trim_value(value, 0, &mut budget, &mut lost);
+            if lost {
+                cut_fields.push(key.clone());
+            }
+            Some((key, value?))
         })
         .collect();
-    Value::Object(kept)
+    (Value::Object(kept), cut_fields)
+}
+
+fn trim_value(value: Value, depth: usize, budget: &mut usize, lost: &mut bool) -> Option<Value> {
+    match value {
+        Value::String(s) => {
+            let len = s.len();
+            let s = cut(s, MAX_STRING.min(*budget));
+            *lost |= s.len() < len;
+            *budget -= s.len();
+            Some(Value::String(s))
+        }
+        Value::Array(items) if depth < MAX_DEPTH => {
+            *lost |= items.len() > MAX_ITEMS;
+            let items = items
+                .into_iter()
+                .take(MAX_ITEMS)
+                .filter_map(|v| trim_value(v, depth + 1, budget, lost))
+                .collect();
+            Some(Value::Array(items))
+        }
+        Value::Object(fields) if depth < MAX_DEPTH => {
+            *lost |= fields.len() > MAX_FIELDS;
+            let fields = fields
+                .into_iter()
+                .take(MAX_FIELDS)
+                .filter_map(|(k, v)| Some((k, trim_value(v, depth + 1, budget, lost)?)))
+                .collect();
+            Some(Value::Object(fields))
+        }
+        other if other.to_string().len() <= MAX_VALUE => Some(other),
+        _ => {
+            *lost = true;
+            None
+        }
+    }
 }
 
 fn cut(mut s: String, max: usize) -> String {
@@ -248,9 +300,38 @@ mod tests {
         let r = request(stdin("Write", &input.to_string()).as_bytes(), AT, vec![]).unwrap();
         let content = r.tool_input["content"].as_str().unwrap();
         assert!(content.len() <= MAX_STRING && content.ends_with('é'));
-        assert!(r.tool_input.get("lines").is_none());
+        assert_eq!(r.tool_input["lines"].as_array().unwrap().len(), MAX_ITEMS);
         assert_eq!(r.tool_input["file_path"], "C:\\a.txt");
+        assert_eq!(r.cut, ["content", "lines"]);
         assert!(serde_json::to_vec(&r).unwrap().len() < MAX_REQUEST);
+
+        // A MultiEdit keeps its edits, each string cut, and all of them within the budget.
+        let edit = json!({ "old_string": "a".repeat(MAX_STRING + 1), "new_string": "b" });
+        let edits: Vec<Value> = (0..40).map(|_| edit.clone()).collect();
+        let input = json!({ "file_path": "C:\\a.txt", "edits": edits });
+        let r = request(
+            stdin("MultiEdit", &input.to_string()).as_bytes(),
+            AT,
+            vec![],
+        )
+        .unwrap();
+        assert_eq!(r.cut, ["edits"]);
+        assert_eq!(r.tool_input["edits"].as_array().unwrap().len(), 40);
+        assert_eq!(
+            r.tool_input["edits"][0]["old_string"]
+                .as_str()
+                .unwrap()
+                .len(),
+            MAX_STRING
+        );
+        assert_eq!(
+            r.tool_input["edits"][39]["old_string"], "",
+            "past the budget"
+        );
+        assert!(serde_json::to_vec(&r).unwrap().len() < MAX_REQUEST);
+
+        let small = request(stdin("Bash", r#"{"command":"ls"}"#).as_bytes(), AT, vec![]).unwrap();
+        assert!(small.cut.is_empty());
     }
 
     #[test]

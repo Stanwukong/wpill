@@ -34,6 +34,9 @@ export function Island() {
           activity?.kind === "agentApproval"
         ? "needsInput"
         : undefined;
+  // An approval with a diff or command (2.8b) needs a wider card; the layout spring morphs to it like any shape change.
+  const wide =
+    (activity?.kind === "agentApproval" || activity?.kind === "claudeApproval") && activity.payload.preview !== null;
   const ref = useRef<HTMLDivElement>(null);
   usePanelSizeReporter(ref, mode === "pill" ? null : mode);
   const media = useMedia();
@@ -66,6 +69,7 @@ export function Island() {
         data-mode={mode}
         data-charging={charging}
         data-claude={claude}
+        data-wide={wide}
         transition={islandSpring}
         style={{ borderRadius: RADIUS[mode] }}
       >

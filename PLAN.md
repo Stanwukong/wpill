@@ -27,7 +27,8 @@ Cay runs), with all 12 manual checks passed. Phase 2.7 is complete.**
 decided (v0.2 unsigned, D33) (2026-11-01). **4a-5 (release v0.2) and the dock check are set aside** at the author's
 call (2026-11-01) to start 2.8; they resume after it.
 **Now: [Phase 2.8 agent UX](#phase-28-agent-ux-started-2026-11-01) (D34).** 2.8a (approve terminal sessions from the
-island, D36) is signed off (2026-11-01). **Next: 2.8b–f**, kick-off prompt
+island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the card, D37) is built, manual check
+pending. **Next: 2.8c–f**, kick-off prompt
 [prompts/phase-2.8-agent-ux.md](prompts/phase-2.8-agent-ux.md).
 Proposed, not started: [6 Google Calendar and Gmail](#phase-6-google-calendar-and-gmail-proposed-2026-11-01-not-started)
 (D35) and [2.9 other agents and open models](#phase-29-other-agents-and-open-models-proposed-2026-11-01-not-started).
@@ -312,6 +313,20 @@ not shown after Stop). `rememberAs` ("git", "edits") replaces the planned `canRe
 `Schedule`: `{ kind: "off" }`, `{ kind: "days", time: "HH:MM", days: ["mon", …] }`, `{ kind: "every", hours: 1–24,
 from: "HH:MM" }`, `{ kind: "start" }`. `SkipReason`: `missed | paused | stillRunning | tooMany | folderMissing |
 startFailed`.
+
+### Phase 2.8 (a–b)
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| activity | `claudeApproval` | `{ requestId, sessionId \| null, project, tool, summary, risk, preview }` | 2.8a: a terminal session's held permission request. Sticky, interactive. |
+| command | `claude_decide` | `(requestId, answer: "allow" \| "deny")` | 2.8a. Error `agentApprovalGone` once it's no longer held. |
+| activity field | `agentApproval.preview`, `claudeApproval.preview` | `ApprovalPreview \| null` | 2.8b: the card's copy (≤6 lines). |
+| type | `ApprovalPreview` | `{ kind: "diff", file, lines: { op: add \| del \| ctx \| gap, text }[], added \| null, removed \| null, moreLines, cut, note }` or `{ kind: "command", lines, moreLines, cut }` | Counts are `null` when the input was cut. Command lines are pre-wrapped to 48 columns. |
+| command | `agent_approval_preview` / `claude_ask_preview` | `(requestId) → ApprovalPreview \| null` | The whole preview (≤2000 lines); `null` once answered. |
+| command / event | `claude_asks` / `claude:asks` | `() → { asks }` / `{ asks: ClaudeApprovalActivity[] }` | Held session requests, oldest first, for the command window. |
+| command | `command_window_show_ask` | `(requestId) → void` | Shows the command window and sends `command:focus-ask` (`requestId`). |
+| command | `command_take_focus` | `() → { kind: "run", runId } \| { kind: "ask", requestId } \| null` | Once, on load: the focus a newly created window missed. |
+| pipe field | `ask::Request.cut` | `string[]` | Top-level input fields the forwarder shortened. |
 
 ### Reserved for later phases (names fixed now so they slot in)
 
@@ -997,10 +1012,38 @@ tray first, it now adds `PermissionRequest`; restart open Claude Code sessions)
 7. **Click the summary:** it brings that session's terminal to the front; the card stays until answered.
 8. **Agent runs unchanged:** an agent run's approval still shows its own card (with "for this run"), not a session card.
 
-**2.8b See what you approve**
-- [ ] Edits: a compact diff on the card (first few changed lines, `+n −m`), Cascadia Mono; full diff in the command
-      window (click). Shell: the whole command, wrapped, never cut mid-token. Built in Rust (`describe.rs`, unit-tested)
-- [ ] Respect the island's size limits (D2); the card grows to a cap, then says "+12 more lines"
+**2.8b See what you approve** (built 2026-11-01, D37)
+- [x] Edits: a compact diff on the card (first changed lines with one line of context, `file · +n −m`, a note for a new
+      file, every occurrence or a whole-file replace), Cascadia Mono; the whole diff in the command window (click).
+      `Write` diffs against the file on disk (≤256 KB). Shell: the whole command wrapped to 48 columns between tokens
+      (a token longer than a line breaks after `/ \ = , & ;`), never cut. Built in Rust (`agent/preview.rs`, pure,
+      unit-tested); both card kinds carry the card's copy, `agent_approval_preview` / `claude_ask_preview` the whole one
+- [x] Respect the island's size limits (D2): the card shows at most 6 lines, then "+n more lines"; the island widens to
+      `min(460px, 100vw − 32px)` while such a card shows (231 CSS px tall at most, checked at 100/120/150 %)
+- [x] 2.8a's cut is honest: `ask.rs` trims strings (16 KB each, 384 KB in all), arrays (64 items) and nesting, records
+      the fields it shortened (`Request::cut`), and the card says "cut" instead of counts. MultiEdit's `edits` are now
+      trimmed instead of dropped
+- [x] A session's request opens in the command window (the author's choice): "Waiting in sessions" in the sidebar, the
+      whole diff or command, Allow / Deny, "Show session"; the card's title now focuses the terminal. The window takes
+      a pending focus on first load (`command_take_focus`), which also fixes runs opened when it's first created
+- [x] Checked: Rust 169 tests (11 new), clippy, typecheck, `pnpm build`; headless renders of a 6-line diff with
+      "+12 more lines", a wrapped command, a cut diff, a new file, the card without a preview and the command window
+      session view at 100/120/150 % (motion-designer)
+- [ ] Manual check (below)
+
+**Manual check (Phase 2.8b)** (`pnpm tauri dev`; Connect stays as in 2.8a)
+1. **Edit:** in a terminal session ask Claude to change two lines of a file. The card shows `file · +2 −2` and the lines;
+   Allow writes it.
+2. **Long diff:** ask for a new 30-line file. The card says "New file", 6 lines, "+24 more lines"; click the block: the
+   command window opens on "Waiting in sessions" with the whole file. Allow there; the card goes.
+3. **Overwrite:** ask Claude to rewrite an existing small file with `Write`: the card diffs against what's on disk.
+4. **Long command:** ask for a long shell command (e.g. a `git log` with many flags). It wraps between words, nothing
+   is cut, and copying it from the command window gives the exact command.
+5. **Cut:** ask Claude to `Write` a file over 16 KB from a session: the card says "cut" with no counts.
+6. **Agent run:** an agent run's edit approval shows the same diff; clicking it opens the run, whose pending card shows
+   the whole diff.
+7. **Title:** clicking the session card's project name brings its terminal forward.
+8. **Text size 150 %:** cards still fit; nothing overlaps.
 
 **2.8c Questions and plans**
 - [ ] `AskUserQuestion`: options as buttons on the card; a free-text answer opens the command window
@@ -1185,6 +1228,9 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
   minute (`Stop` doesn't fire; the idle notification corrects it). Clicking focuses the window, not the Windows Terminal
   tab. The hook entry records the exe that clicked "Connect" (connect from the installed build, like autostart).
   The PowerShell form of the entry (machines without Git Bash) is untested. Sessions inside WSL aren't seen.
+  Approval previews (2.8b): a session's input over 16 KB per string arrives cut, so its card says "cut" without
+  counts; a `Write` diffs against the file as it is when asked (≤256 KB, UTF-8), else it reads "Replaces the whole
+  file". Wrapping counts characters, so wide (CJK) characters can overflow a line. `NotebookEdit` has no preview.
 - Agent (2.7): only steps Claude Code would ask about reach the island; your own allow rules still auto-approve
   (`agent.userSettings: false` sends everything to the island but drops your hooks and plugins for those runs). Your
   own MCP servers aren't loaded in agent runs unless `agent.strictMcpConfig` is false. Budgets are Claude Code's

@@ -1,7 +1,8 @@
 import { useState } from "react";
-import type { AgentApprovalActivity, AgentRisk } from "../../lib/types";
+import type { AgentApprovalActivity, AgentRisk, ApprovalPreview } from "../../lib/types";
 import { ChevronGlyph, RiskGlyph } from "../agent/AgentGlyphs";
 import { RISK_LABEL } from "../agent/labels";
+import { PreviewBlock } from "../agent/PreviewBlock";
 import { decide, openRun } from "../agent/useAgentRuns";
 import { AgentMark } from "../claude/WorkingGlyphs";
 import "../agent/agent.css";
@@ -9,8 +10,8 @@ import "../agent/agent.css";
 export type ApprovalChoice = "allow" | "deny" | "run";
 
 /**
- * An agent run asks to use a tool: mark · project (or routine) · tool · risk, the command or path on its own line (click it for
- * the command window), then Deny / Allow and, where Rust offers it, "Allow … for this run". Sticky: Rust withdraws
+ * An agent run asks to use a tool: mark · project (or routine) · tool · risk, the command or path on its own line, or
+ * its diff / wrapped command (click it for the command window), then Deny / Allow and, where Rust offers it, "Allow … for this run". Sticky: Rust withdraws
  * it once answered, so a click only marks the choice as pending. Interactive while hovered (Rust's hit test).
  */
 export function AgentApproval({ approval }: { approval: AgentApprovalActivity }) {
@@ -34,6 +35,7 @@ export function AgentApproval({ approval }: { approval: AgentApprovalActivity })
       risk={risk}
       desktop={desktop}
       summary={summary}
+      preview={approval.preview}
       summaryHint="Details"
       onSummary={() => openRun(runId)}
       rememberAs={rememberAs}
@@ -46,15 +48,19 @@ export function AgentApproval({ approval }: { approval: AgentApprovalActivity })
 /**
  * The approval card both kinds share (agent runs and terminal sessions, 2.8a). Presentational: the caller owns the
  * pending choice and what a click does. `origin` is a quiet word after the title that tells the kinds apart;
- * without `onSummary` the summary is plain text.
+ * `onTitle` makes the title a quiet button; without `onSummary` the summary is plain text. With a `preview` (2.8b)
+ * the well holds the diff or the wrapped command instead of the one line (the island widens for it, `data-wide`).
  */
 export function ApprovalCard({
   title,
+  titleHint,
+  onTitle,
   origin,
   tool,
   risk,
   desktop,
   summary,
+  preview,
   summaryHint,
   onSummary,
   rememberAs,
@@ -62,11 +68,14 @@ export function ApprovalCard({
   onAnswer,
 }: {
   title: string;
+  titleHint?: string;
+  onTitle?: () => void;
   origin?: string;
   tool: string;
   risk: AgentRisk;
   desktop: boolean;
   summary: string;
+  preview?: ApprovalPreview | null;
   summaryHint?: string;
   onSummary?: () => void;
   rememberAs?: string | null;
@@ -80,7 +89,13 @@ export function ApprovalCard({
       <div className="approval__head">
         <AgentMark />
         <span className="approval__title">
-          <span className="activity__title">{title}</span>
+          {onTitle ? (
+            <button className="activity__title approval__title-btn" title={titleHint} onClick={onTitle}>
+              {title}
+            </button>
+          ) : (
+            <span className="activity__title">{title}</span>
+          )}
           {origin && <span className="approval__origin">{origin}</span>}
           <span className="approval__tool">{tool}</span>
         </span>
@@ -89,7 +104,20 @@ export function ApprovalCard({
           {RISK_LABEL[risk]}
         </span>
       </div>
-      {onSummary ? (
+      {preview && onSummary ? (
+        <button
+          className="approval__summary approval__preview"
+          title={summaryHint ? `${summary}\n${summaryHint}` : summary}
+          onClick={onSummary}
+        >
+          <PreviewBlock preview={preview} />
+          <ChevronGlyph />
+        </button>
+      ) : preview ? (
+        <div className="approval__summary approval__preview" data-static="true" title={summary}>
+          <PreviewBlock preview={preview} />
+        </div>
+      ) : onSummary ? (
         <button
           className="approval__summary"
           title={summaryHint ? `${summary}\n${summaryHint}` : summary}

@@ -13,8 +13,9 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
+use super::preview::{self, Existing};
 use super::{actions, describe};
-use crate::ipc::{AgentApprovalActivity, AgentRisk};
+use crate::ipc::{AgentApprovalActivity, AgentRisk, ApprovalPreview};
 
 /// Grants kept per run at most (approved prompts whose call never came).
 const MAX_GRANTS: usize = 32;
@@ -53,6 +54,8 @@ pub struct Request {
     pub routine_name: Option<String>,
     /// Its timeout pauses while you're away (a scheduled routine with "Approvals wait for me").
     pub patient: bool,
+    /// For a `Write`: the file it would replace (`preview::read_existing`), for the diff.
+    pub existing: Existing,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +67,8 @@ pub struct Pending {
     pub purpose: Purpose,
     pub tool: String,
     pub target_pid: Option<u32>,
+    /// The command window's copy of the preview (the card's is in `activity`).
+    pub full: Option<ApprovalPreview>,
     key: Option<String>,
     deadline: Instant,
     patient: bool,
@@ -132,6 +137,7 @@ impl Approvals {
         } else {
             describe::summary(&req.tool, &req.input, &req.cwd)
         };
+        let previews = preview::build(&req.tool, &req.input, &req.cwd, &req.existing, &[]);
         self.next_id = self.next_id.wrapping_add(1).max(1);
         let pending = Pending {
             activity: AgentApprovalActivity {
@@ -145,12 +151,14 @@ impl Approvals {
                 desktop,
                 detail: actions::detail(&req.tool, &req.input),
                 routine_name: req.routine_name,
+                preview: previews.as_ref().map(|p| Box::new(p.card.clone())),
             },
             input: req.input,
             reply: req.reply,
             purpose: req.purpose,
             tool: req.tool,
             target_pid: req.target_pid,
+            full: previews.map(|p| p.full),
             key,
             deadline: now + timeout,
             patient: req.patient,
@@ -251,6 +259,15 @@ impl Approvals {
             .collect()
     }
 
+    /// The whole diff or command of a waiting request, for the command window.
+    pub fn preview(&self, request_id: u32) -> Option<ApprovalPreview> {
+        self.pending
+            .iter()
+            .find(|p| p.activity.request_id == request_id)?
+            .full
+            .clone()
+    }
+
     pub fn has_pending(&self, run_id: &str) -> bool {
         self.pending.iter().any(|p| p.activity.run_id == run_id)
     }
@@ -288,6 +305,7 @@ mod tests {
             element: None,
             routine_name: None,
             patient: false,
+            existing: Existing::NotRead,
         }
     }
 
