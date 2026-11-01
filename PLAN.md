@@ -25,7 +25,7 @@ Cay runs), with all 12 manual checks passed. Phase 2.7 is complete.**
 **Now: [Phase 4a](#phase-4a-release-readiness) (release readiness)**, kick-off prompt
 [prompts/phase-4a-release-readiness.md](prompts/phase-4a-release-readiness.md). 4a-1 (own visual identity: the amber
 wave, D30), 4a-2 (display changes followed live, D31; dock check pending) and 4a-3 (renamed **Cay**, README, MIT,
-D32) are done (2026-11-01); **next: 4a-4 (code signing)**: compare options and wait for an OK.
+D32) are done and 4a-4 decided (v0.2 unsigned, D33) (2026-11-01); **next: 4a-5 (release v0.2)**.
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -920,7 +920,14 @@ Kick-off prompt: [prompts/phase-4a-release-readiness.md](prompts/phase-4a-releas
       README (features, install, SmartScreen, migration, needs, what it touches, privacy, agent safety, not affiliated
       with Anthropic), MIT LICENSE, licence and publisher in the configs. Verified: the dev build copied 41 files, left
       the Run value for the installed build, and a haiku run's approval went through `mcp__cay__approve`. 152 tests
-- [ ] Code signing (certificate or Azure Trusted Signing) wired into `tauri build`
+- [x] **4a-4 Code signing: decided (2026-11-01, D33): v0.2 ships unsigned.** Compared Azure Artifact Signing (individuals
+      in the US and Canada only, so not available), SignPath Foundation (free for open source, but the publisher reads
+      "SignPath Foundation" and builds move to GitHub Actions), Certum's Open Source certificate (~€69, individuals
+      worldwide, "Open Source Developer, <name>") and OV/EV (EV lost its instant SmartScreen pass in 2024). No option
+      skips SmartScreen for a new app; signing builds publisher reputation over releases. The README explains the
+      SmartScreen prompt and how to check the installer's SHA-256, which every release lists.
+- [ ] Signing from v0.3: Certum Open Source (own name) or SignPath (free); wire `bundle.windows.signCommand`, never
+      commit a secret, check `cay.exe` and the installer with `signtool verify /pa`
 - [ ] Rerun the manual checklist; publish v0.2 installer
 
 **Manual check (Phase 4a-2)** (`pnpm tauri dev` with `$env:RUST_LOG='info,cay_lib=debug'`; each step logs
@@ -1016,14 +1023,17 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
 - Windows 11 already has the WebView2 runtime, so nothing else is downloaded. On machines without it,
   Tauri's default NSIS mode fetches a small WebView2 bootstrapper during install.
 - A fresh release build takes ~11 min (fat LTO). The release profile trades build time for size.
-- **Not code-signed yet:** SmartScreen will warn "Windows protected your PC" on other machines.
-  Signing needs a code-signing certificate (or Azure Trusted Signing) before a public release.
+- **v0.2 is not code-signed (D33):** SmartScreen warns "Windows protected your PC" with an unknown publisher. Each
+  release lists the installer's SHA-256 (`Get-FileHash … -Algorithm SHA256`); the README explains both. Signing is
+  planned from v0.3.
 
 ## Open questions
-- Code signing: buy a certificate, or use Azure Trusted Signing? (Stage 4a-4.)
+- Signing from v0.3: Certum Open Source certificate (own name, ~€69) or SignPath Foundation (free, their name)?
 - Rename the GitHub repo from `wpill` to `cay`? (GitHub redirects the old URL; the README and configs link `wpill`.)
 
 ## Decided
-- Name: **Cay**, licence MIT (2026-11-01, D32). Identifier `io.github.stanwukong.cay`.
+- Name: **Cay**, licence MIT (2026-11-01, D32). Identifier `io.github.stanwukong.cay`. Kept although `cay.app` /
+  `cay.dev` are taken: nothing depends on a domain. If a site is wanted, `getcay.dev`, `usecay.app`, `trycay.app` and
+  `cayisland.app` showed no RDAP registration on 2026-11-01.
 - Collapsed pill shows the clock (2026-10-28).
 - Package manager: pnpm (2026-10-28).

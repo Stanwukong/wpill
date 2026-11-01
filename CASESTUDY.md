@@ -524,6 +524,23 @@ startup would vanish for the one existing user); rewriting the hooks on first st
 settings without asking); moving instead of copying the old folder (a failed move half-loses data, and an installed
 TopBar would start from nothing); GPL-3.0 or Apache-2.0 (the author chose MIT).
 
+### D33: v0.2 ships unsigned, with a published checksum; signing comes in v0.3 (Phase 4a-4)
+*Why:* the comparison (Microsoft's own "code signing options" page, checked 2026-11-01) changed the premise of this
+stage. Since 2024 no certificate gives a new app instant SmartScreen trust, EV included: every signed app shows the
+"Windows protected your PC" prompt until its publisher builds reputation over downloads and releases. Signing still
+matters (a verified publisher name, reputation that carries across releases instead of per file, and enterprise
+policies that block unsigned exes), but it doesn't remove the first-release warning. The cheapest route, Azure Artifact
+Signing (~$9.99 a month, no hardware), only accepts individuals in the US or Canada, which excludes the author.
+The remaining choices were SignPath Foundation (free for open-source projects, but the certificate is theirs, so the
+publisher reads "SignPath Foundation", and releases must be built in GitHub Actions), Certum's Open Source certificate
+(~€69, worldwide, the author's own name, a cloud key through their SimplySign app) and a standard OV certificate
+($150–300 a year, a hardware token or cloud key store since 2023). The author chose to ship v0.2 unsigned rather than
+wait days for identity checks, and to sign from v0.3. To keep an unsigned download checkable, each release lists the
+installer's SHA-256 and the README shows how to compare it.
+*Alternatives:* Azure Artifact Signing (not available to individuals outside the US and Canada); EV (no SmartScreen
+advantage since 2024, $400+ a year); waiting for SignPath or Certum before releasing (delays v0.2 for a warning that
+signing wouldn't remove yet).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -707,6 +724,7 @@ needs the same DPI awareness as the app it measures, or it reports a consistent 
 | 2026-11-01 | Stage 4a-1: TopBar's own look (D30). The Claude Code-style spinner, `✻` and orange are replaced by an amber wave, its mark and an amber edge, chosen from two rounds of rendered candidates (motion-designer); checked live with a haiku run. |
 | 2026-11-01 | Stage 4a-2: the island follows display changes (D31): the poller re-reads the primary monitor every 250 ms and re-places the island; `monitor:changed` makes React measure again. Verified at 100/125/150 %, a temporary 1280×720 and a fullscreen window (C13); the dock check is the user's. |
 | 2026-11-01 | Stage 4a-3: renamed **Cay** (D32) after name checks; MIT licence; README with install, privacy and agent-safety sections; one-time migration of TopBar's data, startup entry and hooks. Verified with the dev build (41 files copied, a haiku run approved through `mcp__cay__approve`). |
+| 2026-11-01 | Name kept although `cay.app` / `cay.dev` are taken. Stage 4a-4 decided: v0.2 ships unsigned with a published SHA-256 (D33); signing from v0.3 (Certum Open Source or SignPath). |
 
 ## 7. Results & metrics
 

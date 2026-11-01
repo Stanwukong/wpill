@@ -36,8 +36,16 @@ collapsed it doesn't block a single click.
 Download `Cay_<version>_x64-setup.exe` from [Releases](https://github.com/Stanwukong/wpill/releases) and run it. It installs for
 your user only (no admin) into `%LOCALAPPDATA%\Cay`, and adds a tray icon with **Launch at startup** and **Quit Cay**.
 
-Until the installer is code-signed, Windows SmartScreen may say "Windows protected your PC". Click **More info**, check
-that the publisher and file name are what you downloaded, then **Run anyway**.
+v0.2 isn't code-signed yet (signing is planned from v0.3), so Windows SmartScreen will say "Windows protected your PC"
+and list the publisher as unknown. Check your download first (below), then click **More info** → **Run anyway**.
+
+**Check your download.** Each release lists the installer's SHA-256 checksum. In PowerShell:
+
+```powershell
+Get-FileHash .\Cay_0.2.0_x64-setup.exe -Algorithm SHA256
+```
+
+The hash must match the one on the release page exactly. If it doesn't, delete the file.
 
 **Coming from TopBar?** Quit TopBar from its tray, then install Cay. On first start Cay copies TopBar's settings,
 routines and agent history, and moves the startup entry if you had it on. If you'd connected Claude Code, click
