@@ -46,7 +46,7 @@
   /* Charging is always green, whatever the album-art accent is. */
   --charge: #30d158;
   --charge-rgb: 48, 209, 88;
-  /* TopBar's agent amber (sessions, agent runs, the edge glow, Allow); never follows the album art. Text on it uses
+  /* Cay's agent amber (sessions, agent runs, the edge glow, Allow); never follows the album art. Text on it uses
      --agent-ink (white on amber fails contrast); --agent-deep is the pressed state. */
   --agent: #f6a823;
   --agent-rgb: 246, 168, 35;

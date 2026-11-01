@@ -18,7 +18,7 @@ A change is not finished until these are updated. Small refactors and typo fixes
 
 ## Project
 
-**TopBar** (working name, repo `wpill`): a Windows 11 "Dynamic Island"-style bar pinned to
+**Cay** (formerly TopBar until Phase 4a-3, D32; repo `wpill`): a Windows 11 "Dynamic Island"-style bar pinned to
 the top center of the screen. Collapsed it's a small pill; hovering a hot zone at the
 top-middle expands it into a panel (running apps; later media, memory-heavy processes,
 window previews).
@@ -33,20 +33,20 @@ window previews).
 .\scripts\check-env.ps1     # verify toolchain (Rust/MSVC/Node/WebView2)
 pnpm install
 pnpm tauri dev              # run the app (Vite HMR for React; Rust rebuilds + relaunches on save)
-$env:RUST_LOG='info,topbar_lib=debug'; pnpm tauri dev   # + hover transitions, panel-rect, media:state and activity:show logs
+$env:RUST_LOG='info,cay_lib=debug'; pnpm tauri dev   # + hover transitions, panel-rect, media:state and activity:show logs
 pnpm tauri build            # release build + NSIS installer (~11 min cold: fat LTO; ~1.5 MB installer)
 cd src-tauri; cargo fmt; cargo clippy --all-targets; cargo test
 pnpm typecheck              # tsc --noEmit
-# Debug builds only: drive agent runs from outside (forwarded to the running TopBar; results in its log)
-.\src-tauri\target\debug\topbar.exe agent-test start <folder> "<prompt>" haiku 4
-.\src-tauri\target\debug\topbar.exe agent-test decide <requestId> allow|deny [run]   # also: send, stop, stop-all, show, hide, quit
-.\src-tauri\target\debug\topbar.exe agent-test look screenshot '{"hwnd":123}' C:\tmp\shot.png   # a desktop look without Claude (also list_windows, focused_window, ui_tree)
-.\src-tauri\target\debug\topbar.exe agent-test act type_text '{"hwnd":123,"text":"hi"}'   # an action without Claude or approvals (no refs; real input: ask first)
-.\src-tauri\target\debug\topbar.exe agent-test routine list|save '<draftJson>'|run <id>|due <id>|delete <id>|pause on|off   # JSON args: from Git Bash (C12)
+# Debug builds only: drive agent runs from outside (forwarded to the running Cay; results in its log)
+.\src-tauri\target\debug\cay.exe agent-test start <folder> "<prompt>" haiku 4
+.\src-tauri\target\debug\cay.exe agent-test decide <requestId> allow|deny [run]   # also: send, stop, stop-all, show, hide, quit
+.\src-tauri\target\debug\cay.exe agent-test look screenshot '{"hwnd":123}' C:\tmp\shot.png   # a desktop look without Claude (also list_windows, focused_window, ui_tree)
+.\src-tauri\target\debug\cay.exe agent-test act type_text '{"hwnd":123,"text":"hi"}'   # an action without Claude or approvals (no refs; real input: ask first)
+.\src-tauri\target\debug\cay.exe agent-test routine list|save '<draftJson>'|run <id>|due <id>|delete <id>|pause on|off   # JSON args: from Git Bash (C12)
 ```
 
 The first `cargo build` compiles ~370 crates (several minutes); later rebuilds of the
-`topbar` crate take 1–2 minutes in debug. `target\debug` grows by GBs over many rebuilds (it hit ~20 GB and filled
+`cay` crate take 1–2 minutes in debug. `target\debug` grows by GBs over many rebuilds (it hit ~20 GB and filled
 the drive once); `cargo clean --profile dev` when space runs low.
 
 ## Layout
@@ -56,21 +56,22 @@ the drive once); `cargo clean --profile dev` when space runs low.
   `hover/` (`mod.rs` = poller thread + commands, `logic.rs` = pure state machine + hit tests, unit-tested),
   `fullscreen.rs`, `apps/` (`enumerate.rs`, `icon.rs`, `activate.rs`), `tray.rs` (tray menu),
   `autostart.rs` (Run-key entry, quoted path, respects Task Manager's enable flag),
+  `migrate.rs` (one-time TopBar → Cay moves: data folder copy, Run value; D32),
   `media/` (`mod.rs` = managed state + commands, `watcher.rs` = GSMTC thread + subscriptions,
   `snapshot.rs`, `artwork.rs`, `logic.rs` = pure helpers, unit-tested),
   `activity/` (`mod.rs` = managed `Activities`, `Watcher` harness, Caps Lock read, drag/open commands; `queue.rs` = pure
-  priority/coalescing, unit-tested; `settings.rs` = switches in `%APPDATA%\dev.wpill.topbar\settings.json`; one thread
+  priority/coalescing, unit-tested; `settings.rs` = switches in `%APPDATA%\io.github.stanwukong.cay\settings.json`; one thread
   per source: `audio.rs` (volume + Bluetooth), `brightness.rs`, `power.rs`, `screenshots.rs`; `drag.rs`).
   The activity queue is driven by `hover::logic::Machine` (the `Showing` phase), not by the activity module.
   Sources send `activity::Signal` (`Offer(Activity)` or `Retract(key)`); other features start their threads through
   the same `activity::Watcher` harness (`Activities::sender`/`add_watcher`) so shutdown stops them too.
-  `claude/` (Claude Code via hooks): `forward.rs` = `topbar.exe hook` (run from `main.rs` before Tauri), `pipe.rs` =
+  `claude/` (Claude Code via hooks): `forward.rs` = `cay.exe hook` (run from `main.rs` before Tauri), `pipe.rs` =
   per-user pipe + server loop, `process.rs` = ancestor chain/liveness, `protocol.rs` + `sessions.rs` + `hooks.rs`
   (settings.json merge) = pure and unit-tested, `focus.rs` = which window to bring forward, `mod.rs` = listener,
-  commands and the tray's Connect/Disconnect dialog. It ignores hooks from sessions TopBar itself started (`is_self`).
+  commands and the tray's Connect/Disconnect dialog. It ignores hooks from sessions Cay itself started (`is_self`).
   `agent/` (Phase 2.7, headless Claude Code runs): `mod.rs` = managed `Agents`, pipe server + connection threads,
   approval flow, commands; `run.rs` = command line + spawn (suspended, `CREATE_NO_WINDOW`, Job Object via `job.rs`);
-  `bridge.rs` = `topbar.exe mcp` (run from `main.rs`, relays stdio JSON-RPC ↔ `pipe.rs`); `hotkey.rs`, `folder.rs`
+  `bridge.rs` = `cay.exe mcp` (run from `main.rs`, relays stdio JSON-RPC ↔ `pipe.rs`); `hotkey.rs`, `folder.rs`
   (picker + long paths), `installs.rs` (find `claude.exe`, recent folders), `audit.rs` (jsonl trail, run ids),
   `settings.rs` (`agent` block in settings.json). Pure and unit-tested: `stream.rs` (stream-json), `lifecycle.rs`
   (run state), `approvals.rs`, `describe.rs` (risk, summaries, remember keys), `mcp.rs`.
@@ -163,11 +164,15 @@ the drive once); `cargo clean --profile dev` when space runs low.
   It keeps the window permanently layered and flips only `WS_EX_TRANSPARENT`, with no `SWP_FRAMECHANGED`.
   The poller re-asserts it every 250 ms in case Tao rewrites the style.
 - **Autostart registers the exe that toggled it.** Turning on "Launch at startup" from a dev build
-  writes `target\debug\topbar.exe` into the Run key. Toggle it from the installed build.
-- **Run-key paths must be quoted** (`"C:\Users\DELL 7300\…\topbar.exe"`). Unquoted paths with spaces
+  writes `target\debug\cay.exe` into the Run key. Toggle it from the installed build.
+- **Run-key paths must be quoted** (`"C:\Users\DELL 7300\…\cay.exe"`). Unquoted paths with spaces
   don't show in Task Manager's Startup apps and are a hijack risk. `HKCU\…\Explorer\StartupApproved\Run`
   holds Task Manager's own switch (odd first byte = disabled): read it in `is_enabled`, and clear it when the user toggles from the tray.
-- **Single instance blocks dev while the installed app runs** (same identifier). Quit it from the tray first.
+- **Single instance blocks dev while the installed app runs** (same identifier). Quit it from the tray first. An
+  installed *TopBar* (the old identifier) is a different app to Windows: quit it too, or two islands run.
+- **The TopBar → Cay rename (D32) is migrated once, in `migrate.rs`**, first thing in `setup`. Keep `OLD_IDENTIFIER`,
+  `autostart::OLD_VALUE_NAME` and `hooks::OLD_MARKER` until v1; the data copy only runs while Cay's folder doesn't
+  exist (test it by renaming that folder aside, not by deleting TopBar's).
 - **WebView2 background throttling can't be disabled on Windows** (Tauri's
   `background_throttling` is unsupported there). Don't build on JS timers running while idle.
 - **Alt+Tab filter:** visible, non-empty title, root owner + last active popup equals
@@ -208,18 +213,18 @@ the drive once); `cargo clean --profile dev` when space runs low.
 - **Testing activities from outside without side effects:** toggle Caps Lock with SendInput and toggle it back; volume
   up N then down N; brightness via WMI `WmiSetBrightness` and restore; copy an image into the Screenshots folder (then
   delete it). Read `GWL_EXSTYLE` (`WS_EX_TRANSPARENT`) to check click-through.
-- **The hook forwarder must stay quiet and fast.** `topbar.exe hook` runs before Tauri, never prints, never panics
+- **The hook forwarder must stay quiet and fast.** `cay.exe hook` runs before Tauri, never prints, never panics
   (release is `panic = "abort"`, a non-zero exit shows as a hook error in Claude Code) and bounds every wait. Keep
   the hook entry in *shell form* with an explicit `shell`: Claude Code before 2.1.15x ignores the `args` exec form
-  and would run a bare `topbar.exe`, launching TopBar. "Connect Claude Code…" records the exe that clicked it (as with
+  and would run a bare `cay.exe`, launching Cay. "Connect Claude Code…" records the exe that clicked it (as with
   autostart), so connect from the installed build.
 - **Testing Claude Code hooks without touching `~/.claude/settings.json`:** pipe hook JSON *files* into
-  `target\debug\topbar.exe hook` (shells mangle backslashes in inline JSON, C7), or run
+  `target\debug\cay.exe hook` (shells mangle backslashes in inline JSON, C7), or run
   `claude -p "…" --settings <file with the hook entries>`. Never write the real settings in tests; `hooks.rs` tests
   use a temp folder, and `CLAUDE_CONFIG_DIR` points the tray item at another folder.
-- **Agent runs never weaken permissions.** TopBar always passes `--permission-mode default` and
-  `--permission-prompt-tool mcp__topbar__approve`; never `bypassPermissions` or `--dangerously-skip-permissions`, and
-  never write the user's `~/.claude/settings.json` for a run (per-run files live under `%APPDATA%\dev.wpill.topbar\
+- **Agent runs never weaken permissions.** Cay always passes `--permission-mode default` and
+  `--permission-prompt-tool mcp__cay__approve`; never `bypassPermissions` or `--dangerously-skip-permissions`, and
+  never write the user's `~/.claude/settings.json` for a run (per-run files live under `%APPDATA%\io.github.stanwukong.cay\
   agent\runs\<runId>\`, deleted when the process exits). The prompt tool's reply is a text block holding
   `{"behavior":"allow","updatedInput":…}` / `{"behavior":"deny","message":…}`.
 - **Agent processes:** `claude.exe` must start `CREATE_SUSPENDED`, be assigned to its Job Object, then resumed
@@ -230,7 +235,7 @@ the drive once); `cargo clean --profile dev` when space runs low.
 - **Building a webview window** from a sync command or the main thread deadlocks on Windows: `window::command::show`
   is called from the hotkey thread and async commands. The hotkeys use `RegisterHotKey(NULL)` on their own thread
   (`WM_HOTKEY` goes to the thread queue); receiving one is what lets the command window take the foreground.
-- **Desktop looks never capture TopBar.** Every window of our own process is refused by pid (island, command window,
+- **Desktop looks never capture Cay.** Every window of our own process is refused by pid (island, command window,
   glow). For a screen capture, `capture.rs` sets `WDA_EXCLUDEFROMCAPTURE` on our visible windows, `DwmFlush`es twice,
   captures, and restores `WDA_NONE`; don't make it permanent on the island (it would vanish from the user's own
   screenshots). The glow is always excluded, so it can't be screenshotted: check it through its window
@@ -253,18 +258,18 @@ the drive once); `cargo clean --profile dev` when space runs low.
   real keys from the target's layout (`VkKeyScanExW`, Shift and Caps Lock handled), one event per `SendInput`, 25 ms
   apart and 60 ms after a modifier goes down. Don't batch it back up; check typed text by reading it back (UIA or a
   screenshot), not by `SendInput`'s count, and compare with WordPad when an app looks wrong.
-- **Testing agent runs:** use `topbar.exe agent-test …` (debug builds only), a scratch folder, `haiku` and low
+- **Testing agent runs:** use `cay.exe agent-test …` (debug builds only), a scratch folder, `haiku` and low
   max turns. Don't send synthetic keystrokes while the user is at the machine; they land in whatever has focus.
   UI Automation actions (`invoke`, `set_value`) send no input and work with the window behind; ask before testing
   `focus_window`, `click`, `type_text`, `press_keys` or `launch`.
 - **Routines never pre-approve.** A routine's run goes through `start_run` like a new task; its only differences are
   `--name`, the desktop tools disallowed unless the routine allows them, and patient approvals (timeout paused while
   you're away, 12 h cap) for scheduled runs. Don't add allow lists or permission modes to routines. Schedules are
-  checked by the `agent-routines` thread (at least once a minute; never a JS timer). `routines.json` is TopBar's file:
+  checked by the `agent-routines` thread (at least once a minute; never a JS timer). `routines.json` is Cay's file:
   test with `agent-test routine …`, and test due times with `routine due <id>` or a time two minutes ahead, never by
   changing the clock.
 - **Windows PowerShell 5.1 can't list GSMTC sessions** (`GetSessions()` comes back empty). Check media state with the
-  `topbar_lib=debug` log instead.
+  `cay_lib=debug` log instead.
 
 ## Conventions
 

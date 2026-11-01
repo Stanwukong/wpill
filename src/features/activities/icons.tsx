@@ -78,7 +78,7 @@ export function BatteryIcon({ level, charging }: { level: number; charging: bool
   );
 }
 
-/** TopBar acting on the desktop for an agent run: a pointer. */
+/** Cay acting on the desktop for an agent run: a pointer. */
 export function PointerIcon() {
   return (
     <Icon>

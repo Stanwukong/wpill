@@ -468,6 +468,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "cay"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "env_logger",
+ "log",
+ "png 0.17.16",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-single-instance",
+ "thiserror 2.0.21",
+ "windows",
+ "windows-collections",
+ "windows-core",
+ "windows-future",
+ "windows-registry",
+]
+
+[[package]]
 name = "cc"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3885,27 +3906,6 @@ name = "toml_writer"
 version = "1.1.3+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06bdbd8cfc056b8d2e2e85f29b56a3bdbecb527cef81eb39e3e7b98af4652770"
-
-[[package]]
-name = "topbar"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "env_logger",
- "log",
- "png 0.17.16",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-single-instance",
- "thiserror 2.0.21",
- "windows",
- "windows-collections",
- "windows-core",
- "windows-future",
- "windows-registry",
-]
 
 [[package]]
 name = "tower"

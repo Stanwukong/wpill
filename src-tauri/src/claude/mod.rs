@@ -1,6 +1,6 @@
 //! Claude Code sessions through Claude Code hooks (CASESTUDY D17, D19).
 //!
-//! `topbar.exe hook` (`forward.rs`) runs as the hook command and writes a trimmed message to a per-user
+//! `cay.exe hook` (`forward.rs`) runs as the hook command and writes a trimmed message to a per-user
 //! named pipe. The `claude-listener` thread (`pipe.rs`, started through the activity `Watcher` harness)
 //! keeps session state (`sessions.rs`), offers and withdraws activities on the shared activity channel,
 //! and emits `claude:sessions` for the panel. `hooks.rs` installs the hooks from the tray.
@@ -38,7 +38,7 @@ use sessions::{Effect, Session, Sessions};
 /// With no client, the listener wakes this often to drop sessions whose process is gone.
 const PRUNE_INTERVAL: Duration = Duration::from_secs(30);
 
-/// The forwarder: `main.rs` calls this for `topbar.exe hook`, before anything else starts.
+/// The forwarder: `main.rs` calls this for `cay.exe hook`, before anything else starts.
 pub fn forward_hook() {
     forward::run();
 }
@@ -114,7 +114,7 @@ fn listen(app: &AppHandle, out: &Sender<Signal>, server: &pipe::Server, stop: &H
                 return;
             }
             pipe::Next::Message(bytes) => match protocol::decode(&bytes) {
-                // Agent runs started by TopBar fire the same hooks; `agent/` shows those itself.
+                // Agent runs started by Cay fire the same hooks; `agent/` shows those itself.
                 Some(msg) if msg.chain.iter().any(process::is_self) => {
                     log::debug!("claude hook {:?} from an agent run; ignored", msg.event);
                 }
@@ -225,7 +225,7 @@ pub fn tray_label() -> &'static str {
 }
 
 fn this_exe() -> Result<std::path::PathBuf, String> {
-    std::env::current_exe().map_err(|e| format!("couldn't find TopBar's own path: {e}"))
+    std::env::current_exe().map_err(|e| format!("couldn't find Cay's own path: {e}"))
 }
 
 fn settings_path() -> Result<std::path::PathBuf, String> {
@@ -261,7 +261,7 @@ pub fn toggle_from_tray(item: MenuItem<Wry>) {
     std::thread::spawn(move || {
         if let Err(e) = run_dialog() {
             message(
-                &format!("TopBar couldn't change the Claude Code settings:\n\n{e}"),
+                &format!("Cay couldn't change the Claude Code settings:\n\n{e}"),
                 MB_OK | MB_ICONWARNING,
             );
         }
@@ -276,7 +276,7 @@ fn run_dialog() -> Result<(), String> {
     let path = settings_path()?;
     if hooks_installed() {
         let text = format!(
-            "Remove TopBar's hooks from\n{}?\n\nOnly hooks whose command ends in \"topbar.exe' hook\" are removed; your \
+            "Remove Cay's hooks from\n{}?\n\nOnly hooks whose command ends in \"cay.exe' hook\" are removed; your \
              other settings and hooks stay. A backup of the file is saved next to it first.",
             path.display()
         );
@@ -293,7 +293,7 @@ fn run_dialog() -> Result<(), String> {
         let shell = hooks::detect_shell();
         let command = hooks::command(&this_exe()?, shell);
         let text = format!(
-            "TopBar will add these hooks to\n{}\n\n{}\n\nYour other settings and hooks stay. A backup of the file is \
+            "Cay will add these hooks to\n{}\n\n{}\n\nYour other settings and hooks stay. A backup of the file is \
              saved next to it first. Claude Code sessions that are already open may need a restart to pick them up.",
             path.display(),
             hooks::preview(&command, shell)
@@ -331,7 +331,7 @@ fn message(
         MessageBoxW(
             None,
             &HSTRING::from(text),
-            &HSTRING::from("TopBar"),
+            &HSTRING::from("Cay"),
             style | MB_SETFOREGROUND | MB_TOPMOST,
         )
     }

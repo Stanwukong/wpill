@@ -27,7 +27,7 @@ use crate::win32;
 const BUDGET: Duration = Duration::from_secs(3);
 const UIA_TIMEOUT_MS: u32 = 2000;
 
-/// UI Automation with TopBar's timeouts, so a hung provider can't hold a thread for long. Needs COM (MTA).
+/// UI Automation with Cay's timeouts, so a hung provider can't hold a thread for long. Needs COM (MTA).
 pub fn automation() -> windows::core::Result<IUIAutomation> {
     // SAFETY: COM calls on smart pointers released on drop; the caller initialised COM (MTA) on this thread.
     unsafe {

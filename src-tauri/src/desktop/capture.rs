@@ -1,5 +1,5 @@
 //! Pixels: a window with `PrintWindow(PW_RENDERFULLCONTENT)` (works when it's covered or partly off-screen, no
-//! capture border), or a monitor with `BitBlt` from the screen. For the screen, TopBar's own windows are excluded
+//! capture border), or a monitor with `BitBlt` from the screen. For the screen, Cay's own windows are excluded
 //! from capture (`WDA_EXCLUDEFROMCAPTURE`) only for the moment of the capture, so your own screenshots and screen
 //! shares still see the island. DRM-protected content comes out black either way.
 
@@ -51,7 +51,7 @@ pub fn window(hwnd: HWND, window: Rect, frame: Rect) -> Result<Bitmap, String> {
     ))
 }
 
-/// The screen inside `area` (a monitor), without TopBar's windows.
+/// The screen inside `area` (a monitor), without Cay's windows.
 pub fn screen(area: Rect) -> Result<Bitmap, String> {
     let hidden = exclude_own_windows();
     let result = draw(area.width, area.height, |dc| {

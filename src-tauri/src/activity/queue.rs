@@ -68,7 +68,7 @@ fn rules(activity: &Activity) -> Rules {
             sticky: true,
             ..notice(3, Duration::ZERO, Duration::ZERO)
         },
-        // Above approvals: while TopBar acts you should see it, and other runs' approvals wait their turn.
+        // Above approvals: while Cay acts you should see it, and other runs' approvals wait their turn.
         Activity::AgentActing(_) => Rules {
             sticky: true,
             ..notice(ACTING_PRIORITY, Duration::ZERO, Duration::ZERO)
@@ -125,7 +125,7 @@ fn preempts(new: &Rules, current: &Shown) -> bool {
     if new.class == Class::Feedback {
         return true;
     }
-    // TopBar acting on the desktop always shows at once (an approval on screen steps aside and comes back).
+    // Cay acting on the desktop always shows at once (an approval on screen steps aside and comes back).
     if new.priority >= ACTING_PRIORITY {
         return true;
     }

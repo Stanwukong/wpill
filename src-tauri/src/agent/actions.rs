@@ -1,4 +1,4 @@
-//! TopBar's desktop actions as MCP sees them (Phase 2.7d, CASESTUDY D27): definitions for `tools/list`, their
+//! Cay's desktop actions as MCP sees them (Phase 2.7d, CASESTUDY D27): definitions for `tools/list`, their
 //! arguments (with `ui_tree` refs and screenshot points resolved against what the run has seen), replies, and
 //! audit fields that never carry the typed text. The acting itself is `crate::desktop::act`. Pure; unit-tested.
 
@@ -29,14 +29,14 @@ pub const NAMES: &[&str] = &[
     LAUNCH,
 ];
 
-/// `mcp__topbar__click` → `click`, for TopBar's actions only.
+/// `mcp__cay__click` → `click`, for Cay's actions only.
 pub fn short_name(tool: &str) -> Option<&'static str> {
-    let name = tool.strip_prefix("mcp__topbar__")?;
+    let name = tool.strip_prefix("mcp__cay__")?;
     NAMES.iter().copied().find(|n| *n == name)
 }
 
 const APPROVED: &str =
-    "The user approves each action in TopBar (never for the whole run), the screen \
+    "The user approves each action in Cay (never for the whole run), the screen \
     edges glow while it runs, and any mouse or keyboard input of theirs stops it.";
 
 pub fn definitions() -> Vec<Value> {
@@ -427,7 +427,7 @@ pub fn reply(rpc_id: Value, result: &Result<Acted, ActError>) -> Value {
         acted
             .foreground
             .as_ref()
-            .map_or("the desktop (or a TopBar window)".to_string(), |w| {
+            .map_or("the desktop (or a Cay window)".to_string(), |w| {
                 let app = w.app.as_deref().unwrap_or("");
                 format!("{app} · {} (hwnd {})", w.title, w.hwnd)
             });
@@ -442,7 +442,7 @@ pub fn reply(rpc_id: Value, result: &Result<Acted, ActError>) -> Value {
 
 /// The audit line for an action: tool, target, what happened; text only as its size.
 pub fn audit_fields(tool: &str, input: &Value, result: &Result<Acted, ActError>) -> Value {
-    let input = redact(&format!("mcp__topbar__{tool}"), input);
+    let input = redact(&format!("mcp__cay__{tool}"), input);
     match result {
         Err(e) => json!({ "tool": tool, "input": input, "ok": false, "error": e.code() }),
         Ok(a) => json!({ "tool": tool, "input": input, "ok": true, "done": a.what, "note": a.note,
@@ -459,8 +459,8 @@ mod tests {
 
     #[test]
     fn names_and_definitions() {
-        assert_eq!(short_name("mcp__topbar__click"), Some("click"));
-        assert_eq!(short_name("mcp__topbar__screenshot"), None);
+        assert_eq!(short_name("mcp__cay__click"), Some("click"));
+        assert_eq!(short_name("mcp__cay__screenshot"), None);
         let defs = definitions();
         let names: Vec<_> = defs.iter().map(|d| d["name"].as_str().unwrap()).collect();
         assert_eq!(names, NAMES);
@@ -528,7 +528,7 @@ mod tests {
         assert_eq!(pid, Some(99));
         assert_eq!(
             element_for(
-                "mcp__topbar__invoke",
+                "mcp__cay__invoke",
                 &json!({ "hwnd": 7, "element": 1 }),
                 "r",
                 &refs,
@@ -594,17 +594,17 @@ mod tests {
     #[test]
     fn text_stays_out_of_the_audit() {
         let input = json!({ "hwnd": 1, "text": "Dear team,\nhello" });
-        let r = redact("mcp__topbar__type_text", &input);
+        let r = redact("mcp__cay__type_text", &input);
         assert_eq!(r["text"], json!({ "chars": 16, "lines": 2 }));
         assert_eq!(
-            detail("mcp__topbar__type_text", &input).as_deref(),
+            detail("mcp__cay__type_text", &input).as_deref(),
             Some("Dear team,\nhello")
         );
         let line = audit_fields(TYPE_TEXT, &input, &Err(ActError::PasswordField));
         assert!(!line.to_string().contains("Dear team"));
         assert_eq!(line["error"], "passwordField");
         assert_eq!(
-            redact("mcp__topbar__click", &json!({ "x": 1 })),
+            redact("mcp__cay__click", &json!({ "x": 1 })),
             json!({ "x": 1 })
         );
     }

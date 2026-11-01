@@ -45,7 +45,7 @@ pub fn start(
             for (id, (hotkey, text)) in ALL.iter().zip([&open, &stop_all]).enumerate() {
                 let id = id as i32 + 1;
                 let Some((mods, vk)) = parse_hotkey(text) else {
-                    errors.push(format!("\"{text}\" isn't a hotkey TopBar understands."));
+                    errors.push(format!("\"{text}\" isn't a hotkey Cay understands."));
                     continue;
                 };
                 // SAFETY: registers for this thread (no window); undone below on this same thread.

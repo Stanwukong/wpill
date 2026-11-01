@@ -29,7 +29,7 @@ pub enum AppError {
     #[error("That approval was already answered or has expired.")]
     AgentApprovalGone,
     #[error(
-        "Claude Code wasn't found. Install it, or set agent.claudePath in TopBar's settings.json."
+        "Claude Code wasn't found. Install it, or set agent.claudePath in Cay's settings.json."
     )]
     AgentNoClaude,
     #[error("{0}")]

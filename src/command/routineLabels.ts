@@ -42,7 +42,7 @@ export function daysLabel(days: Weekday[]): string {
     .join(", ");
 }
 
-/** The schedule alone: "Weekdays 09:00", "Every 4 h from 08:00", "At TopBar start", "Off". */
+/** The schedule alone: "Weekdays 09:00", "Every 4 h from 08:00", "At Cay start", "Off". */
 export function scheduleLabel(schedule: Schedule): string {
   switch (schedule.kind) {
     case "off":
@@ -52,7 +52,7 @@ export function scheduleLabel(schedule: Schedule): string {
     case "every":
       return `Every ${schedule.hours} h from ${schedule.from}`;
     case "start":
-      return "At TopBar start";
+      return "At Cay start";
   }
 }
 

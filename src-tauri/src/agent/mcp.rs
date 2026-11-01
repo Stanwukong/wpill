@@ -1,5 +1,5 @@
-//! TopBar's MCP server, message by message: JSON-RPC 2.0 over the bridge (one message per pipe message).
-//! Pure; unit-tested. `approve` is what Claude Code calls through `--permission-prompt-tool mcp__topbar__approve`;
+//! Cay's MCP server, message by message: JSON-RPC 2.0 over the bridge (one message per pipe message).
+//! Pure; unit-tested. `approve` is what Claude Code calls through `--permission-prompt-tool mcp__cay__approve`;
 //! the desktop tools (2.7c, `tools.rs`) are what Claude itself calls. Its input is `{ tool_name, input, tool_use_id }` and its
 //! reply is a text block holding `{"behavior":"allow","updatedInput":…}` or `{"behavior":"deny","message":…}`
 //! (checked against 2.1.123 and 2.1.312; the docs don't spell it out).
@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-pub const SERVER_NAME: &str = "topbar";
+pub const SERVER_NAME: &str = "cay";
 pub const APPROVE_TOOL: &str = "approve";
 /// Newest first; an unknown client version gets the newest.
 const PROTOCOL_VERSIONS: &[&str] = &["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
@@ -15,7 +15,7 @@ const PROTOCOL_VERSIONS: &[&str] = &["2025-11-25", "2025-06-18", "2025-03-26", "
 /// The bridge's first message on a new connection.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Hello {
-    pub topbar: u32,
+    pub cay: u32,
     pub run: String,
     pub token: String,
 }
@@ -156,7 +156,7 @@ pub fn error(id: Value, code: i64, message: &str) -> Value {
 fn approve_tool() -> Value {
     json!({
         "name": APPROVE_TOOL,
-        "description": "Asks the user in TopBar's island to allow or deny a tool call. Used by Claude Code as its \
+        "description": "Asks the user in Cay's island to allow or deny a tool call. Used by Claude Code as its \
                         permission prompt tool; not for direct use.",
         "inputSchema": {
             "type": "object",
@@ -183,7 +183,7 @@ mod tests {
         };
         assert_eq!(r["id"], 0);
         assert_eq!(r["result"]["protocolVersion"], "2025-06-18");
-        assert_eq!(r["result"]["serverInfo"]["name"], "topbar");
+        assert_eq!(r["result"]["serverInfo"]["name"], "cay");
 
         let future = json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize",
             "params": { "protocolVersion": "2099-01-01" } });

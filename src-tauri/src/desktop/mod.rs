@@ -6,7 +6,7 @@
 //! - Acting: `act.rs` (UIA patterns on an element found again from a ref), `input.rs` (`SendInput`), `guard.rs`
 //!   (your input aborts), `launch.rs` (links and Start-menu apps). Pure: `plan.rs`, `refs.rs`.
 //!
-//! TopBar's own windows are never listed, captured, read or acted on. Every look and action runs on its own MTA
+//! Cay's own windows are never listed, captured, read or acted on. Every look and action runs on its own MTA
 //! thread with a time limit, so a hung app can't hold up the agent's connection. One action runs at a time.
 
 pub mod logic;
@@ -79,10 +79,10 @@ pub struct Image {
 
 pub enum Outcome {
     Windows(Vec<WindowEntry>),
-    /// `None` with `topbar` true: TopBar's own window is in front (never described).
+    /// `None` with `cay` true: Cay's own window is in front (never described).
     Focused {
         window: Option<WindowEntry>,
-        topbar: bool,
+        cay: bool,
     },
     Image {
         image: Image,
@@ -137,13 +137,10 @@ fn look_now(look: Look, expect_pid: Option<u32>) -> Result<Outcome, LookError> {
     match look {
         Look::ListWindows => Ok(Outcome::Windows(windows::list())),
         Look::FocusedWindow => Ok(match windows::focused() {
-            Ok(window) => Outcome::Focused {
-                window,
-                topbar: false,
-            },
+            Ok(window) => Outcome::Focused { window, cay: false },
             Err(()) => Outcome::Focused {
                 window: None,
-                topbar: true,
+                cay: true,
             },
         }),
         Look::Screenshot { hwnd: None } => {
@@ -197,7 +194,7 @@ pub struct Acted {
     /// The app didn't confirm in time (it may have opened a dialog), or a set value didn't stick.
     pub note: Option<String>,
     pub target: Option<Target>,
-    /// The window in front afterwards (`None` when it's the desktop or one of TopBar's).
+    /// The window in front afterwards (`None` when it's the desktop or one of Cay's).
     pub foreground: Option<WindowEntry>,
 }
 
@@ -232,7 +229,7 @@ pub fn act(
     rx.recv_timeout(ACT_TIMEOUT).unwrap_or_else(|_| {
         guard::abort();
         Err(ActError::Failed(
-            "it took too long, so TopBar stopped it".into(),
+            "it took too long, so Cay stopped it".into(),
         ))
     })
 }

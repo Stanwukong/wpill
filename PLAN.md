@@ -21,11 +21,11 @@ the screen's edges while Claude looks, with all 12 manual checks passed.**
 `type_text`, `press_keys`, `launch`), UI Automation first with `[n]` refs from `ui_tree`, each approved on its own
 and never for the run, stopped by any input of yours, with all 12 manual checks passed.**
 **Phase 2.7e is complete (2026-10-31): routines (saved instructions run from the command window or on a schedule while
-TopBar runs), with all 12 manual checks passed. Phase 2.7 is complete.**
+Cay runs), with all 12 manual checks passed. Phase 2.7 is complete.**
 **Now: [Phase 4a](#phase-4a-release-readiness) (release readiness)**, kick-off prompt
 [prompts/phase-4a-release-readiness.md](prompts/phase-4a-release-readiness.md). 4a-1 (own visual identity: the amber
-wave, D30) and 4a-2 (display changes followed live, D31; dock check pending) are done (2026-11-01); **next: 4a-3
-(final name, README, LICENSE)**: propose names and wait for a choice.
+wave, D30), 4a-2 (display changes followed live, D31; dock check pending) and 4a-3 (renamed **Cay**, README, MIT,
+D32) are done (2026-11-01); **next: 4a-4 (code signing)**: compare options and wait for an OK.
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -263,12 +263,12 @@ not shown after Stop). `rememberAs` ("git", "edits") replaces the planned `canRe
 
 | Kind | Name | Payload / signature | Notes |
 |---|---|---|---|
-| activity field | `agentApproval.desktop` | `boolean` | One of TopBar's desktop looks: the risk badge shows an eye. `tool` reads `desktop · screenshot`; `rememberAs` is `window lists`, `screenshots` or `reading UIs`. |
-| MCP tool | `list_windows` | `{}` → text `{ windows: [{ hwnd, app, title, bounds, minimized, focused }] }` | Alt+Tab windows front to back, physical px, never TopBar's own. Minimized windows have empty bounds. |
-| MCP tool | `focused_window` | `{}` → text `{ window: … \| null, note? }` | `null` + note when TopBar's own window is in front. |
+| activity field | `agentApproval.desktop` | `boolean` | One of Cay's desktop looks: the risk badge shows an eye. `tool` reads `desktop · screenshot`; `rememberAs` is `window lists`, `screenshots` or `reading UIs`. |
+| MCP tool | `list_windows` | `{}` → text `{ windows: [{ hwnd, app, title, bounds, minimized, focused }] }` | Alt+Tab windows front to back, physical px, never Cay's own. Minimized windows have empty bounds. |
+| MCP tool | `focused_window` | `{}` → text `{ window: … \| null, note? }` | `null` + note when Cay's own window is in front. |
 | MCP tool | `screenshot` | `{ hwnd? }` → image block + text `{ source, width, height, origin, scale, format }` | No hwnd: the primary monitor. ≤1568 px long edge, ≤500 KB (PNG, else JPEG q80/q60). |
 | MCP tool | `ui_tree` | `{ hwnd, maxDepth? (12, ≤25), maxNodes? (400, ≤1000) }` → text outline | `button "Save" #id @x,y wxh flags`, ≤60 KB, says when it was cut. Password fields: no value. |
-| errors | (all four) | `isError` text `code: advice` | `windowGone`, `topbarWindow`, `notOnThisDesktop`, `minimized`, `notResponding`, `elevated`, `screenLocked`, `failed`. |
+| errors | (all four) | `isError` text `code: advice` | `windowGone`, `cayWindow`, `notOnThisDesktop`, `minimized`, `notResponding`, `elevated`, `screenLocked`, `failed`. |
 
 ### Phase 2.7d
 
@@ -284,7 +284,7 @@ not shown after Stop). `rememberAs` ("git", "edits") replaces the planned `canRe
 | MCP tool | `type_text` | `{ hwnd, text }` | ≤500 chars, real keys from the window's layout (Unicode packets only for what it can't type), paced. |
 | MCP tool | `press_keys` | `{ hwnd, keys: string[] }` | ≤5 chords; Win-key chords, Alt+Tab, Alt/Ctrl+Esc, Ctrl+Shift+Esc refused. |
 | MCP tool | `launch` | `{ url }` or `{ app }` | https/http/`ms-settings:` links; Start-menu apps by name. |
-| reply | (all seven) | text "Invoked button "Save" in Notepad · notes.txt. In front now: …" | Errors `isError` `code: advice`: `windowGone`, `elementGone`, `staleView`, `topbarWindow`, `notOnThisDesktop`, `notResponding`, `elevated`, `screenLocked`, `notForeground`, `covered`, `disabled`, `unsupported`, `passwordField`, `refused`, `notFound`, `aborted`, `failed`. |
+| reply | (all seven) | text "Invoked button "Save" in Notepad · notes.txt. In front now: …" | Errors `isError` `code: advice`: `windowGone`, `elementGone`, `staleView`, `cayWindow`, `notOnThisDesktop`, `notResponding`, `elevated`, `screenLocked`, `notForeground`, `covered`, `disabled`, `unsupported`, `passwordField`, `refused`, `notFound`, `aborted`, `failed`. |
 | MCP notification | `notifications/cancelled` | `{ requestId }` | Withdraws that call's approval or aborts its running action. |
 
 ### Phase 2.7e
@@ -299,7 +299,7 @@ not shown after Stop). `rememberAs` ("git", "edits") replaces the planned `canRe
 | event | `routines:changed` | `{ routines, paused }` | On save, delete, pause, a run starting or ending, a skip. |
 | field | `AgentRun.routine` | `{ id, name, trigger: "manual" \| "schedule" } \| null` | |
 | activity field | `agentApproval.routineName`, `agentFinished.routineName` | `string \| null` | Shown in place of `project`. |
-| file | `routines.json` | `{ version: 1, paused, routines: Routine[] }` | `%APPDATA%\dev.wpill.topbar\`, written by TopBar (temp file + rename); an unreadable file is moved aside to `routines.unreadable.json`. |
+| file | `routines.json` | `{ version: 1, paused, routines: Routine[] }` | `%APPDATA%\io.github.stanwukong.cay\`, written by Cay (temp file + rename); an unreadable file is moved aside to `routines.unreadable.json`. |
 | audit | `start` line | `routine: { id, name }`, `trigger`, `desktopTools` | Plus `agent\routines.jsonl`: `started` (`dueMs`, `late`, `runId`, `trigger`) and `skipped` (`why`). |
 
 `Routine { id, name, prompt, cwd, model, maxTurns, maxBudgetUsd, claudePath, schedule, enabled, ifMissed: "once" |
@@ -363,7 +363,7 @@ meaning; new phases slot in between.
 | 2 | **2 Media card** | Now playing + controls, media state in the collapsed pill | Makes the island feel alive; the planned next phase. |
 | 3 | **2.5 Live Activities** | Island auto-expands for system events | The defining Dynamic Island behavior; reuses Phase 2's pill plumbing. |
 | 4 | **2.6 Claude Code activity** | Island shows when a local Claude Code session finishes or needs a decision | Added 2026-10-30 (D17). Small once 2.5's activity queue exists; high daily value while working with Claude Code. |
-| 5 | **2.7 Local automation agent** | Type an instruction; TopBar runs a headless Claude Code session, shows progress in the island, asks for approvals there, and gives Claude desktop tools through its own MCP server | Added 2026-10-30 (D21). Builds directly on 2.6's pipe, sessions and activities. Staged so each stage is useful on its own. |
+| 5 | **2.7 Local automation agent** | Type an instruction; Cay runs a headless Claude Code session, shows progress in the island, asks for approvals there, and gives Claude desktop tools through its own MCP server | Added 2026-10-30 (D21). Builds directly on 2.6's pipe, sessions and activities. Staged so each stage is useful on its own. |
 | 6 | **4a Release readiness** | Multi-monitor + per-monitor DPI, code signing, v0.2 release | Docking/undocking breaks placement today; unsigned installers trigger SmartScreen. |
 | 7 | **3 Memory-heavy apps** | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
 | 8 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
@@ -371,8 +371,8 @@ meaning; new phases slot in between.
 
 ### Phase 1.5: shell basics (complete 2026-10-30)
 - [x] Tray icon (`tauri` `tray-icon` feature, `src-tauri/src/tray.rs`). The menu (left or right click) shows a
-      version label ("TopBar 0.1.0", in place of a separate About), a **Launch at startup** checkbox, and **Quit TopBar**
-- [x] Launch at startup: per-user `HKCU\…\Run` entry named `TopBar`, no admin. Written by our own
+      version label ("Cay 0.1.0", in place of a separate About), a **Launch at startup** checkbox, and **Quit Cay**
+- [x] Launch at startup: per-user `HKCU\…\Run` entry named `Cay`, no admin. Written by our own
       `autostart.rs` with a **quoted** path. `tauri-plugin-autostart` was dropped: its unquoted path
       didn't show in Task Manager on this machine (CASESTUDY C5). An old unquoted entry for the same exe
       is repaired on launch.
@@ -382,15 +382,15 @@ meaning; new phases slot in between.
 - [x] Manual check (below): all steps passed on the installer that includes `autostart.rs` (2026-10-30)
 
 **Manual check (Phase 1.5)**
-1. The TopBar icon is in the system tray (it may be in the ^ overflow; drag it out to pin it).
-2. Clicking it shows "TopBar 0.1.0" (greyed out), "Launch at startup" and "Quit TopBar".
-3. **Quit TopBar** closes the island and the tray icon.
+1. The Cay icon is in the system tray (it may be in the ^ overflow; drag it out to pin it).
+2. Clicking it shows "Cay 0.1.0" (greyed out), "Launch at startup" and "Quit Cay".
+3. **Quit Cay** closes the island and the tray icon.
 4. Tick **Launch at startup** from the *installed release build*. Reopen Task Manager → Startup apps:
-   TopBar is listed and Enabled. Sign out and back in: the island appears.
-   Untick it: TopBar disappears from Startup apps, and `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
-   has no `TopBar` value.
-4b. Disable TopBar *in Task Manager*, then open the tray menu: the checkbox shows unticked. Ticking it re-enables it.
-5. Launching TopBar again while it's running doesn't create a second island.
+   Cay is listed and Enabled. Sign out and back in: the island appears.
+   Untick it: Cay disappears from Startup apps, and `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+   has no `Cay` value.
+4b. Disable Cay *in Task Manager*, then open the tray menu: the checkbox shows unticked. Ticking it re-enables it.
+5. Launching Cay again while it's running doesn't create a second island.
 
 ### Phase 2: media card (complete 2026-10-30)
 - [x] Rust `media/`: a `media-watcher` thread (MTA) owns the GSMTC manager and subscribes to `CurrentSessionChanged`,
@@ -411,7 +411,7 @@ meaning; new phases slot in between.
       URL and fade over 700 ms; plain black when there's no art (CASESTUDY D13)
 - [x] Manual check (below): all 10 pass, 2026-10-30 (Spotify, YouTube in a browser, two sessions, nothing playing, text sizes)
 
-**Manual check (Phase 2)** (run with `$env:RUST_LOG='info,topbar_lib=debug'` to see `media:state` lines)
+**Manual check (Phase 2)** (run with `$env:RUST_LOG='info,cay_lib=debug'` to see `media:state` lines)
 1. **Nothing playing** (close Spotify, no media tabs): the pill is the plain clock; the panel has no media card.
 2. **Spotify:** play a song. Within a second the pill shows its art, the clock and a moving equalizer. The panel card
    shows art, title, "Artist · Spotify", and the bar advances smoothly with the elapsed time.
@@ -443,10 +443,10 @@ Kick-off prompt: [prompts/phase-2.5-live-activities.md](prompts/phase-2.5-live-a
 - [x] Caps Lock: `GetKeyState` polled in the 60 Hz poller (no hook)
 - [x] Screenshot: overlapped `ReadDirectoryChangesW` on the Screenshots known folder, shell thumbnail; hovering holds it
       and makes it clickable; drag out with `SHDoDragDrop`, click to open (D16)
-- [x] Switches in `%APPDATA%\dev.wpill.topbar\settings.json` (`activities.volume`, …, read at launch; UI in Phase 4b)
+- [x] Switches in `%APPDATA%\io.github.stanwukong.cay\settings.json` (`activities.volume`, …, read at launch; UI in Phase 4b)
 - [x] Charging look (D18): green glowing outline with a light orbiting it every 2.4 s, soft green halo, bolt and
       level in green; static ring under reduced motion. Checked by rendering the built CSS in headless Edge
-- [x] Verified from outside (2026-10-30, `RUST_LOG=topbar_lib=debug`, SendInput + screen captures + `GWL_EXSTYLE`):
+- [x] Verified from outside (2026-10-30, `RUST_LOG=cay_lib=debug`, SendInput + screen captures + `GWL_EXSTYLE`):
       Caps Lock toggled and restored → "Caps Lock · On" activity, island stayed click-through, foreground unchanged;
       2× volume up + 2× down (restored) → one activity updated in place; WMI brightness 100 → 90 → 100 → activity at 90;
       a file copied into Screenshots → thumbnail activity, clickable only while hovered, held past 6 s, gone ~1 s after
@@ -455,7 +455,7 @@ Kick-off prompt: [prompts/phase-2.5-live-activities.md](prompts/phase-2.5-live-a
       foreground window. 36 Rust tests pass
 - [x] Manual check (below): all 12 pass, 2026-10-30 (including Bluetooth headphones, charger, screenshot drag-out and fullscreen)
 
-**Manual check (Phase 2.5)** (run with `$env:RUST_LOG='info,topbar_lib=debug'`; `activity:show` lines appear in the log)
+**Manual check (Phase 2.5)** (run with `$env:RUST_LOG='info,cay_lib=debug'`; `activity:show` lines appear in the log)
 1. **Volume keys:** press volume up/down several times. One activity shows the bar moving and the level; it leaves 1.5 s
    after the last press. Mute shows "Muted" and an empty bar. Windows' own flyout also appears (known limitation).
 2. **Brightness keys:** same, with the sun icon. Adaptive brightness changes may also show it (known limitation).
@@ -475,7 +475,7 @@ Kick-off prompt: [prompts/phase-2.5-live-activities.md](prompts/phase-2.5-live-a
 10. **Fullscreen:** in a fullscreen video, volume keys show no island; a screenshot taken there appears after leaving
     fullscreen if within 30 s.
 11. **Theme:** with Spotify playing (tinted island), activities use the art's colors; with nothing playing, black + green.
-12. **Switches:** set `"capsLock": false` in `%APPDATA%\dev.wpill.topbar\settings.json`, restart → Caps Lock shows nothing.
+12. **Switches:** set `"capsLock": false` in `%APPDATA%\io.github.stanwukong.cay\settings.json`, restart → Caps Lock shows nothing.
 
 ### Phase 2.6: Claude Code activity (complete 2026-10-30)
 The island tells you when a local Claude Code session finishes a task or needs a decision, through Claude Code
@@ -483,18 +483,18 @@ hooks. Start from [prompts/phase-2.6-claude-code.md](prompts/phase-2.6-claude-co
 proposal before any code). Depends on Phase 2.5's activity queue.
 
 ```
-Claude Code hook ──stdin JSON──▶ topbar.exe hook (forwarder, exits before Tauri starts)
+Claude Code hook ──stdin JSON──▶ cay.exe hook (forwarder, exits before Tauri starts)
                                    │ per-user named pipe
                                    ▼
-                     TopBar: claude/ listener thread ──▶ activity queue (2.5) ──▶ island
+                     Cay: claude/ listener thread ──▶ activity queue (2.5) ──▶ island
                                                      └──▶ claude:sessions ──▶ panel section
 ```
 
-- [x] `topbar.exe hook` forwarder (`claude/forward.rs`): checked in `main.rs` before Tauri; keeps only `session_id`,
+- [x] `cay.exe hook` forwarder (`claude/forward.rs`): checked in `main.rs` before Tauri; keeps only `session_id`,
       `cwd`, the event, `notification_type` and `source` (never prompt, tool or assistant text), adds its ancestor
       process chain, writes one message to the pipe. Stdin read capped at 8 MiB with a 1 s deadline; a busy pipe is
       retried for up to 1 s; always exits 0 and prints nothing
-- [x] Pipe listener (`claude/pipe.rs`, a `Watcher`): `\\.\pipe\topbar-claude-<user SID>`, DACL for the current user
+- [x] Pipe listener (`claude/pipe.rs`, a `Watcher`): `\\.\pipe\cay-claude-<user SID>`, DACL for the current user
       only (`D:P(A;;GA;;;<SID>)`), `PIPE_REJECT_REMOTE_CLIENTS`, `FILE_FLAG_FIRST_PIPE_INSTANCE`, one instance, one
       message per connection, 16 KiB cap, 500 ms read timeout, overlapped connect/read waited with the stop event
 - [x] Sessions (`claude/sessions.rs`): `idle | working | done | needsInput` keyed by `session_id`; events older than
@@ -518,9 +518,9 @@ Claude Code hook ──stdin JSON──▶ topbar.exe hook (forwarder, exits bef
 - [x] Tray "Connect Claude Code…" / "Disconnect Claude Code…": a native message box shows the exact entries and asks;
       backs up `settings.json`, merges (key order kept), quoted exe path, removes only our entries. Honours
       `CLAUDE_CONFIG_DIR`. Switch `activities.claude` in `settings.json`
-- [x] Verified from outside (2026-10-30, `RUST_LOG=topbar_lib=debug`): sample hook JSON piped into `topbar.exe hook`
+- [x] Verified from outside (2026-10-30, `RUST_LOG=cay_lib=debug`): sample hook JSON piped into `cay.exe hook`
       (start → prompt → permission → tool → stop, and a 3 MB `Stop`) produced the expected activities, with no prompt
-      or answer text in the log; ~85–150 ms per forwarder run (debug build), exit 0 with TopBar not running, with no
+      or answer text in the log; ~85–150 ms per forwarder run (debug build), exit 0 with Cay not running, with no
       stdin and with garbage; 12 forwarders at once all delivered; garbage, a 40 KB message and a silent client
       written straight to the pipe were dropped without stopping the listener; the pipe's ACL lists only the current
       user. Real `claude -p` runs on Claude Code 2.1.123 and 2.1.159 with the entries below (via `--settings`, the real
@@ -530,23 +530,23 @@ Claude Code hook ──stdin JSON──▶ topbar.exe hook (forwarder, exits bef
       input" with the orange edge, back to the spinner once the tool ran, then "wpill · Done"; the foreground window
       never changed. 67 Rust tests pass
 - [x] Manual check (below): all 12 pass, 2026-10-30 (Windows Terminal with a PowerShell profile, VS Code, two
-      sessions, permission prompts, Esc, fullscreen, TopBar not running, disconnect). Note: a WSL profile runs Linux
-      Claude Code with its own settings, which never calls `topbar.exe` (known limitation)
+      sessions, permission prompts, Esc, fullscreen, Cay not running, disconnect). Note: a WSL profile runs Linux
+      Claude Code with its own settings, which never calls `cay.exe` (known limitation)
 
 **Manual hook entries.** Add these to `~/.claude/settings.json` under `"hooks"` (the tray item writes the same thing,
-with the path of the TopBar that wrote it). One group per event, for `SessionStart`, `UserPromptSubmit`, `PostToolUse`,
+with the path of the Cay that wrote it). One group per event, for `SessionStart`, `UserPromptSubmit`, `PostToolUse`,
 `Notification`, `Stop` and `StopFailure`:
 
 ```json
-{ "hooks": [ { "type": "command", "command": "'C:/Users/<you>/AppData/Local/TopBar/topbar.exe' hook",
+{ "hooks": [ { "type": "command", "command": "'C:/Users/<you>/AppData/Local/Cay/cay.exe' hook",
                "shell": "bash", "async": true, "timeout": 5 } ] }
 ```
 
 and for `SessionEnd` the same without `"async": true` (it runs at exit, so it shouldn't be left in the background).
-Without Git Bash, use `"shell": "powershell"` and `"command": "& 'C:\\Users\\<you>\\…\\topbar.exe' hook"`. Keep the
-shell form: Claude Code before 2.1.15x has no `args` exec form and would run a bare `topbar.exe`, starting TopBar.
+Without Git Bash, use `"shell": "powershell"` and `"command": "& 'C:\\Users\\<you>\\…\\cay.exe' hook"`. Keep the
+shell form: Claude Code before 2.1.15x has no `args` exec form and would run a bare `cay.exe`, starting Cay.
 
-**Manual check (Phase 2.6)** (run with `$env:RUST_LOG='info,topbar_lib=debug'`; connect from the tray first, then
+**Manual check (Phase 2.6)** (run with `$env:RUST_LOG='info,cay_lib=debug'`; connect from the tray first, then
 restart any open Claude Code sessions)
 1. **Task finishes while you're elsewhere:** give Claude a task, switch to another app. When it finishes the island
    shows "<project> · Done" with an amber edge for 5 s; the pill shows the wave left of the clock while it works.
@@ -563,9 +563,9 @@ restart any open Claude Code sessions)
    arriving meanwhile shows after the panel closes.
 7. **Esc:** interrupt a running task → the wave stops about a minute later (idle notification), with no activity.
 8. **Fullscreen:** a question asked while a fullscreen video plays shows after leaving fullscreen.
-9. **TopBar not running:** quit TopBar; Claude Code runs normally with no hook errors.
+9. **Cay not running:** quit Cay; Claude Code runs normally with no hook errors.
 10. **Close a terminal mid-task:** its session leaves the panel within ~30 s.
-11. **Hooks removed:** tray → "Disconnect Claude Code…" → only TopBar's entries are gone (compare with the backup next
+11. **Hooks removed:** tray → "Disconnect Claude Code…" → only Cay's entries are gone (compare with the backup next
     to `settings.json`); the tray label switches back.
 12. **Focus:** typing in another app continues while Claude activities come and go.
 
@@ -573,19 +573,19 @@ Only sessions that run on this machine and fire hooks are covered; claude.ai/cod
 
 ### Phase 2.7: local automation agent (complete 2026-10-31)
 **Goal:** press a hotkey, type an instruction ("build the release installer and copy it to Drafts", "rename these
-screenshots by date", "open the PR page for this branch"), pick a folder, and walk away. TopBar runs a headless Claude
+screenshots by date", "open the PR page for this branch"), pick a folder, and walk away. Cay runs a headless Claude
 Code session for it, the island shows it working, asks you to approve risky steps right there (Allow / Deny), and tells
 you when it's done. Claude gets desktop tools (windows, screenshots, UI Automation, and later clicking and typing)
-from TopBar itself. Kick-off prompt: [prompts/phase-2.7-automation-agent.md](prompts/phase-2.7-automation-agent.md)
+from Cay itself. Kick-off prompt: [prompts/phase-2.7-automation-agent.md](prompts/phase-2.7-automation-agent.md)
 (research and a design proposal before any code). Decision: CASESTUDY D21.
 
 ```
 hotkey ─▶ command window (focusable, separate) ── agent_start ─▶ Rust agent/ ── spawns ─▶ claude -p (stream-json)
                 ▲ transcript (agent:output)               │  reads NDJSON events ◀──────────────┘   │
                 │                                         ▼                                         │ stdio MCP
-         island: wave,    agentApproval (Allow/Deny), agentFinished          topbar.exe mcp (bridge) ◀┘
+         island: wave,    agentApproval (Allow/Deny), agentFinished          cay.exe mcp (bridge) ◀┘
                 ▲                                         ▲                         │ per-user pipe
-                └──────── activity queue (2.5/D19) ◀──────┴── TopBar MCP server ◀───┘
+                └──────── activity queue (2.5/D19) ◀──────┴── Cay MCP server ◀───┘
                                                               tools: approve, windows, screenshot, ui_tree, (click, type)
 ```
 
@@ -601,15 +601,15 @@ hotkey ─▶ command window (focusable, separate) ── agent_start ─▶ Rus
   `error_during_execution`), `num_turns` (this turn), `total_cost_usd` (the session), `errors`, `permission_denials`.
   A user message written mid-turn is queued. A turn limit exits with code 1 and may let one more batch of tools run.
 - `--max-budget-usd` caps Claude Code's own estimate (can overshoot); on a subscription it's a usage cap, not billing.
-- Hooks fire in `-p` runs with the same session id, so the user's TopBar hooks see agent runs (2.6 now ignores them).
+- Hooks fire in `-p` runs with the same session id, so the user's Cay hooks see agent runs (2.6 now ignores them).
 - Windows has no SIGTERM/SIGINT for these: Stop is TerminateJobObject; the transcript is on disk, so `--resume` works.
 - Differences from this plan: `agent:run` → `agent:runs` (a list, like `claude:sessions`); `AgentRun` has no
   `sessionId` (Claude's id stays in Rust); the hotkey needs no message-only window (`RegisterHotKey(NULL)` posts to
   the thread); `AskUserQuestion` is disallowed (nobody can type an answer mid-run).
 
 **Principles (non-negotiable)**
-- **You approve, the island asks.** Every action Claude Code would ask about goes to `mcp__topbar__approve`, which
-  shows an `agentApproval` activity and waits. Nothing runs with `bypassPermissions`; TopBar always passes
+- **You approve, the island asks.** Every action Claude Code would ask about goes to `mcp__cay__approve`, which
+  shows an `agentApproval` activity and waits. Nothing runs with `bypassPermissions`; Cay always passes
   `--permission-mode default` explicitly, whatever the user's settings say. Reading (screenshots, window lists, UI
   trees) is risk `read`; file and shell changes are `change`; clicking and typing into other apps are `input`, which
   can never be pre-approved for longer than one run.
@@ -619,7 +619,7 @@ hotkey ─▶ command window (focusable, separate) ── agent_start ─▶ Rus
 - **Always stoppable.** A visible agent state in the pill, Stop in the panel and the command window, and a global stop
   hotkey. Stopping kills the whole process tree (Job Object), including anything Claude started.
 - **Leave a trail.** Every tool call, approval and result is appended to
-  `%APPDATA%\dev.wpill.topbar\agent\<runId>.jsonl` (local only, pruned after 30 days).
+  `%APPDATA%\io.github.stanwukong.cay\agent\<runId>.jsonl` (local only, pruned after 30 days).
 - **Island shows status, not content** (as in 2.6): project, step name, the approval summary. Full output lives in
   the command window.
 
@@ -629,15 +629,15 @@ hotkey ─▶ command window (focusable, separate) ── agent_start ─▶ Rus
       every run. A taken hotkey is logged and shown in the window. Esc hides it
 - [x] `agent/` module: finds `claude.exe` installs (PATH, npm shim → real exe, `~/.local/bin`, VS Code; newest
       version unless `agent.claudePath`), spawns it suspended with `CREATE_NO_WINDOW` into a Job Object
-      (`KILL_ON_JOB_CLOSE`), stream-json both ways, `--append-system-prompt` with TopBar's guidance (`run.rs`). Stdout
+      (`KILL_ON_JOB_CLOSE`), stream-json both ways, `--append-system-prompt` with Cay's guidance (`run.rs`). Stdout
       is parsed on its own thread (`stream.rs`): init (session id), tool steps (→ "Running git status"), result (turns,
       cost, limits). Stdin closes once every message has its result; follow-ups resume with `--resume`
-- [x] No double activities: 2.6's listener ignores hooks whose ancestor chain contains TopBar itself; agent runs are
+- [x] No double activities: 2.6's listener ignores hooks whose ancestor chain contains Cay itself; agent runs are
       listed from `agent:runs` in the same panel section (agent badge, step, Stop), and `agentFinished` replaces
       `claudeDone` for them
 - [x] Follow-ups (`agent_send`), Stop (panel, command window, hotkey), limits (`maxTurns` 25, `maxBudgetUsd` 1 by
       default; "Turn limit reached" / "Budget reached")
-- [x] Audit trail `%APPDATA%\dev.wpill.topbar\agent\<runId>.jsonl` (start, tool, approval, asked, decision, followUp,
+- [x] Audit trail `%APPDATA%\io.github.stanwukong.cay\agent\<runId>.jsonl` (start, tool, approval, asked, decision, followUp,
       stop, result; tool input cut to 4 KB), pruned after 30 days. Run ids are `20261030-142233-7f3a`
 - [x] Settings in `settings.json` → `agent`: `hotkey`, `stopHotkey`, `claudePath`, `model`, `maxTurns`,
       `maxBudgetUsd`, `strictMcpConfig` (true), `userSettings` (true), `approvalTimeoutSecs` (600)
@@ -647,8 +647,8 @@ hotkey ─▶ command window (focusable, separate) ── agent_start ─▶ Rus
       The command window is sized by Windows' Text size factor
 
 **Stage 2.7b: approvals in the island**
-- [x] `topbar.exe mcp` (`bridge.rs`): run from `main.rs` before Tauri; relays newline JSON-RPC ↔ the per-user pipe
-      `\\.\pipe\topbar-agent-<SID>` (duplex, message mode, user-only DACL). Its first message names the run and its
+- [x] `cay.exe mcp` (`bridge.rs`): run from `main.rs` before Tauri; relays newline JSON-RPC ↔ the per-user pipe
+      `\\.\pipe\cay-agent-<SID>` (duplex, message mode, user-only DACL). Its first message names the run and its
       128-bit token (from the generated `mcp.json`'s `env`, deleted when the process exits); anything else is refused.
       4 MiB cap per message; oversized calls are answered with an error by the bridge
 - [x] `approve` → `agentApproval` (sticky, keyed per request): project · tool · risk, the summary built in Rust (the
@@ -659,10 +659,10 @@ hotkey ─▶ command window (focusable, separate) ── agent_start ─▶ Rus
 - [x] Several runs waiting: approvals take turns (D19 rules) and park under the panel and fullscreen; the panel lists
       pending ones under their run with Deny / Allow
 - [x] Interactive (non-agent) sessions stay notify-only, as in 2.6
-- [x] Verified from outside (2026-10-30, debug build, haiku, `topbar.exe agent-test …` in debug builds only): deny
+- [x] Verified from outside (2026-10-30, debug build, haiku, `cay.exe agent-test …` in debug builds only): deny
       (no file, Claude adapted, "Done"), allow, "allow for this run" (second `touch` answered as `remembered`), compound
       command not rememberable, turn limit (`failed / maxTurns`), follow-up resuming a stopped run, Stop with
-      `ping -t localhost` under three shells (all six processes gone), TopBar killed mid-run and quit mid-run (no
+      `ping -t localhost` under three shells (all six processes gone), Cay killed mid-run and quit mid-run (no
       `claude.exe`, bridge or `PING.EXE` left), hotkey → command window in the foreground, captures of the approval
       activity and the command window. 95 Rust tests pass
 - [x] Manual check (below): all 12 pass, 2026-10-30
@@ -674,23 +674,23 @@ hotkey ─▶ command window (focusable, separate) ── agent_start ─▶ Rus
 `jpeg`, `gif`, `webp`) reach the model as images, billed as image tokens (~w×h/750). Claude Code resizes them to fit
 2000×2000 and re-compresses anything over 512,000 bytes itself. A tool result over `MAX_MCP_OUTPUT_TOKENS` (25,000;
 an image counts as 1,600) is saved to a file or cut. MCP tools return "MCPTool requires permission", so in `default`
-mode they go to `--permission-prompt-tool`; a user allow rule skips that, hence TopBar's own grant check.
-`readOnlyHint` makes Claude Code treat a tool as read-only and parallel-safe, so TopBar doesn't set it.
+mode they go to `--permission-prompt-tool`; a user allow rule skips that, hence Cay's own grant check.
+`readOnlyHint` makes Claude Code treat a tool as read-only and parallel-safe, so Cay doesn't set it.
 `--allowedTools` isn't used: it would approve looks before anything happens. Claude Code loads MCP tools lazily
-(`ToolSearch` → `select:mcp__topbar__…`) before the first call.
+(`ToolSearch` → `select:mcp__cay__…`) before the first call.
 
 - [x] `desktop/` feature folder (Win32 isolated): `windows.rs` (the Alt+Tab list from `apps/`, target checks),
       `capture.rs` (`PrintWindow(PW_RENDERFULLCONTENT)` for a window, covered or not; `BitBlt` of the primary monitor
-      with TopBar's windows set to `WDA_EXCLUDEFROMCAPTURE` only for that moment), `encode.rs` (WIC Fant scaling,
+      with Cay's windows set to `WDA_EXCLUDEFROMCAPTURE` only for that moment), `encode.rs` (WIC Fant scaling,
       PNG, else JPEG), `uia.rs` (control view walk, one cache request per element, 2 s UIA timeouts, 3 s budget, on a
       per-look MTA thread with an 8 s limit). Pure and tested: `logic.rs`, `tree.rs`
 - [x] Four MCP tools (`agent/tools.rs`): `list_windows`, `focused_window`, `screenshot`, `ui_tree` (IPC table above).
-      Refused: closed windows, TopBar's own, other virtual desktops (cloaked), minimized (screenshot), hung, elevated,
+      Refused: closed windows, Cay's own, other virtual desktops (cloaked), minimized (screenshot), hung, elevated,
       and everything while the lock screen or a UAC prompt is up. Password fields never carry a value
 - [x] Approvals: risk `read`; summaries "List open windows", "Screenshot of Chrome · GitHub", "Screenshot of the whole
       screen", "Read the UI of Notepad · notes.txt"; step labels "Taking a screenshot" etc.; "for this run" per kind
       (window lists = `list_windows` + `focused_window`, screenshots, reading UIs). Allowing a prompt leaves a one-time
-      grant for that input; a call without one (a user allow rule) is asked about by TopBar itself; the window's
+      grant for that input; a call without one (a user allow rule) is asked about by Cay itself; the window's
       process is checked again at look time
 - [x] Screen-edge glow (`window/glow.rs`): native layered window over the looked-at monitor, never captured, below
       the island; Claude's accent, 32 px band, `0.6·(1−t)²`, 220 ms in, 1.5 s hold, 400 ms out; no fades with
@@ -704,16 +704,16 @@ mode they go to `--permission-prompt-tool`; a user allow rule skips that, hence 
       (`ui_tree`, 102 elements in 0.75 s, text read exactly); whole-screen screenshot (1568×882 JPEG, 89 KB);
       Notepad covered by a fullscreen video captured cleanly (460×517 PNG, 12 KB); "Allow screenshots for this run"
       (second shot `remembered`); Deny on `ui_tree` and `list_windows` (Claude stopped, no `look` entries); a
-      project allow rule for `screenshot` (Claude Code skipped its prompt, TopBar asked, `by: topbar`, denied); closed
+      project allow rule for `screenshot` (Claude Code skipped its prompt, Cay asked, `by: cay`, denied); closed
       hwnd → `windowGone`; minimized → `minimized`; elevated Task Manager → `elevated` for both tools; the glow window
       covering 1920×1080 with affinity 17, hidden ~2.3 s after a look; a screen capture with the island showing (no
       pill in the image). Largest image 105 KB, far under the 4 MiB pipe cap. 115 Rust tests pass
 - [x] Manual check (below): all 12 pass, 2026-10-30
 
-**Manual check (Phase 2.7c, all pass 2026-10-30)** (`pnpm tauri dev` with `$env:RUST_LOG='info,topbar_lib=debug'`, model `haiku`, a scratch
+**Manual check (Phase 2.7c, all pass 2026-10-30)** (`pnpm tauri dev` with `$env:RUST_LOG='info,cay_lib=debug'`, model `haiku`, a scratch
 folder)
 1. **Window list:** "What windows are open?" asks "List open windows" with an eye in the badge; the answer lists your
-   windows and never TopBar's command window.
+   windows and never Cay's command window.
 2. **Glow:** while any look runs, the screen's edges glow softly in Claude's color, under the island, and fade about
    1.5 s after; it never steals focus or clicks, and isn't in your own screenshots (Win+Shift+S during a look).
 3. **UI tree:** "What does the Notepad window say?" asks "Read the UI of Notepad · …" and answers with the text.
@@ -736,7 +736,7 @@ folder)
 [prompts/phase-2.7d-desktop-actions.md](prompts/phase-2.7d-desktop-actions.md). Decision: CASESTUDY D27; challenge C11.
 
 *Research at kick-off (Claude Code 2.1.123 / 2.1.159 / 2.1.314 bundles):* MCP tools still need permission in `default`
-mode, so actions reach `--permission-prompt-tool`; a user allow rule skips it, and TopBar's one-time grant check then
+mode, so actions reach `--permission-prompt-tool`; a user allow rule skips it, and Cay's one-time grant check then
 asks itself (checked live with a project allow rule). `MCP_TOOL_TIMEOUT` defaults to 1e8 ms (a per-server `timeout`
 in `mcp.json` overrides it); 2.1.314 adds a 30 min idle limit for stdio servers, so a 10 min approval wait is fine.
 On abort or timeout the client sends `notifications/cancelled { requestId }`. UIA patterns don't bring windows
@@ -756,7 +756,7 @@ forward (`SetFocus` does); a Win32 `Invoke` that opens a modal dialog can block 
       "hello" into …", "Press Ctrl+A, then Delete in …", "Bring … to the front", "Open https://github.com in your
       browser", "Open the Calculator app"; step labels; the grant check covers user allow rules; typed text in full
       in the command window's card, only `{chars, lines}` in the audit
-- [x] Refused: TopBar's windows, elevated, other desktops, hung, locked screen / UAC, password fields (also checked
+- [x] Refused: Cay's windows, elevated, other desktops, hung, locked screen / UAC, password fields (also checked
       while typing), secret-looking text, Win-key and shell chords, `file:` and other schemes
 - [x] Your input first: waits until you've let go for 500 ms (≤10 s), then any non-injected key or mouse event aborts
       it before its next event; Stop, Win+Alt+Escape and a cancelled call abort too; one action at a time; the island
@@ -772,15 +772,15 @@ forward (`SetFocus` does); a Win32 `Invoke` that opens a modal dialog can block 
       `invoke` of Notepad's Settings and Back buttons with the window behind; `focus_window`; a raw `click` on the
       editor by ref; `press_keys` Ctrl+End and Ctrl+A, Delete; `type_text` read back exactly in Notepad and WordPad
       after C11 (82 and 80 characters, Shift-heavy); `launch https://github.com`; Deny on `press_keys` (no `act`
-      entry, Claude stopped); a project allow rule for `focus_window` (TopBar asked itself); "for this run" never
+      entry, Claude stopped); a project allow rule for `focus_window` (Cay asked itself); "for this run" never
       offered; closed window → `windowGone`; elevated Task Manager → `elevated`; focused Chrome password field →
       `passwordField` before any key; secret text, Win+R and `file:` refused; typing aborted by moving the mouse
       after 269 of 391 characters with no modifier left down. 133 Rust tests pass
 - [x] Manual check (below): all 12 pass, 2026-10-31
 
-**Manual check (Phase 2.7d, all pass 2026-10-31)** (`pnpm tauri dev` with `$env:RUST_LOG='info,topbar_lib=debug'`, model `haiku`, a scratch
+**Manual check (Phase 2.7d, all pass 2026-10-31)** (`pnpm tauri dev` with `$env:RUST_LOG='info,cay_lib=debug'`, model `haiku`, a scratch
 folder, Notepad on a scratch file)
-1. **Set a field:** "Set the Notepad text to 'hello' using TopBar's tools": `ui_tree`, then "Set "Text editor" to
+1. **Set a field:** "Set the Notepad text to 'hello' using Cay's tools": `ui_tree`, then "Set "Text editor" to
    "hello" in Notepad · …" with a pointer in the `input` badge and no "for this run"; Notepad shows hello.
 2. **Invoke:** "Press Notepad's Settings button" while Notepad is behind another window: it works without coming
    forward; the island shows the acting activity briefly and the screen edges glow with a rim.
@@ -807,14 +807,14 @@ folder, Notepad on a scratch file)
 *Research at kick-off (2.1.123 / 2.1.159 / 2.1.314):* Claude Code's own scheduling doesn't cover this. `/loop` and
 `CronCreate` live in one open interactive session (in memory only, fire only while it's idle, up to half a period
 late, recurring jobs expire after 7 days). Cloud routines (`/schedule`, remote triggers) run on Anthropic's servers
-against a repo clone, so they can't see local folders, the desktop or TopBar's approvals. `--bg` sessions (2.1.314
+against a repo clone, so they can't see local folders, the desktop or Cay's approvals. `--bg` sessions (2.1.314
 only) aren't scheduled. All three take `--name` (used: routine runs are easy to find in `/resume`),
 `--max-budget-usd` (always set for routines) and `--no-session-persistence` (not used: it breaks follow-ups).
 `--disallowedTools` takes a comma-separated list. Every routine run starts a fresh session: resuming would carry a
 growing, stale history at full price.
 
 - [x] `agent/schedule.rs` (pure, fake-zone tests): days at a time, every N hours (1–24, real hours from an anchor),
-      at TopBar start (+2 min); DST gaps run at the first minute after, repeated times run once; `check` → fire on
+      at Cay start (+2 min); DST gaps run at the first minute after, repeated times run once; `check` → fire on
       time (≤2 min), catch up once (latest missed time only, ≤24 h, after a 2-minute settle) or skip; paused, still
       running and the limit of 2 scheduled runs skip
 - [x] `agent/routines.rs`: `routines.json` (atomic writes, unreadable file kept aside), Rust-side validation and
@@ -836,13 +836,13 @@ growing, stale history at full price.
       minutes ahead: fired once at 18:26:00 (`late: false`) and not again; a scheduled run waiting on an approval
       (island showed the routine's name, Deny / Allow, nothing pre-approved), denied (no file); due again while
       running → `stillRunning`, Run now refused; Stop and stop-all (the hotkey's path) on scheduled runs → `stopped`;
-      paused → `paused`; quit TopBar before two routines' due time and restarted 3 min after: "skip" one skipped as
+      paused → `paused`; quit Cay before two routines' due time and restarted 3 min after: "skip" one skipped as
       `missed` at once, "once" one caught up once 2 min after launch (`late: true`), no burst; deleted routines with
       schedules (gone from the file, nothing more fired); desktop tools off → Claude had no `list_windows`, nothing
       asked; the command window live with the routines list. 145 Rust tests pass
 - [x] Manual check (below): signed off 2026-10-31
 
-**Manual check (Phase 2.7e, signed off 2026-10-31)** (`pnpm tauri dev` with `$env:RUST_LOG='info,topbar_lib=debug'`, model `haiku`, a scratch
+**Manual check (Phase 2.7e, signed off 2026-10-31)** (`pnpm tauri dev` with `$env:RUST_LOG='info,cay_lib=debug'`, model `haiku`, a scratch
 folder)
 1. **Save as routine:** type a task in the command window, Save as routine: the editor opens prefilled; save it; it's
    listed with its schedule in words and "next in …".
@@ -856,7 +856,7 @@ folder)
    still waiting when you're back and then times out 10 minutes later if unanswered (turn "Approvals wait for me" off
    to see it time out while locked).
 7. **Overlap:** a routine whose run is still going when it's due again: the row says "Skipped HH:MM: still running".
-8. **Missed while closed:** schedule a time two minutes ahead, quit TopBar, start it after that time: with "Run once
+8. **Missed while closed:** schedule a time two minutes ahead, quit Cay, start it after that time: with "Run once
    when back" it runs once about two minutes after start; with "Skip" it says "Skipped … missed".
 9. **Pause:** tray → Pause routines: the command window shows Paused, a due time is skipped as paused, and Resume in
    the window unticks the tray item.
@@ -865,12 +865,12 @@ folder)
     its time.
 12. **Text size 100 / 120 / 150 %:** the routines list and the editor fit; the editor scrolls with its buttons kept.
 
-**Out of scope:** cloud or remote sessions, WSL sessions, voice input, other machines, running TopBar elevated,
+**Out of scope:** cloud or remote sessions, WSL sessions, voice input, other machines, running Cay elevated,
 approving prompts of interactive terminal sessions from the island (possible later through the `PermissionRequest`
 hook; deliberately not mixed in here).
 
 **Manual check (Phase 2.7a–b, all pass 2026-10-30)** (run the installed build or `pnpm tauri dev` with
-`$env:RUST_LOG='info,topbar_lib=debug'`; use a test folder and cheap tasks, e.g. model `haiku` in Options)
+`$env:RUST_LOG='info,cay_lib=debug'`; use a test folder and cheap tasks, e.g. model `haiku` in Options)
 1. **Hotkey:** Win+Alt+A from any app opens the command window with the cursor in the prompt; Esc hides it; the island
    never takes focus (typing in another app afterwards still goes there).
 2. **A read-only task:** "List the 5 largest files in this folder" runs: the pill shows the wave, the panel row shows
@@ -886,8 +886,8 @@ hook; deliberately not mixed in here).
 8. **Panel open / fullscreen:** an approval arriving with the panel open is listed under its run there (answerable);
    one arriving during a fullscreen video shows after leaving fullscreen.
 9. **Follow-up:** after "Done", type a follow-up in the command window → the same run continues (resumed).
-10. **TopBar quits mid-run:** tray → Quit while a run works → no orphaned `claude.exe`.
-11. **Audit:** `%APPDATA%\dev.wpill.topbar\agent\<runId>.jsonl` lists the start, each tool call, approval and decision.
+10. **Cay quits mid-run:** tray → Quit while a run works → no orphaned `claude.exe`.
+11. **Audit:** `%APPDATA%\io.github.stanwukong.cay\agent\<runId>.jsonl` lists the start, each tool call, approval and decision.
 12. **Text size 100 / 120 / 150 %:** the approval activity and the command window fit; the island's click area matches.
 
 ### Phase 4a: release readiness
@@ -910,13 +910,22 @@ Kick-off prompt: [prompts/phase-4a-release-readiness.md](prompts/phase-4a-releas
       x=450, back to 680×440 at x=620, each within a tick, foreground unchanged, still click-through), a temporary
       1280×720 (x=300) and back, and a borderless fullscreen window still hiding the island. 148 Rust tests
 - [ ] Manual check (Phase 4a-2, below): needs a dock or second monitor
-- [ ] Final name (bundle identifier, `%APPDATA%` migration), README, LICENSE, privacy note
+- [x] **4a-3 Name, identity and repo** (2026-11-01, D32): **Cay** (a small low island, said "key"), picked from
+      checked candidates (GitHub, winget, web trademark searches; Atoll, Islet, Isle, Lintel, Skerry, BrimDeck, Orla and
+      Islo are taken nearby). Renamed everywhere: product, identifier `io.github.stanwukong.cay`, crate `cay` /
+      `cay_lib`, `cay.exe`, pipes `cay-claude-<SID>` / `cay-agent-<SID>`, MCP server `cay` (`mcp__cay__approve`),
+      `CAY_AGENT_*`, Run value `Cay`. One-time migration (`migrate.rs`): `%APPDATA%\dev.wpill.topbar` copied (not
+      moved) to Cay's folder, without per-run files; the `TopBar` Run value moved to `Cay` if it was on (release builds
+      only); old `topbar.exe` hook entries count as ours to replace but not as connected, so the tray offers Connect.
+      README (features, install, SmartScreen, migration, needs, what it touches, privacy, agent safety, not affiliated
+      with Anthropic), MIT LICENSE, licence and publisher in the configs. Verified: the dev build copied 41 files, left
+      the Run value for the installed build, and a haiku run's approval went through `mcp__cay__approve`. 152 tests
 - [ ] Code signing (certificate or Azure Trusted Signing) wired into `tauri build`
 - [ ] Rerun the manual checklist; publish v0.2 installer
 
-**Manual check (Phase 4a-2)** (`pnpm tauri dev` with `$env:RUST_LOG='info,topbar_lib=debug'`; each step logs
+**Manual check (Phase 4a-2)** (`pnpm tauri dev` with `$env:RUST_LOG='info,cay_lib=debug'`; each step logs
 `monitor changed: …`)
-1. **Dock:** with TopBar running on the laptop alone, connect the dock / external monitor. The island stays at the top
+1. **Dock:** with Cay running on the laptop alone, connect the dock / external monitor. The island stays at the top
    centre of the primary monitor; hover opens it and the panel's click area matches what you see.
 2. **Change the main display:** Settings → Display → "Make this my main display" on the external monitor. Within a
    moment the island moves to its top centre; hover and click work there.
@@ -981,7 +990,7 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
   questions mid-run (it asks in its final message; answer with a follow-up). The hotkeys are fixed until Phase 4b
   (edit `settings.json`). Clicking the panel's "agent" row opens the command window; there's no per-step "Details" yet.
 - Desktop looks (2.7c): Claude Code keeps every image a tool returns in its own session transcript
-  (`~/.claude/projects/<folder>/<session>.jsonl`), so screenshots persist there outside TopBar's control (TopBar's audit
+  (`~/.claude/projects/<folder>/<session>.jsonl`), so screenshots persist there outside Cay's control (Cay's audit
   never stores them). Screen capture is the primary monitor only. Elevated windows are refused for both tools (UIPI;
   a whole-screen screenshot still shows them). Protected video comes out black. Big browser pages can hit the `ui_tree`
   time or node cap (it says so). "Allow screenshots for this run" covers every window and the screen, not just the
@@ -993,17 +1002,17 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
   screen). Some apps don't notice `set_value` (Win32 `WM_SETTEXT`, React inputs); the reply says when the value
   didn't stick. A UIA `invoke` that opens a modal dialog may be reported as "not confirmed". Only one action runs
   at a time across runs.
-- Routines (2.7e): schedules run only while TopBar runs (no Task Scheduler entry); a run due while the PC sleeps runs
+- Routines (2.7e): schedules run only while Cay runs (no Task Scheduler entry); a run due while the PC sleeps runs
   once after it wakes (if set to), and the lock screen doesn't stop a run (approvals wait, looks and actions are
   refused while locked). Your own allow rules still auto-approve steps in routine runs, as in any run. A run whose
   background shell outlives its result still counts as running (its process is alive), so its next due time is
   skipped as `stillRunning`. "Every N hours" counts real hours, so its local times shift by an hour across a DST
   change. Times use Windows' current time zone; changing the zone moves the schedule with it. `routines.json` is
-  written by TopBar, not by hand.
+  written by Cay, not by hand.
 
 ## Distribution
-- `pnpm tauri build` produces `src-tauri/target/release/bundle/nsis/TopBar_0.1.0_x64-setup.exe`:
-  **1.62 MiB download as of Phase 2.6** (1.47 MB at Phase 1; 4.13 MB installed then; see CASESTUDY §7 for RAM/CPU).
+- `pnpm tauri build` produces `src-tauri/target/release/bundle/nsis/Cay_<version>_x64-setup.exe` (`TopBar_0.1.0_x64-setup.exe`
+  before 4a-3): **1.62 MiB download as of Phase 2.6** (1.47 MB at Phase 1; 4.13 MB installed then; see CASESTUDY §7 for RAM/CPU).
 - Windows 11 already has the WebView2 runtime, so nothing else is downloaded. On machines without it,
   Tauri's default NSIS mode fetches a small WebView2 bootstrapper during install.
 - A fresh release build takes ~11 min (fat LTO). The release profile trades build time for size.
@@ -1011,9 +1020,10 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
   Signing needs a code-signing certificate (or Azure Trusted Signing) before a public release.
 
 ## Open questions
-- Final app name (affects bundle identifier `dev.wpill.topbar`, so decide before the first public release).
-- Code signing: buy a certificate, or use Azure Trusted Signing?
+- Code signing: buy a certificate, or use Azure Trusted Signing? (Stage 4a-4.)
+- Rename the GitHub repo from `wpill` to `cay`? (GitHub redirects the old URL; the README and configs link `wpill`.)
 
 ## Decided
+- Name: **Cay**, licence MIT (2026-11-01, D32). Identifier `io.github.stanwukong.cay`.
 - Collapsed pill shows the clock (2026-10-28).
 - Package manager: pnpm (2026-10-28).

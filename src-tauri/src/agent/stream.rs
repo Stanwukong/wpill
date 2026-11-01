@@ -158,9 +158,9 @@ mod tests {
     use super::*;
 
     // Trimmed from real 2.1.123 / 2.1.312 output.
-    const INIT: &str = r#"{"type":"system","subtype":"init","cwd":"C:\\x","session_id":"432c70f9-8329","tools":["Bash"],"mcp_servers":[{"name":"topbar","status":"connected"}],"model":"claude-haiku-4-5-20251001","permissionMode":"default"}"#;
+    const INIT: &str = r#"{"type":"system","subtype":"init","cwd":"C:\\x","session_id":"432c70f9-8329","tools":["Bash"],"mcp_servers":[{"name":"cay","status":"connected"}],"model":"claude-haiku-4-5-20251001","permissionMode":"default"}"#;
     const TOOL: &str = r#"{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"..."},{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"touch probe.txt"}}]},"parent_tool_use_id":null,"session_id":"s"}"#;
-    const DENIED: &str = r#"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"The user denied this from TopBar.","is_error":true,"tool_use_id":"toolu_1"}]},"parent_tool_use_id":null}"#;
+    const DENIED: &str = r#"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"The user denied this from Cay.","is_error":true,"tool_use_id":"toolu_1"}]},"parent_tool_use_id":null}"#;
     const RESULT: &str = r#"{"type":"result","subtype":"error_max_turns","is_error":true,"num_turns":2,"total_cost_usd":0.0325,"errors":["Reached maximum number of turns (1)"],"terminal_reason":"max_turns"}"#;
 
     #[test]
@@ -185,7 +185,7 @@ mod tests {
             vec![StreamEvent::ToolResult {
                 id: "toolu_1".into(),
                 is_error: true,
-                text: "The user denied this from TopBar.".into(),
+                text: "The user denied this from Cay.".into(),
             }]
         );
     }

@@ -1,7 +1,7 @@
-//! `topbar.exe mcp`: the stdio MCP server Claude Code starts for an agent run (from the run's generated
-//! `--mcp-config`). Like `topbar.exe hook` it runs before Tauri (checked in `main.rs`) and never prints
+//! `cay.exe mcp`: the stdio MCP server Claude Code starts for an agent run (from the run's generated
+//! `--mcp-config`). Like `cay.exe hook` it runs before Tauri (checked in `main.rs`) and never prints
 //! anything of its own: it relays newline-delimited JSON-RPC between stdio and the agent pipe, one message per
-//! pipe message, after a hello carrying the run's token (from the config's `env`). TopBar terminates MCP.
+//! pipe message, after a hello carrying the run's token (from the config's `env`). Cay terminates MCP.
 
 use std::io::{BufRead, Write};
 use std::sync::{Arc, Mutex};
@@ -12,10 +12,10 @@ use windows::Win32::System::Threading::INFINITE;
 use super::mcp::{self, Hello, HELLO_VERSION};
 use super::pipe::{Pipe, Read, MAX_MESSAGE};
 
-pub const TOKEN_ENV: &str = "TOPBAR_AGENT_TOKEN";
-pub const RUN_ENV: &str = "TOPBAR_AGENT_RUN";
+pub const TOKEN_ENV: &str = "CAY_AGENT_TOKEN";
+pub const RUN_ENV: &str = "CAY_AGENT_RUN";
 
-/// Returns the process exit code: 0 when Claude Code closed stdin, non-zero if TopBar couldn't be reached.
+/// Returns the process exit code: 0 when Claude Code closed stdin, non-zero if Cay couldn't be reached.
 pub fn run() -> i32 {
     let (Ok(token), Ok(run)) = (std::env::var(TOKEN_ENV), std::env::var(RUN_ENV)) else {
         return 2;
@@ -25,7 +25,7 @@ pub fn run() -> i32 {
     };
     let pipe = Arc::new(pipe);
     let hello = Hello {
-        topbar: HELLO_VERSION,
+        cay: HELLO_VERSION,
         run,
         token,
     };
@@ -37,7 +37,7 @@ pub fn run() -> i32 {
     }
     let stdout = Arc::new(Mutex::new(std::io::stdout()));
 
-    // TopBar → Claude Code. When TopBar goes away there's nobody left to answer: end the bridge.
+    // Cay → Claude Code. When Cay goes away there's nobody left to answer: end the bridge.
     let (from, out) = (pipe.clone(), stdout.clone());
     std::thread::spawn(move || loop {
         match from.read(&[], INFINITE) {
@@ -55,7 +55,7 @@ pub fn run() -> i32 {
         }
     });
 
-    // Claude Code → TopBar, until Claude Code closes stdin.
+    // Claude Code → Cay, until Claude Code closes stdin.
     let mut stdin = std::io::stdin().lock();
     let mut line = Vec::new();
     loop {
@@ -74,7 +74,7 @@ pub fn run() -> i32 {
                 .ok()
                 .and_then(|m| m.get("id").cloned());
             if let Some(id) = id {
-                let reply = mcp::error(id, -32600, "message too large for TopBar");
+                let reply = mcp::error(id, -32600, "message too large for Cay");
                 let mut out = stdout.lock().unwrap_or_else(|e| e.into_inner());
                 let _ = writeln!(out, "{reply}");
                 let _ = out.flush();

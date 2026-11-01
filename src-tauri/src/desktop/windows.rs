@@ -50,7 +50,7 @@ fn own_pid() -> u32 {
     std::process::id()
 }
 
-/// Alt+Tab windows in Z-order, without any of TopBar's own (island, command window, glow).
+/// Alt+Tab windows in Z-order, without any of Cay's own (island, command window, glow).
 pub fn list() -> Vec<WindowEntry> {
     let front = foreground_root();
     apps::top_level_windows(HWND::default())
@@ -77,7 +77,7 @@ pub fn list() -> Vec<WindowEntry> {
         .collect()
 }
 
-/// The window in front, or `Err(())` when it's one of TopBar's own (never described), or `Ok(None)` when
+/// The window in front, or `Err(())` when it's one of Cay's own (never described), or `Ok(None)` when
 /// nothing is (the desktop).
 pub fn focused() -> Result<Option<WindowEntry>, ()> {
     let Some(front) = foreground_root() else {
@@ -140,7 +140,7 @@ pub fn check(hwnd: i64, expect_pid: Option<u32>) -> Result<Target, LookError> {
             return check(win32::raw(root) as i64, expect_pid);
         }
     }
-    let target = identify(hwnd).ok_or(LookError::TopbarWindow)?;
+    let target = identify(hwnd).ok_or(LookError::CayWindow)?;
     if expect_pid.is_some_and(|pid| pid != target.pid) {
         return Err(LookError::WindowGone);
     }
@@ -176,7 +176,7 @@ pub fn screen_locked() -> bool {
     }
 }
 
-/// How long since your last mouse or keyboard input (TopBar's own injected input counts too).
+/// How long since your last mouse or keyboard input (Cay's own injected input counts too).
 pub fn idle_ms() -> u64 {
     let mut info = LASTINPUTINFO {
         cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,

@@ -21,7 +21,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let version = MenuItem::with_id(
         app,
         "version",
-        format!("TopBar {}", app.package_info().version),
+        format!("Cay {}", app.package_info().version),
         false,
         None::<&str>,
     )?;
@@ -45,13 +45,13 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         None::<&str>,
     )?;
     let _ = PAUSE_ROUTINES.set(pause.clone());
-    let quit = MenuItem::with_id(app, ID_QUIT, "Quit TopBar", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, ID_QUIT, "Quit Cay", true, None::<&str>)?;
     let items: [&dyn IsMenuItem<Wry>; 6] =
         [&version, &separator, &autostart, &claude, &pause, &quit];
     let menu = Menu::with_items(app, &items)?;
 
     let mut tray = TrayIconBuilder::with_id(TRAY_ID)
-        .tooltip("TopBar")
+        .tooltip("Cay")
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(move |app, event| match event.id().as_ref() {

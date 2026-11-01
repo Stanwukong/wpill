@@ -1,4 +1,4 @@
-//! The trail: `%APPDATA%\dev.wpill.topbar\agent\<runId>.jsonl`, one JSON object per line, local only. Every
+//! The trail: `%APPDATA%\io.github.stanwukong.cay\agent\<runId>.jsonl`, one JSON object per line, local only. Every
 //! start, tool call, approval, decision and result is appended; files older than 30 days are deleted at launch.
 //! Run ids double as file names: `20261030-142233-7f3a` (UTC time + random), so they sort by date.
 
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn log_lines_append() {
-        let dir = std::env::temp_dir().join(format!("topbar-audit-{}", random_hex(4)));
+        let dir = std::env::temp_dir().join(format!("cay-audit-{}", random_hex(4)));
         let audit = Audit::new(dir.clone());
         audit.log("r1", "start", json!({ "prompt": "hi" }));
         audit.log("r1", "result", json!({ "turns": 2 }));

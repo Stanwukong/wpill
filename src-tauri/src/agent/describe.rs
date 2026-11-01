@@ -27,7 +27,7 @@ const SHELL_TOOLS: &[&str] = &["Bash", "PowerShell"];
 /// Anything here in a shell command makes it compound: remembering its first word would allow far more.
 const SHELL_OPERATORS: &[&str] = &["&", "|", ";", "`", "$(", ">", "<", "\n", "\r"];
 
-/// Unknown tools (other MCP servers, new built-ins) count as changes. TopBar's desktop looks are reads.
+/// Unknown tools (other MCP servers, new built-ins) count as changes. Cay's desktop looks are reads.
 pub fn risk(tool: &str) -> AgentRisk {
     if is_action(tool) {
         AgentRisk::Input
@@ -38,12 +38,12 @@ pub fn risk(tool: &str) -> AgentRisk {
     }
 }
 
-/// One of TopBar's own desktop looks (2.7c): `list_windows`, `focused_window`, `screenshot`, `ui_tree`.
+/// One of Cay's own desktop looks (2.7c): `list_windows`, `focused_window`, `screenshot`, `ui_tree`.
 pub fn is_desktop(tool: &str) -> bool {
     tools::short_name(tool).is_some()
 }
 
-/// One of TopBar's own desktop actions (2.7d): input into other apps, risk `input`, never remembered.
+/// One of Cay's own desktop actions (2.7d): input into other apps, risk `input`, never remembered.
 pub fn is_action(tool: &str) -> bool {
     actions::short_name(tool).is_some()
 }
@@ -223,7 +223,7 @@ pub fn desktop_summary(tool: &str, input: &Value, target: Option<&str>) -> Strin
     truncate(&text, MAX_SUMMARY)
 }
 
-/// `mcp__github__create_issue` → `github · create_issue`; built-ins stay as they are. TopBar's desktop tools
+/// `mcp__github__create_issue` → `github · create_issue`; built-ins stay as they are. Cay's desktop tools
 /// read as `desktop · screenshot`.
 pub fn display_tool(tool: &str) -> String {
     if let Some(name) = tools::short_name(tool).or_else(|| actions::short_name(tool)) {
@@ -277,17 +277,17 @@ pub fn step_label(tool: &str, input: &Value, cwd: &str) -> String {
         "WebSearch" => "Searching the web".to_string(),
         "Task" | "Agent" => "Delegating".to_string(),
         "TodoWrite" => "Planning".to_string(),
-        "mcp__topbar__list_windows" => "Listing windows".to_string(),
-        "mcp__topbar__focused_window" => "Checking the front window".to_string(),
-        "mcp__topbar__screenshot" => "Taking a screenshot".to_string(),
-        "mcp__topbar__ui_tree" => "Reading a window's UI".to_string(),
-        "mcp__topbar__focus_window" => "Bringing a window forward".to_string(),
-        "mcp__topbar__invoke" => "Using a control".to_string(),
-        "mcp__topbar__set_value" => "Setting a field".to_string(),
-        "mcp__topbar__click" => "Clicking".to_string(),
-        "mcp__topbar__type_text" => "Typing".to_string(),
-        "mcp__topbar__press_keys" => "Pressing keys".to_string(),
-        "mcp__topbar__launch" => "Opening".to_string(),
+        "mcp__cay__list_windows" => "Listing windows".to_string(),
+        "mcp__cay__focused_window" => "Checking the front window".to_string(),
+        "mcp__cay__screenshot" => "Taking a screenshot".to_string(),
+        "mcp__cay__ui_tree" => "Reading a window's UI".to_string(),
+        "mcp__cay__focus_window" => "Bringing a window forward".to_string(),
+        "mcp__cay__invoke" => "Using a control".to_string(),
+        "mcp__cay__set_value" => "Setting a field".to_string(),
+        "mcp__cay__click" => "Clicking".to_string(),
+        "mcp__cay__type_text" => "Typing".to_string(),
+        "mcp__cay__press_keys" => "Pressing keys".to_string(),
+        "mcp__cay__launch" => "Opening".to_string(),
         _ => summary(tool, input, cwd),
     };
     truncate(label.trim(), MAX_LABEL)
@@ -417,18 +417,18 @@ mod tests {
         assert_eq!(risk("Edit"), AgentRisk::Change);
         assert_eq!(risk("mcp__github__create_issue"), AgentRisk::Change);
         assert_eq!(risk("SomethingNew"), AgentRisk::Change);
-        assert_eq!(risk("mcp__topbar__click"), AgentRisk::Input);
-        assert_eq!(risk("mcp__topbar__screenshot"), AgentRisk::Read);
-        assert_eq!(risk("mcp__topbar__list_windows"), AgentRisk::Read);
-        assert_eq!(risk("mcp__topbar__approve"), AgentRisk::Change);
+        assert_eq!(risk("mcp__cay__click"), AgentRisk::Input);
+        assert_eq!(risk("mcp__cay__screenshot"), AgentRisk::Read);
+        assert_eq!(risk("mcp__cay__list_windows"), AgentRisk::Read);
+        assert_eq!(risk("mcp__cay__approve"), AgentRisk::Change);
         assert_eq!(risk("mcp__other__screenshot"), AgentRisk::Change);
     }
 
     #[test]
     fn desktop_looks() {
-        let shot = "mcp__topbar__screenshot";
+        let shot = "mcp__cay__screenshot";
         assert!(is_desktop(shot));
-        assert!(!is_desktop("mcp__topbar__click"));
+        assert!(!is_desktop("mcp__cay__click"));
         assert_eq!(display_tool(shot), "desktop · screenshot");
         assert_eq!(
             desktop_summary(shot, &json!({ "hwnd": 5 }), Some("Chrome · GitHub")),
@@ -439,33 +439,33 @@ mod tests {
             "Screenshot of the whole screen"
         );
         assert_eq!(
-            desktop_summary("mcp__topbar__ui_tree", &json!({ "hwnd": 5 }), None),
+            desktop_summary("mcp__cay__ui_tree", &json!({ "hwnd": 5 }), None),
             "Read the UI of a window that has closed"
         );
         assert_eq!(
-            desktop_summary("mcp__topbar__focused_window", &json!({}), None),
+            desktop_summary("mcp__cay__focused_window", &json!({}), None),
             "See which window is in front"
         );
         assert_eq!(step_label(shot, &json!({}), CWD), "Taking a screenshot");
         let key = |tool: &str| remember_key(tool, &json!({ "hwnd": 1 })).unwrap();
         assert_eq!(
-            key("mcp__topbar__list_windows"),
-            key("mcp__topbar__focused_window")
+            key("mcp__cay__list_windows"),
+            key("mcp__cay__focused_window")
         );
-        assert_ne!(key(shot), key("mcp__topbar__ui_tree"));
+        assert_ne!(key(shot), key("mcp__cay__ui_tree"));
         assert_eq!(remember_scope(&key(shot)), "screenshots");
         assert_eq!(
-            remember_scope(&key("mcp__topbar__list_windows")),
+            remember_scope(&key("mcp__cay__list_windows")),
             "window lists"
         );
-        assert_eq!(remember_scope(&key("mcp__topbar__ui_tree")), "reading UIs");
+        assert_eq!(remember_scope(&key("mcp__cay__ui_tree")), "reading UIs");
     }
 
     #[test]
     fn action_summaries() {
         let np = Some("Notepad · notes.txt");
         let s = |tool: &str, input: Value, element: Option<&str>| {
-            action_summary(&format!("mcp__topbar__{tool}"), &input, np, element)
+            action_summary(&format!("mcp__cay__{tool}"), &input, np, element)
         };
         assert_eq!(
             s(
@@ -566,27 +566,24 @@ mod tests {
             "Open Settings (ms-settings:display)"
         );
         assert_eq!(
-            acting_step("mcp__topbar__type_text", &json!({}), np, None),
+            acting_step("mcp__cay__type_text", &json!({}), np, None),
             "Typing into Notepad"
         );
         assert_eq!(
-            acting_step("mcp__topbar__click", &json!({}), np, Some("\"Save\"")),
+            acting_step("mcp__cay__click", &json!({}), np, Some("\"Save\"")),
             "Clicking \"Save\""
         );
         assert_eq!(
             acting_step(
-                "mcp__topbar__press_keys",
+                "mcp__cay__press_keys",
                 &json!({ "keys": ["ctrl+s"] }),
                 np,
                 None
             ),
             "Pressing Ctrl+S"
         );
-        assert_eq!(display_tool("mcp__topbar__click"), "desktop · click");
-        assert_eq!(
-            step_label("mcp__topbar__type_text", &json!({}), CWD),
-            "Typing"
-        );
+        assert_eq!(display_tool("mcp__cay__click"), "desktop · click");
+        assert_eq!(step_label("mcp__cay__type_text", &json!({}), CWD), "Typing");
     }
 
     #[test]
@@ -650,9 +647,9 @@ mod tests {
             key("WebFetch", json!({ "url": "https://Docs.rs/x" })),
             Some("WebFetch:docs.rs".into())
         );
-        assert_eq!(key("mcp__topbar__type_text", json!({})), None);
+        assert_eq!(key("mcp__cay__type_text", json!({})), None);
         for name in actions::NAMES {
-            let tool = format!("mcp__topbar__{name}");
+            let tool = format!("mcp__cay__{name}");
             assert_eq!(risk(&tool), AgentRisk::Input);
             assert_eq!(
                 key(&tool, json!({ "hwnd": 1 })),

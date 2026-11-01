@@ -48,7 +48,7 @@
   }
 }
 
-/* "agent": tells the TopBar-started runs apart from terminal sessions. Segoe, like other chrome. */
+/* "agent": tells the Cay-started runs apart from terminal sessions. Segoe, like other chrome. */
 .agent-badge {
   flex: none;
   display: inline-flex;
@@ -147,7 +147,7 @@
   cursor: default;
 }
 
-/* Risk: reads and changes are quiet words; input (TopBar acting on other apps) is a small red tag with a hairline. */
+/* Risk: reads and changes are quiet words; input (Cay acting on other apps) is a small red tag with a hairline. */
 .agent-risk {
   flex: none;
   font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;

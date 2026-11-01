@@ -271,7 +271,7 @@ fn run(island: isize) -> windows::core::Result<()> {
             cbSize: size_of::<WNDCLASSEXW>() as u32,
             lpfnWndProc: Some(wndproc),
             hInstance: instance.into(),
-            lpszClassName: w!("TopBarGlow"),
+            lpszClassName: w!("CayGlow"),
             ..Default::default()
         };
         RegisterClassExW(&class);
@@ -279,8 +279,8 @@ fn run(island: isize) -> windows::core::Result<()> {
             WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST;
         let hwnd = CreateWindowExW(
             WINDOW_EX_STYLE(ex.0),
-            w!("TopBarGlow"),
-            w!("TopBar glow"),
+            w!("CayGlow"),
+            w!("Cay glow"),
             WS_POPUP,
             0,
             0,

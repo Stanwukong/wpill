@@ -2,18 +2,18 @@
 //! window, shown in the island, with their permission prompts answered from it.
 //!
 //! - `run.rs` starts `claude.exe -p` (stream-json both ways) in a Job Object; its stdout feeds `lifecycle.rs`.
-//! - Claude Code reaches TopBar's MCP server through `topbar.exe mcp` (`bridge.rs`) and the agent pipe
+//! - Claude Code reaches Cay's MCP server through `cay.exe mcp` (`bridge.rs`) and the agent pipe
 //!   (`pipe.rs`). The `agent-server` thread accepts bridges; each connection proves its run with a token, and its
 //!   `approve` calls (`mcp.rs`) become `agentApproval` activities (`approvals.rs`, `describe.rs`).
 //! - The desktop tools (2.7c, `tools.rs` → `crate::desktop`) look at windows and the screen. Each look is
-//!   approved (Claude Code's prompt, then TopBar's own grant check), runs on its own thread, and lights the
+//!   approved (Claude Code's prompt, then Cay's own grant check), runs on its own thread, and lights the
 //!   screen edges (`window::glow`) while it runs.
 //! - The desktop actions (2.7d, `actions.rs` → `crate::desktop::act`) focus, invoke, set fields, click, type,
 //!   press keys and launch. Each is approved on its own (never "for this run"), waits until you let go of the
 //!   mouse and keyboard, shows `agentActing` and the acting glow, and stops at once if you touch either.
 //! - Hotkeys (`hotkey.rs`) open the command window or stop everything. Everything is logged (`audit.rs`).
 //! - Routines (2.7e, `routines.rs`, `schedule.rs`) are saved instructions, run from the command window or by the
-//!   `agent-routines` thread on a schedule while TopBar runs. A routine's run is an ordinary run: same approvals,
+//!   `agent-routines` thread on a schedule while Cay runs. A routine's run is an ordinary run: same approvals,
 //!   same Stop, same audit; nothing about it is pre-approved.
 //!
 //! Rust owns runs, approvals and timeouts; React only renders `agent:runs`, `agent:output` and the activities.
@@ -81,7 +81,7 @@ const RESUME_JUMP_MS: i64 = 2 * 60_000;
 /// "Approvals wait for me": you count as away while the screen is locked or after this long without input.
 const AWAY_IDLE_MS: u64 = 5 * 60_000;
 
-/// `topbar.exe mcp`: `main.rs` calls this before anything else starts.
+/// `cay.exe mcp`: `main.rs` calls this before anything else starts.
 pub fn mcp_bridge() -> i32 {
     bridge::run()
 }
@@ -130,7 +130,7 @@ struct Inner {
     /// Wakes the `agent-routines` thread after a change.
     routines_wake: Option<Arc<Handle>>,
     launched_ms: i64,
-    /// Missed routines wait until then to catch up (TopBar's start or the PC's wake, plus a little).
+    /// Missed routines wait until then to catch up (Cay's start or the PC's wake, plus a little).
     settle_until_ms: i64,
 }
 
@@ -239,7 +239,7 @@ impl Agents {
         RoutinesPayload { routines, paused }
     }
 
-    /// Kills every run's process tree. Called on exit; the jobs would also die with TopBar.
+    /// Kills every run's process tree. Called on exit; the jobs would also die with Cay.
     pub fn shutdown(&self) {
         let mut inner = self.lock();
         for slot in &mut inner.slots {
@@ -312,10 +312,12 @@ impl Inner {
     fn settle(&mut self, settled: Vec<Pending>, allow: bool, by: &'static str, after: &mut After) {
         for p in settled {
             let message = match by {
-                "timeout" => "Nobody answered in TopBar within the time limit, so this was denied.",
+                "timeout" => "Nobody answered in Cay within the time limit, so this was denied.",
                 "runEnded" => "The run ended before this was answered.",
                 "cancelled" => "The call was cancelled before it was answered.",
-                _ => "The user denied this in TopBar. Don't retry it; adapt or explain what you needed.",
+                _ => {
+                    "The user denied this in Cay. Don't retry it; adapt or explain what you needed."
+                }
             };
             if let Some(conn) = self.conns.get(&p.reply.conn) {
                 let rpc_id = p.reply.rpc_id.clone();
@@ -324,7 +326,7 @@ impl Inner {
                         let reply = mcp::decision(rpc_id, allow, p.input.clone(), message);
                         after.replies.push((conn.pipe.clone(), reply));
                     }
-                    // TopBar's own check before a look: allowed means look now, denied is the tool's error.
+                    // Cay's own check before a look: allowed means look now, denied is the tool's error.
                     Purpose::Look if allow => after.looks.push(LookJob {
                         pipe: conn.pipe.clone(),
                         rpc_id,
@@ -430,7 +432,7 @@ pub fn spawn(app: &AppHandle, activities: &Activities) {
         .path()
         .app_data_dir()
         .map(|d| d.join("agent"))
-        .unwrap_or_else(|_| std::env::temp_dir().join("topbar-agent"));
+        .unwrap_or_else(|_| std::env::temp_dir().join("cay-agent"));
     let audit = Arc::new(Audit::new(dir));
     audit.prune();
     let stop = match Handle::event() {
@@ -561,7 +563,7 @@ fn serve(app: &AppHandle, pipe: Arc<pipe::Pipe>, stop: &Handle) {
     let conn = {
         let mut inner = agents.lock();
         let valid = hello.as_ref().is_some_and(|h| {
-            h.topbar == mcp::HELLO_VERSION
+            h.cay == mcp::HELLO_VERSION
                 && inner
                     .slots
                     .iter()
@@ -652,7 +654,7 @@ fn approve(app: &AppHandle, conn: u64, rpc_id: Value, tool: String, input: Value
 }
 
 /// One of the desktop tools was called: it runs if its prompt was approved (a grant) or its kind is allowed for
-/// this run; otherwise TopBar asks in the island itself first.
+/// this run; otherwise Cay asks in the island itself first.
 fn look(app: &AppHandle, conn: u64, rpc_id: Value, name: &'static str, args: Value) {
     let tool = format!("mcp__{}__{name}", mcp::SERVER_NAME);
     let target = desktop_target(&tool, &args);
@@ -676,7 +678,7 @@ fn look(app: &AppHandle, conn: u64, rpc_id: Value, name: &'static str, args: Val
                 pid,
             });
         } else {
-            log::info!("agent look {tool} arrived without an approved prompt; asking in TopBar");
+            log::info!("agent look {tool} arrived without an approved prompt; asking in Cay");
             let reply = ReplyTo { conn, rpc_id };
             let asked = Ask {
                 run_id: &run_id,
@@ -701,7 +703,7 @@ fn look(app: &AppHandle, conn: u64, rpc_id: Value, name: &'static str, args: Val
 }
 
 /// One of the desktop actions was called. Like a look, it runs only with the one-time grant its approved
-/// prompt left (actions are never remembered for the run); without one, TopBar asks in the island itself.
+/// prompt left (actions are never remembered for the run); without one, Cay asks in the island itself.
 fn act(app: &AppHandle, conn: u64, rpc_id: Value, name: &'static str, args: Value) {
     let tool = format!("mcp__{}__{name}", mcp::SERVER_NAME);
     let target = desktop_target(&tool, &args);
@@ -731,7 +733,7 @@ fn act(app: &AppHandle, conn: u64, rpc_id: Value, name: &'static str, args: Valu
                 pid,
             });
         } else {
-            log::info!("agent action {tool} arrived without an approved prompt; asking in TopBar");
+            log::info!("agent action {tool} arrived without an approved prompt; asking in Cay");
             let element = actions::element_for(&tool, &args, &run_id, &inner.refs, Instant::now());
             let reply = ReplyTo { conn, rpc_id };
             let asked = Ask {
@@ -988,7 +990,7 @@ fn ask(
         Asked::Waiting(p) => {
             let activity = p.activity.clone();
             let by = if a.purpose == Purpose::Look {
-                "topbar"
+                "cay"
             } else {
                 "claudeCode"
             };
@@ -1879,7 +1881,7 @@ pub async fn command_window_hide(app: AppHandle) -> AppResult<()> {
 }
 
 /// Debug builds only: drive the agent from outside for verification, through a second launch that the
-/// single-instance plugin forwards here. `topbar.exe agent-test start <cwd> <prompt> [model] [maxTurns]`,
+/// single-instance plugin forwards here. `cay.exe agent-test start <cwd> <prompt> [model] [maxTurns]`,
 /// `… decide <requestId> allow|deny [run]`, `… send <runId> <text>`, `… stop <runId>`, `… stop-all`,
 /// `… show [runId]`, `… act <tool> [argsJson]` (an action without Claude or approvals), `… look <tool> [argsJson] [imageFile]` (a desktop look without Claude or approvals, glow
 /// included). Results go to the log.
@@ -2021,7 +2023,7 @@ pub fn debug_command(app: &AppHandle, args: &[String]) {
                     "unknown routine command {other:?}"
                 ))),
             },
-            // A clean quit (tray "Quit TopBar" does the same), to check runs stop with it.
+            // A clean quit (tray "Quit Cay" does the same), to check runs stop with it.
             "quit" => {
                 app.exit(0);
                 Ok("quitting".into())

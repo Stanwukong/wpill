@@ -282,7 +282,7 @@ export function RoutineEditor({
         </div>
         <div className="routine__when" data-off={schedule.kind !== "off" && !enabled}>
           {schedule.kind === "off" && <p className="routine__hint">Runs only when you click Run now.</p>}
-          {schedule.kind === "start" && <p className="routine__hint">Runs 2 minutes after TopBar starts.</p>}
+          {schedule.kind === "start" && <p className="routine__hint">Runs 2 minutes after Cay starts.</p>}
           {schedule.kind === "days" && (
             <>
               <div className="routine__row">
@@ -352,7 +352,7 @@ export function RoutineEditor({
                   role="radio"
                   aria-checked={ifMissed === "once"}
                   className="seg__item"
-                  title="A time missed while TopBar was closed or the PC slept runs once when you're back (within 24 h)"
+                  title="A time missed while Cay was closed or the PC slept runs once when you're back (within 24 h)"
                   onClick={() => setIfMissed("once")}
                 >
                   Run once when back

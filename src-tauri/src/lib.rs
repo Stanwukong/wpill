@@ -9,19 +9,20 @@ mod fullscreen;
 mod hover;
 mod ipc;
 mod media;
+mod migrate;
 mod tray;
 mod win32;
 mod window;
 
 use tauri::{Manager, RunEvent};
 
-/// `topbar.exe hook`: forwards a Claude Code hook to the running TopBar and returns. Called from `main.rs`
+/// `cay.exe hook`: forwards a Claude Code hook to the running Cay and returns. Called from `main.rs`
 /// before `run()`, so no Tauri, WebView2 or single-instance check is involved.
 pub fn forward_hook() {
     claude::forward_hook();
 }
 
-/// `topbar.exe mcp`: the stdio MCP bridge Claude Code starts for an agent run. Returns the exit code.
+/// `cay.exe mcp`: the stdio MCP bridge Claude Code starts for an agent run. Returns the exit code.
 pub fn mcp_bridge() -> i32 {
     agent::mcp_bridge()
 }
@@ -37,7 +38,7 @@ pub fn run() {
                 agent::debug_command(_app, &_args[2..]);
                 return;
             }
-            log::info!("second launch ignored; TopBar is already running");
+            log::info!("second launch ignored; Cay is already running");
         }))
         .manage(hover::Island::default())
         .manage(apps::IconCache::default())
@@ -46,8 +47,9 @@ pub fn run() {
         .manage(claude::Claude::default())
         .manage(agent::Agents::default())
         .setup(|app| {
-            autostart::repair();
             let handle = app.handle().clone();
+            migrate::from_topbar(&handle);
+            autostart::repair();
             let (island, geometry) = window::create(&handle)?;
             hover::spawn(handle.clone(), &island, geometry)?;
             media::spawn(handle.clone(), &app.state::<media::Media>())?;
@@ -92,7 +94,7 @@ pub fn run() {
             agent::routines_pause,
         ])
         .build(tauri::generate_context!())
-        .expect("error while building TopBar")
+        .expect("error while building Cay")
         .run(|app, event| {
             if let RunEvent::Exit = event {
                 app.state::<agent::Agents>().shutdown();

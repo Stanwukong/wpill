@@ -121,7 +121,7 @@ pub enum ActError {
     WindowGone,
     ElementGone,
     StaleView,
-    TopbarWindow,
+    CayWindow,
     NotOnThisDesktop,
     NotResponding,
     Elevated,
@@ -149,7 +149,7 @@ impl ActError {
             Self::WindowGone => "windowGone",
             Self::ElementGone => "elementGone",
             Self::StaleView => "staleView",
-            Self::TopbarWindow => "topbarWindow",
+            Self::CayWindow => "cayWindow",
             Self::NotOnThisDesktop => "notOnThisDesktop",
             Self::NotResponding => "notResponding",
             Self::Elevated => "elevated",
@@ -177,15 +177,13 @@ impl ActError {
             Self::StaleView => "The window has moved or the screenshot is too old. Take a new \
                                 screenshot (or use ui_tree refs) before clicking."
                 .into(),
-            Self::TopbarWindow => {
-                "That's one of TopBar's own windows, which can't be acted on.".into()
-            }
+            Self::CayWindow => "That's one of Cay's own windows, which can't be acted on.".into(),
             Self::NotOnThisDesktop => {
                 "That window isn't on the current virtual desktop, so it can't be acted on.".into()
             }
             Self::NotResponding => "That window isn't responding. Try again later.".into(),
             Self::Elevated => "That window belongs to an app running as administrator. Windows \
-                               blocks input into it from TopBar, so it can't be acted on."
+                               blocks input into it from Cay, so it can't be acted on."
                 .into(),
             Self::ScreenLocked => "The screen is locked or a Windows security prompt is showing, \
                                    so nothing was done."
@@ -200,19 +198,17 @@ impl ActError {
                 .into(),
             Self::Disabled => "That element is disabled.".into(),
             Self::Unsupported(why) => format!("Not possible on that element: {why}"),
-            Self::PasswordField => {
-                "That's a password field. TopBar never types or sets passwords; \
+            Self::PasswordField => "That's a password field. Cay never types or sets passwords; \
                                     ask the user to do it."
-                    .into()
-            }
+                .into(),
             Self::Refused(why) => format!("Refused: {why}"),
             Self::NotFound(why) => why.clone(),
             Self::Aborted { done, total } => format!(
-                "The user used the mouse or keyboard (or stopped the run) while TopBar was acting, \
+                "The user used the mouse or keyboard (or stopped the run) while Cay was acting, \
                  so it stopped after {done} of {total} steps. Don't retry right away; say what you \
                  were doing and let the user decide."
             ),
-            Self::Busy => "The user kept using the mouse or keyboard, so TopBar didn't act. Don't \
+            Self::Busy => "The user kept using the mouse or keyboard, so Cay didn't act. Don't \
                            retry right away; say what you wanted to do."
                 .into(),
             Self::Failed(why) => format!("The action failed: {why}"),
@@ -224,7 +220,7 @@ impl From<LookError> for ActError {
     fn from(e: LookError) -> Self {
         match e {
             LookError::WindowGone => Self::WindowGone,
-            LookError::TopbarWindow => Self::TopbarWindow,
+            LookError::CayWindow => Self::CayWindow,
             LookError::NotOnThisDesktop => Self::NotOnThisDesktop,
             LookError::Minimized => Self::NotForeground,
             LookError::NotResponding => Self::NotResponding,
@@ -374,7 +370,7 @@ pub fn parse_chord(text: &str) -> Result<Chord, String> {
         "ctrl" | "control" | "shift" | "alt" => {
             return Err(format!("{text:?} has no key after the modifiers"))
         }
-        _ => named(last).ok_or_else(|| format!("{last:?} isn't a key TopBar knows"))?,
+        _ => named(last).ok_or_else(|| format!("{last:?} isn't a key Cay knows"))?,
     };
     held.sort_by_key(|m| [CTRL, ALT, SHIFT, WIN].iter().position(|o| o == m));
     let chord = Chord { mods: held, key };
@@ -386,7 +382,7 @@ pub fn parse_chord(text: &str) -> Result<Chord, String> {
         || (chord.has(CTRL) && chord.has(ALT) && chord.key.vk == 0x2E);
     if blocked {
         return Err(format!(
-            "{} acts on Windows itself, not on the window; TopBar doesn't press it",
+            "{} acts on Windows itself, not on the window; Cay doesn't press it",
             chord.label()
         ));
     }
@@ -469,7 +465,7 @@ pub fn check_text(text: &str, allow_empty: bool) -> Result<(), ActError> {
     }
     if looks_secret(text) {
         return Err(ActError::Refused(
-            "that text looks like a password, token or key, and TopBar never types secrets. Ask \
+            "that text looks like a password, token or key, and Cay never types secrets. Ask \
              the user to enter it themselves."
                 .into(),
         ));
@@ -613,7 +609,7 @@ pub fn launch_url(url: &str) -> Result<String, ActError> {
             Ok(format!("ms-settings:{rest}"))
         }
         other => Err(ActError::Refused(format!(
-            "TopBar only opens https, http and ms-settings links, not {other}:"
+            "Cay only opens https, http and ms-settings links, not {other}:"
         ))),
     }
 }

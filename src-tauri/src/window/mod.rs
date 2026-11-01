@@ -133,7 +133,7 @@ pub fn keep_at(hwnd: HWND, to: Placement) -> bool {
 
 pub fn create(app: &AppHandle) -> AppResult<(WebviewWindow, Geometry)> {
     let window = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::default())
-        .title("TopBar")
+        .title("Cay")
         .inner_size(WINDOW_WIDTH, WINDOW_HEIGHT)
         .transparent(true)
         .decorations(false)

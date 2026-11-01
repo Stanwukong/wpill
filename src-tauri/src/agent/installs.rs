@@ -2,7 +2,7 @@
 //!
 //! The `claude` on PATH is often an npm shim (a shell script plus `.cmd`), which can't be spawned without a
 //! shell, so the real exe is looked up next to it. Versions come from `claude.exe --version` (bounded wait,
-//! no window). Recent folders are TopBar's own runs first, then the projects Claude Code keeps transcripts for,
+//! no window). Recent folders are Cay's own runs first, then the projects Claude Code keeps transcripts for,
 //! newest first.
 
 use std::collections::HashSet;
@@ -127,7 +127,7 @@ pub fn compare(a: Option<&str>, b: Option<&str>) -> std::cmp::Ordering {
     }
 }
 
-/// TopBar's recent run folders first, then Claude Code's projects by their last transcript, existing only.
+/// Cay's recent run folders first, then Claude Code's projects by their last transcript, existing only.
 pub fn recent_folders(own: &[String]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let push = |folder: String, out: &mut Vec<String>| {

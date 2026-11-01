@@ -5,7 +5,7 @@
 //!
 //! Desktop looks (2.7c) are checked twice. Claude Code's `approve` call is the usual prompt; allowing it leaves a
 //! one-time *grant* for that exact input. When the look's own `tools/call` arrives it must find a grant or a
-//! remembered "for this run"; otherwise (a user allow rule skipped the prompt) TopBar asks itself, with
+//! remembered "for this run"; otherwise (a user allow rule skipped the prompt) Cay asks itself, with
 //! `Purpose::Look`, so every look is approved in the island whatever Claude Code decided.
 
 use std::collections::{HashMap, HashSet};
@@ -28,7 +28,7 @@ pub struct ReplyTo {
     pub rpc_id: Value,
 }
 
-/// What an approval answers: Claude Code's permission prompt, or TopBar's own check before a desktop look.
+/// What an approval answers: Claude Code's permission prompt, or Cay's own check before a desktop look.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Purpose {
     Prompt,
@@ -357,18 +357,18 @@ mod tests {
     fn input_is_never_remembered() {
         let mut a = Approvals::default();
         let now = Instant::now();
-        let p = waiting(a.ask(req("r1", "mcp__topbar__click", json!({}), 1), now, TIMEOUT));
+        let p = waiting(a.ask(req("r1", "mcp__cay__click", json!({}), 1), now, TIMEOUT));
         assert_eq!(p.activity.remember_as, None);
         assert_eq!(p.activity.risk, AgentRisk::Input);
         a.decide(p.activity.request_id, true, true);
-        waiting(a.ask(req("r1", "mcp__topbar__click", json!({}), 1), now, TIMEOUT));
+        waiting(a.ask(req("r1", "mcp__cay__click", json!({}), 1), now, TIMEOUT));
     }
 
     #[test]
     fn desktop_looks_need_a_grant_or_a_remembered_kind() {
         let mut a = Approvals::default();
         let now = Instant::now();
-        let shot = "mcp__topbar__screenshot";
+        let shot = "mcp__cay__screenshot";
         let input = || json!({ "hwnd": 42 });
         let p = waiting(a.ask(
             Request {
@@ -394,7 +394,7 @@ mod tests {
         a.decide(denied.activity.request_id, false, false);
         assert_eq!(a.take_grant("r1", shot, &input()), None);
 
-        // A call without a prompt (a user allow rule) is asked about by TopBar itself; that leaves no grant.
+        // A call without a prompt (a user allow rule) is asked about by Cay itself; that leaves no grant.
         let own = waiting(a.ask(
             Request {
                 purpose: Purpose::Look,
@@ -410,7 +410,7 @@ mod tests {
         assert!(matches!(remembered, Asked::Remembered { .. }));
         assert_eq!(a.take_grant("r1", shot, &json!({ "hwnd": 7 })), Some(None));
         // Other kinds still ask; ending the run drops grants.
-        waiting(a.ask(req("r1", "mcp__topbar__ui_tree", input(), 1), now, TIMEOUT));
+        waiting(a.ask(req("r1", "mcp__cay__ui_tree", input(), 1), now, TIMEOUT));
         a.ask(req("r1", shot, json!({}), 1), now, TIMEOUT);
         a.end_run("r1");
         assert_eq!(a.take_grant("r1", shot, &json!({})), None);

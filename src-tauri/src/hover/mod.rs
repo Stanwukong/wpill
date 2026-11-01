@@ -41,7 +41,7 @@ struct Shared {
     hidden: bool,
 }
 
-/// While TopBar acts on the desktop for an agent run (2.7d), the cursor is treated as away: the island neither
+/// While Cay acts on the desktop for an agent run (2.7d), the cursor is treated as away: the island neither
 /// opens on hover nor takes clicks, so a synthetic click near the top centre lands on the app underneath.
 static HANDS_OFF: AtomicBool = AtomicBool::new(false);
 

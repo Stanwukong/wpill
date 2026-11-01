@@ -213,7 +213,7 @@ pub struct AgentApprovalActivity {
     /// What "allow for this run" would cover ("git", "edits"), or `None` where it isn't offered (`input`
     /// actions, compound shell commands).
     pub remember_as: Option<String>,
-    /// One of TopBar's desktop tools: a look (2.7c, risk `read`, an eye) or an action (2.7d, risk `input`, a
+    /// One of Cay's desktop tools: a look (2.7c, risk `read`, an eye) or an action (2.7d, risk `input`, a
     /// pointer). The screen edges glow while it runs.
     pub desktop: bool,
     /// The full text an action would type or set, for the command window (the island shows `summary`).
@@ -222,7 +222,7 @@ pub struct AgentApprovalActivity {
     pub routine_name: Option<String>,
 }
 
-/// TopBar is acting on the desktop for a run (2.7d). Sticky and not interactive; withdrawn when the action ends.
+/// Cay is acting on the desktop for a run (2.7d). Sticky and not interactive; withdrawn when the action ends.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentActingActivity {
@@ -233,7 +233,7 @@ pub struct AgentActingActivity {
     pub phase: AgentActingPhase,
 }
 
-/// `waiting`: TopBar acts once you've let go of the mouse and keyboard. `acting`: it's acting now.
+/// `waiting`: Cay acts once you've let go of the mouse and keyboard. `acting`: it's acting now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum AgentActingPhase {
@@ -326,7 +326,7 @@ pub enum RoutineTrigger {
     Schedule,
 }
 
-/// When a routine runs by itself, while TopBar is running (2.7e). Times are local `HH:MM`.
+/// When a routine runs by itself, while Cay is running (2.7e). Times are local `HH:MM`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Schedule {
@@ -336,7 +336,7 @@ pub enum Schedule {
     Days { time: String, days: Vec<Weekday> },
     /// Every `hours` hours (1–24), counted from `from` on the day the schedule was saved.
     Every { hours: u32, from: String },
-    /// Two minutes after TopBar starts.
+    /// Two minutes after Cay starts.
     Start,
 }
 
@@ -352,7 +352,7 @@ pub enum Weekday {
     Sun,
 }
 
-/// A due time that passed while TopBar wasn't running or the PC slept: run once when back, or skip it.
+/// A due time that passed while Cay wasn't running or the PC slept: run once when back, or skip it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum IfMissed {
@@ -364,7 +364,7 @@ pub enum IfMissed {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SkipReason {
-    /// Missed (TopBar closed, asleep) and set to skip, or more than a day ago.
+    /// Missed (Cay closed, asleep) and set to skip, or more than a day ago.
     Missed,
     Paused,
     /// Its previous run hadn't ended.
@@ -416,7 +416,7 @@ pub struct Routine {
     pub if_missed: IfMissed,
     /// Scheduled runs: an approval's timeout is paused while you're away (locked, or no input for 5 min).
     pub wait_for_me: bool,
-    /// TopBar's desktop looks and actions; off passes them in `--disallowedTools`.
+    /// Cay's desktop looks and actions; off passes them in `--disallowedTools`.
     pub desktop_tools: bool,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
@@ -515,7 +515,7 @@ pub struct AgentStarted {
     pub run_id: String,
 }
 
-/// A `claude.exe` TopBar found.
+/// A `claude.exe` Cay found.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClaudeInstall {

@@ -10,7 +10,7 @@ const HINT: Record<AgentActingActivity["phase"], string> = {
 };
 
 /**
- * TopBar is about to click or type for an agent run, or is doing it: mark · project · step, and a quiet line saying
+ * Cay is about to click or type for an agent run, or is doing it: mark · project · step, and a quiet line saying
  * what stops it. Not interactive (the island stays click-through). Keyed per run, so waiting → acting re-renders in
  * place: only the hint crossfades and the pointer at the end turns amber. The edge holds steady
  * (`data-claude="acting"`); nothing loops.

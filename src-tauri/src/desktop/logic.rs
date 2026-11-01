@@ -82,7 +82,7 @@ impl Encoding {
 #[derive(Debug, Clone, PartialEq)]
 pub enum LookError {
     WindowGone,
-    TopbarWindow,
+    CayWindow,
     NotOnThisDesktop,
     Minimized,
     NotResponding,
@@ -95,7 +95,7 @@ impl LookError {
     pub fn code(&self) -> &'static str {
         match self {
             Self::WindowGone => "windowGone",
-            Self::TopbarWindow => "topbarWindow",
+            Self::CayWindow => "cayWindow",
             Self::NotOnThisDesktop => "notOnThisDesktop",
             Self::Minimized => "minimized",
             Self::NotResponding => "notResponding",
@@ -110,9 +110,7 @@ impl LookError {
             Self::WindowGone => {
                 "That window has closed (or the hwnd is stale). Call list_windows again.".into()
             }
-            Self::TopbarWindow => {
-                "That's one of TopBar's own windows, which can't be looked at.".into()
-            }
+            Self::CayWindow => "That's one of Cay's own windows, which can't be looked at.".into(),
             Self::NotOnThisDesktop => {
                 "That window isn't on the current virtual desktop, so it can't be looked at.".into()
             }
@@ -122,11 +120,9 @@ impl LookError {
                     .into()
             }
             Self::NotResponding => "That window isn't responding. Try again later.".into(),
-            Self::Elevated => {
-                "That window belongs to an app running as administrator, which TopBar \
+            Self::Elevated => "That window belongs to an app running as administrator, which Cay \
                                can't read (Windows blocks it)."
-                    .into()
-            }
+                .into(),
             Self::ScreenLocked => {
                 "The screen is locked or a Windows security prompt is showing, so \
                                    nothing can be looked at."

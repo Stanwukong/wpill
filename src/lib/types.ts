@@ -75,7 +75,7 @@ export interface AgentApprovalActivity {
   /** What "allow for this run" covers ("git", "edits"); `null` where it isn't offered. */
   rememberAs: string | null;
   /**
-   * One of TopBar's desktop tools: with `risk: "read"` Claude looks (windows, screenshot, UI tree; an eye), with
+   * One of Cay's desktop tools: with `risk: "read"` Claude looks (windows, screenshot, UI tree; an eye), with
    * `risk: "input"` it acts (focus, invoke, set a field, click, type, keys, launch; a pointer).
    */
   desktop: boolean;
@@ -86,7 +86,7 @@ export interface AgentApprovalActivity {
 }
 
 /**
- * TopBar is acting on the desktop for a run (Phase 2.7d). Sticky, not interactive; Rust withdraws it when the
+ * Cay is acting on the desktop for a run (Phase 2.7d). Sticky, not interactive; Rust withdraws it when the
  * action ends. `waiting`: it acts once you've let go of the mouse and keyboard; `acting`: it's clicking or typing.
  * Any input of yours stops it.
  */
@@ -235,16 +235,16 @@ export type RoutineTrigger = "manual" | "schedule";
 
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
-/** When a routine runs by itself, while TopBar is running. Times are local `HH:MM`. */
+/** When a routine runs by itself, while Cay is running. Times are local `HH:MM`. */
 export type Schedule =
   | { kind: "off" }
   | { kind: "days"; time: string; days: Weekday[] }
   /** Every `hours` (1–24) hours, counted from `from` on the day the schedule was saved. */
   | { kind: "every"; hours: number; from: string }
-  /** Two minutes after TopBar starts. */
+  /** Two minutes after Cay starts. */
   | { kind: "start" };
 
-/** A due time missed while TopBar was closed or the PC slept: run once when back, or skip it. */
+/** A due time missed while Cay was closed or the PC slept: run once when back, or skip it. */
 export type IfMissed = "once" | "skip";
 
 export type SkipReason = "missed" | "paused" | "stillRunning" | "tooMany" | "folderMissing" | "startFailed";
@@ -283,7 +283,7 @@ export interface RoutineDraft {
   ifMissed: IfMissed;
   /** Scheduled runs: an approval's timeout pauses while you're away (locked, or no input for 5 min; 12 h at most). */
   waitForMe: boolean;
-  /** TopBar's desktop looks and actions. Off by default. */
+  /** Cay's desktop looks and actions. Off by default. */
   desktopTools: boolean;
 }
 

@@ -1,6 +1,6 @@
 //! Your hands come first (Phase 2.7d): while an action runs, low-level keyboard and mouse hooks watch for input
 //! that isn't injected (`LLKHF_INJECTED` / `LLMHF_INJECTED` unset, so it came from a real device). Before acting,
-//! TopBar waits until you've let go for `plan::QUIET`; once it's acting, any input of yours aborts it before its
+//! Cay waits until you've let go for `plan::QUIET`; once it's acting, any input of yours aborts it before its
 //! next event. The hooks live on their own thread with a message loop, only while an action runs; their callback
 //! only stores a timestamp and a flag, and always passes the input on (nothing is swallowed).
 //!

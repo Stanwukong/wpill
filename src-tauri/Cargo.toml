@@ -1,11 +1,13 @@
 [package]
-name = "topbar"
+name = "cay"
 version = "0.1.0"
-description = "Dynamic Island-style top bar for Windows 11"
+description = "A Dynamic Island-style surface for Windows 11, with Claude Code activity and approvals"
+license = "MIT"
+repository = "https://github.com/Stanwukong/wpill"
 edition = "2021"
 
 [lib]
-name = "topbar_lib"
+name = "cay_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

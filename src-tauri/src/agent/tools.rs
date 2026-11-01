@@ -1,4 +1,4 @@
-//! TopBar's desktop tools as MCP sees them (Phase 2.7c): their definitions for `tools/list`, their arguments, and
+//! Cay's desktop tools as MCP sees them (Phase 2.7c): their definitions for `tools/list`, their arguments, and
 //! their replies (text, or an image block plus text). The looking itself is `crate::desktop`. Pure; unit-tested.
 
 use base64::Engine;
@@ -14,9 +14,9 @@ pub const SCREENSHOT: &str = "screenshot";
 pub const UI_TREE: &str = "ui_tree";
 pub const NAMES: &[&str] = &[LIST_WINDOWS, FOCUSED_WINDOW, SCREENSHOT, UI_TREE];
 
-/// `mcp__topbar__screenshot` → `screenshot`, for TopBar's desktop tools only.
+/// `mcp__cay__screenshot` → `screenshot`, for Cay's desktop tools only.
 pub fn short_name(tool: &str) -> Option<&'static str> {
-    let name = tool.strip_prefix("mcp__topbar__")?;
+    let name = tool.strip_prefix("mcp__cay__")?;
     NAMES.iter().copied().find(|n| *n == name)
 }
 
@@ -27,7 +27,7 @@ pub fn definitions() -> Vec<Value> {
             "name": LIST_WINDOWS,
             "description": "Lists the user's open windows (like Alt+Tab), front to back: hwnd, app, title, \
                 bounds in physical screen pixels, minimized, focused. Read-only. The user approves this in \
-                TopBar and sees the screen edges glow.",
+                Cay and sees the screen edges glow.",
             "inputSchema": { "type": "object", "properties": {} },
         }),
         json!({
@@ -117,10 +117,10 @@ pub fn reply(rpc_id: Value, result: &Result<Outcome, LookError>) -> Value {
             )
         }
         Ok(Outcome::Windows(list)) => vec![text(&json!({ "windows": list }).to_string())],
-        Ok(Outcome::Focused { window, topbar }) => {
+        Ok(Outcome::Focused { window, cay }) => {
             let mut v = json!({ "window": window });
-            if *topbar {
-                v["note"] = json!("TopBar's own window is in front; it can't be described.");
+            if *cay {
+                v["note"] = json!("Cay's own window is in front; it can't be described.");
             }
             vec![text(&v.to_string())]
         }
@@ -169,9 +169,9 @@ pub fn audit_fields(tool: &str, result: &Result<Outcome, LookError>) -> Value {
     match result {
         Err(e) => json!({ "tool": tool, "ok": false, "error": e.code() }),
         Ok(Outcome::Windows(list)) => json!({ "tool": tool, "ok": true, "windows": list.len() }),
-        Ok(Outcome::Focused { window, topbar }) => json!({ "tool": tool, "ok": true,
+        Ok(Outcome::Focused { window, cay }) => json!({ "tool": tool, "ok": true,
             "target": window.as_ref().map(|w| json!({ "hwnd": w.hwnd, "app": w.app, "title": w.title })),
-            "topbar": topbar }),
+            "cay": cay }),
         Ok(Outcome::Image { image, target: t }) => json!({ "tool": tool, "ok": true,
             "target": t.as_ref().map(target).unwrap_or(json!("screen")),
             "width": image.width, "height": image.height, "bytes": image.bytes.len(),
@@ -206,8 +206,8 @@ mod tests {
 
     #[test]
     fn names_and_definitions() {
-        assert_eq!(short_name("mcp__topbar__screenshot"), Some("screenshot"));
-        assert_eq!(short_name("mcp__topbar__approve"), None);
+        assert_eq!(short_name("mcp__cay__screenshot"), Some("screenshot"));
+        assert_eq!(short_name("mcp__cay__approve"), None);
         assert_eq!(short_name("mcp__other__screenshot"), None);
         let defs = definitions();
         let names: Vec<_> = defs.iter().map(|d| d["name"].as_str().unwrap()).collect();
@@ -303,10 +303,10 @@ mod tests {
             json!(3),
             &Ok(Outcome::Focused {
                 window: None,
-                topbar: true,
+                cay: true,
             }),
         );
-        assert!(r.to_string().contains("TopBar's own window"));
+        assert!(r.to_string().contains("Cay's own window"));
         let tree = Ok(Outcome::Tree {
             outline: "window \"x\"\n".into(),
             nodes: 1,

@@ -2,7 +2,7 @@
 //! normal, focusable window (CLAUDE.md rule 2), created on first use and hidden (not closed) afterwards.
 //!
 //! Call `show` from a background thread or an async command, never from a sync command or the main thread:
-//! building a webview window there deadlocks on Windows. The hotkey thread's `WM_HOTKEY` gives TopBar the
+//! building a webview window there deadlocks on Windows. The hotkey thread's `WM_HOTKEY` gives Cay the
 //! right to take the foreground, which is what lets `set_focus` work.
 
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindow};
@@ -53,7 +53,7 @@ fn create(app: &AppHandle) -> AppResult<WebviewWindow> {
     let text = text_scale();
     let window =
         tauri::WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("command.html".into()))
-            .title("TopBar")
+            .title("Cay")
             .inner_size(WIDTH * text, HEIGHT * text)
             .min_inner_size(520.0 * text, 380.0 * text)
             .decorations(false)

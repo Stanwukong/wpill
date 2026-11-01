@@ -20,7 +20,7 @@ const MAX_LINE: usize = 16 * 1024 * 1024;
 const STDERR_TAIL: usize = 2000;
 
 /// Appended to Claude Code's system prompt for every agent run.
-pub const GUIDANCE: &str = "You are running headless, started from TopBar, a Windows desktop helper. The user \
+pub const GUIDANCE: &str = "You are running headless, started from Cay, a Windows desktop helper. The user \
 isn't watching a terminal: they see a one-line status at the top of the screen and approve risky steps with Allow \
 or Deny buttons there. Nobody can answer questions while you work, so don't ask; make a sensible choice and state \
 your assumptions. If you truly can't go on, stop and say exactly what you need in your final message; the user can \
@@ -28,14 +28,14 @@ reply with a follow-up. Prefer the shell and files. Never type, print or send pa
 Avoid interactive commands and commands that never end, and don't leave servers or watchers running. End with a \
 short summary of what you did and where the results are.
 
-TopBar's desktop tools (mcp__topbar__list_windows, focused_window, ui_tree, screenshot) let you look at the user's \
+Cay's desktop tools (mcp__cay__list_windows, focused_window, ui_tree, screenshot) let you look at the user's \
 screen. Use them only when the task is about what's on screen and the shell or files can't answer it. Every look is \
 approved by the user and makes the screen edges glow, so before each one say in one sentence what you're looking \
 for. Get a window's hwnd from list_windows (list again if a window has closed). Prefer ui_tree (text, cheap, exact) \
 over screenshot; take a screenshot only for visual questions (layout, images, charts) or when the tree is empty. \
 Don't repeat sensitive things you happen to see that the task doesn't need.
 
-TopBar's action tools (focus_window, invoke, set_value, click, type_text, press_keys, launch) act on the user's \
+Cay's action tools (focus_window, invoke, set_value, click, type_text, press_keys, launch) act on the user's \
 desktop. Use them only when the task needs something done in an app and the shell or files can't do it. In order \
 of preference: the shell and files; then invoke and set_value on an element's [n] ref from your latest ui_tree \
 (no mouse, works with the window behind); then click, type_text and press_keys (the real mouse and keyboard); \
@@ -57,7 +57,7 @@ pub struct Launch {
     pub user_settings: bool,
     /// Claude Code's display name for the session (a routine's name, 2.7e).
     pub name: Option<String>,
-    /// TopBar's desktop looks and actions; off disallows them.
+    /// Cay's desktop looks and actions; off disallows them.
     pub desktop_tools: bool,
 }
 
@@ -240,7 +240,7 @@ mod tests {
         assert!(has_pair(
             &a,
             "--permission-prompt-tool",
-            "mcp__topbar__approve"
+            "mcp__cay__approve"
         ));
         assert!(has_pair(&a, "--mcp-config", r"C:\runs\r1\mcp.json"));
         assert!(has_pair(&a, "--input-format", "stream-json"));
@@ -290,8 +290,8 @@ mod tests {
         let list: Vec<&str> = a[i + 1].split(',').collect();
         assert_eq!(list.len(), 1 + tools::NAMES.len() + actions::NAMES.len());
         assert!(list.contains(&"AskUserQuestion"));
-        assert!(list.contains(&"mcp__topbar__screenshot"));
-        assert!(list.contains(&"mcp__topbar__type_text"));
+        assert!(list.contains(&"mcp__cay__screenshot"));
+        assert!(list.contains(&"mcp__cay__type_text"));
         // The approval tool is never disallowed.
         assert!(!list.iter().any(|t| t.ends_with("approve")));
     }

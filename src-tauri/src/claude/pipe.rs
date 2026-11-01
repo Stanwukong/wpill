@@ -25,11 +25,11 @@ use crate::win32::{self, Handle, UserOnly};
 /// A connected client gets this long to deliver its message.
 const READ_TIMEOUT_MS: u32 = 500;
 
-/// `\\.\pipe\topbar-claude-<user SID>`: per user, so sessions of other users (fast user switching, RDP)
+/// `\\.\pipe\cay-claude-<user SID>`: per user, so sessions of other users (fast user switching, RDP)
 /// never see each other's pipe.
 pub fn name() -> Option<HSTRING> {
     Some(HSTRING::from(format!(
-        r"\\.\pipe\topbar-claude-{}",
+        r"\\.\pipe\cay-claude-{}",
         win32::user_sid()?
     )))
 }

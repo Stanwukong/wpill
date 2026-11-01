@@ -1,4 +1,4 @@
-# Verifies the toolchain needed to build TopBar (Tauri 2 on Windows).
+# Verifies the toolchain needed to build Cay (Tauri 2 on Windows).
 # Usage: .\scripts\check-env.ps1   (exit code 1 if anything required is missing)
 
 $ok = $true

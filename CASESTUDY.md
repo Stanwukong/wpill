@@ -1,4 +1,7 @@
-# Case Study: TopBar, a Dynamic Island for Windows 11
+# Case Study: Cay, a Dynamic Island for Windows 11
+
+> Cay was called **TopBar** until Phase 4a-3 (D32, 2026-11-01). Entries written before then use the old name, paths
+> and identifiers (`topbar.exe`, `dev.wpill.topbar`) as they were at the time.
 
 > A running record of how this project was built: the problem, the decisions, the hard
 > parts and the results. Update it after every significant change (see [CLAUDE.md](CLAUDE.md)).
@@ -495,6 +498,32 @@ fixed choice belongs in Phase 4b's settings.
 *Alternatives:* the watcher window from the proposal (a thread and a window for ~250 ms less latency); reacting only to
 Tao's `ScaleFactorChanged` (misses resolution and primary-monitor changes); following the cursor's monitor.
 
+### D32: The name is Cay, the licence MIT, and TopBar's data moves over once (Phase 4a-3)
+*Why:* "TopBar" was a working name: generic, and shared with many existing tools. The niche turned out to be crowded:
+GitHub, winget (which covers the Microsoft Store) and web trademark searches showed that Atoll, Islet and Isle (Isle
+Notch) are Dynamic Island apps, BrimDeck and a project called Skerry are Dynamic Islands for Windows, Lintel is a Windows
+"notch toolkit for AI coding agents, approvals" (nearly this app), Islo is Incredibuild's sandbox for coding agents,
+Orla is both an AI agent tool and a small Windows top bar, and Spindrift is a registered software mark. **Cay** (a small,
+low island, said "key") had no clash in the niche, keeps the island idea without copying a name, and is short; Wavepill
+and wpill were the other finalists. The bundle identifier is `io.github.stanwukong.cay`, a namespace the author owns
+(their GitHub Pages domain). The licence is MIT: the simplest permissive licence, usual for small desktop tools.
+Everything that carried the name changed together: product and window titles, crate `cay` / `cay_lib` and so `cay.exe`,
+the two pipes (`cay-claude-<SID>`, `cay-agent-<SID>`), the MCP server (`mcp__cay__approve`; the approval path is
+otherwise identical, so permissions are unchanged), the bridge's environment variables, the Run value, window classes.
+*Migration:* the new identifier is a different app to Windows, with its own `%APPDATA%` folder and single-instance key,
+so `migrate.rs` runs first in `setup`. It *copies* `%APPDATA%\dev.wpill.topbar` (settings, routines, the agent audit;
+not per-run files or WebView2's cache) into a temporary folder and renames it into place, only while Cay's folder
+doesn't exist, so a failed copy is retried and an installed TopBar keeps working until it's uninstalled. A `TopBar` Run
+value becomes `Cay` if it was on, in release builds only (a dev build would register `target\debug`, C5's rule). Claude
+Code hooks are not rewritten automatically, because `~/.claude/settings.json` is only ever written after the user clicks
+Connect: TopBar's entries count as ours to replace or remove, but not as connected, so the tray offers "Connect Claude
+Code…" again and one click swaps them. The ownership check now also needs a path separator before the exe name, so a
+`decay.exe` hook isn't mistaken for ours.
+*Alternatives:* keeping TopBar (generic, not ownable); renaming silently with no migration (settings, routines and
+startup would vanish for the one existing user); rewriting the hooks on first start (writes the user's Claude Code
+settings without asking); moving instead of copying the old folder (a failed move half-loses data, and an installed
+TopBar would start from nothing); GPL-3.0 or Apache-2.0 (the author chose MIT).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -677,6 +706,7 @@ needs the same DPI awareness as the app it measures, or it reports a consistent 
 | 2026-10-31 | Stage 2.7e signed off: all 12 manual checks pass (save as routine, run now, edit, schedule, approval, away, overlap, missed while closed, pause, stop, delete, text sizes). **Phase 2.7 complete.** Phase 4a (release readiness) starts. |
 | 2026-11-01 | Stage 4a-1: TopBar's own look (D30). The Claude Code-style spinner, `✻` and orange are replaced by an amber wave, its mark and an amber edge, chosen from two rounds of rendered candidates (motion-designer); checked live with a haiku run. |
 | 2026-11-01 | Stage 4a-2: the island follows display changes (D31): the poller re-reads the primary monitor every 250 ms and re-places the island; `monitor:changed` makes React measure again. Verified at 100/125/150 %, a temporary 1280×720 and a fullscreen window (C13); the dock check is the user's. |
+| 2026-11-01 | Stage 4a-3: renamed **Cay** (D32) after name checks; MIT licence; README with install, privacy and agent-safety sections; one-time migration of TopBar's data, startup entry and hooks. Verified with the dev build (41 files copied, a haiku run approved through `mcp__cay__approve`). |
 
 ## 7. Results & metrics
 

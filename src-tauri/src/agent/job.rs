@@ -1,4 +1,4 @@
-//! Each run's process tree lives in its own Job Object, so Stop (and TopBar exiting, even by crashing) ends
+//! Each run's process tree lives in its own Job Object, so Stop (and Cay exiting, even by crashing) ends
 //! everything Claude Code started: shells, `ping -t`, dev servers. `claude.exe` is created suspended, put in
 //! the job, then resumed, so nothing it starts can slip out before it's assigned.
 

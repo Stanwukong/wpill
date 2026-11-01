@@ -438,7 +438,7 @@
 
 /*
  * Agent acting: mark · project · step, and under it what stops it. Not clickable. The pointer at the end is muted
- * while TopBar waits for you to let go and turns amber once it acts (120 ms, in place).
+ * while Cay waits for you to let go and turns amber once it acts (120 ms, in place).
  */
 .activity--acting {
   height: auto;

@@ -29,7 +29,7 @@ use crate::error::AppResult;
 use crate::ipc::{Activity, PowerActivity, PowerEvent};
 use crate::win32;
 
-const CLASS: PCWSTR = w!("TopBarPowerWatcher");
+const CLASS: PCWSTR = w!("CayPowerWatcher");
 /// Crossing one of these (downwards, on battery) raises a low-battery notice.
 const LOW_THRESHOLDS: [u8; 2] = [20, 10];
 

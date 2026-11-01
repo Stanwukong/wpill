@@ -1,12 +1,12 @@
-//! Adds TopBar's hooks to Claude Code's user settings (`~/.claude/settings.json`) and removes them again.
+//! Adds Cay's hooks to Claude Code's user settings (`~/.claude/settings.json`) and removes them again.
 //!
 //! Merge, never replace: other hooks and every other key stay as they are (key order included, via
-//! serde_json's `preserve_order`). Ours are recognised by their command (`…topbar.exe' hook`), so installing
+//! serde_json's `preserve_order`). Ours are recognised by their command (`…cay.exe' hook`), so installing
 //! twice is a no-op and removing touches nothing else. The file is backed up before every write, and a
 //! file we can't parse is left alone.
 //!
 //! The entry is shell form with an explicit `shell`: Claude Code before 2.1.15x has no `args` exec form and
-//! would run a bare `topbar.exe`, starting a second TopBar instead of the forwarder.
+//! would run a bare `cay.exe`, starting a second Cay instead of the forwarder.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -25,7 +25,10 @@ pub const EVENTS: [(&str, bool); 7] = [
     ("SessionEnd", false),
 ];
 const TIMEOUT_SECS: u64 = 5;
-const MARKER: &str = "topbar.exe' hook";
+const MARKER: &str = "cay.exe' hook";
+/// Cay was called TopBar until Phase 4a-3 (D32). Its entries are still ours to replace and remove, but they don't
+/// count as connected: they point at the old exe and pipe, so the tray offers Connect again.
+const OLD_MARKER: &str = "topbar.exe' hook";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shell {
@@ -63,12 +66,23 @@ pub fn group(command: &str, shell: Shell, background: bool) -> Value {
     json!({ "hooks": [Value::Object(hook)] })
 }
 
-fn is_ours(hook: &Value) -> bool {
+/// The hook's command runs `…\<exe>' hook` (or `…/<exe>' hook`) for `marker`'s exe; `decay.exe` doesn't count.
+fn runs(hook: &Value, marker: &str) -> bool {
     hook.get("command")
         .and_then(Value::as_str)
-        .is_some_and(|c| c.to_ascii_lowercase().ends_with(MARKER))
+        .map(str::to_ascii_lowercase)
+        .is_some_and(|c| {
+            c.strip_suffix(marker)
+                .is_some_and(|rest| rest.ends_with(['/', '\\']))
+        })
 }
 
+/// Ours to replace or remove: Cay's entries and TopBar's from before the rename.
+fn is_ours(hook: &Value) -> bool {
+    runs(hook, MARKER) || runs(hook, OLD_MARKER)
+}
+
+/// Connected: at least one entry runs Cay (old TopBar entries alone don't count).
 pub fn installed(settings: &Value) -> bool {
     settings
         .get("hooks")
@@ -80,11 +94,11 @@ pub fn installed(settings: &Value) -> bool {
                 .flatten()
                 .filter_map(|g| g.get("hooks").and_then(Value::as_array))
                 .flatten()
-                .any(is_ours)
+                .any(|h| runs(h, MARKER))
         })
 }
 
-/// `settings` with any previous TopBar hooks replaced by fresh ones.
+/// `settings` with any previous Cay hooks replaced by fresh ones.
 pub fn with_hooks(settings: Value, command: &str, shell: Shell) -> Result<Value, String> {
     let mut settings = without_hooks(settings)?;
     let root = settings
@@ -106,7 +120,7 @@ pub fn with_hooks(settings: Value, command: &str, shell: Shell) -> Result<Value,
     Ok(settings)
 }
 
-/// `settings` without TopBar's hooks. Groups, events and `hooks` that only held ours go too.
+/// `settings` without Cay's hooks. Groups, events and `hooks` that only held ours go too.
 pub fn without_hooks(mut settings: Value) -> Result<Value, String> {
     let root = settings
         .as_object_mut()
@@ -209,7 +223,7 @@ pub fn write(path: &Path, settings: &Value) -> Result<Option<PathBuf>, String> {
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| d.as_secs());
-        let backup = path.with_extension(format!("json.topbar-{stamp}.bak"));
+        let backup = path.with_extension(format!("json.cay-{stamp}.bak"));
         std::fs::copy(path, &backup).map_err(|e| fail("back up", e))?;
         Some(backup)
     } else {
@@ -220,7 +234,7 @@ pub fn write(path: &Path, settings: &Value) -> Result<Option<PathBuf>, String> {
     };
     let mut text = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
     text.push('\n');
-    let temp = path.with_extension("json.topbar-tmp");
+    let temp = path.with_extension("json.cay-tmp");
     std::fs::write(&temp, text).map_err(|e| fail("write", e))?;
     std::fs::rename(&temp, path).map_err(|e| fail("replace", e))?;
     Ok(backup)
@@ -230,7 +244,7 @@ pub fn write(path: &Path, settings: &Value) -> Result<Option<PathBuf>, String> {
 mod tests {
     use super::*;
 
-    const EXE: &str = r"C:\Users\DELL 7300\AppData\Local\TopBar\topbar.exe";
+    const EXE: &str = r"C:\Users\DELL 7300\AppData\Local\Cay\cay.exe";
 
     fn cmd() -> String {
         command(Path::new(EXE), Shell::Bash)
@@ -248,21 +262,18 @@ mod tests {
 
     #[test]
     fn commands_quote_the_path_for_each_shell() {
-        assert_eq!(
-            cmd(),
-            "'C:/Users/DELL 7300/AppData/Local/TopBar/topbar.exe' hook"
-        );
+        assert_eq!(cmd(), "'C:/Users/DELL 7300/AppData/Local/Cay/cay.exe' hook");
         assert_eq!(
             command(Path::new(EXE), Shell::PowerShell),
-            r"& 'C:\Users\DELL 7300\AppData\Local\TopBar\topbar.exe' hook"
+            r"& 'C:\Users\DELL 7300\AppData\Local\Cay\cay.exe' hook"
         );
         assert_eq!(
-            command(Path::new(r"C:\O'Neil\topbar.exe"), Shell::Bash),
-            r"'C:/O'\''Neil/topbar.exe' hook"
+            command(Path::new(r"C:\O'Neil\cay.exe"), Shell::Bash),
+            r"'C:/O'\''Neil/cay.exe' hook"
         );
         assert_eq!(
-            command(Path::new(r"C:\O'Neil\topbar.exe"), Shell::PowerShell),
-            r"& 'C:\O''Neil\topbar.exe' hook"
+            command(Path::new(r"C:\O'Neil\cay.exe"), Shell::PowerShell),
+            r"& 'C:\O''Neil\cay.exe' hook"
         );
         assert!(is_ours(
             &json!({ "command": command(Path::new(EXE), Shell::PowerShell) })
@@ -302,7 +313,7 @@ mod tests {
     #[test]
     fn installing_twice_keeps_one_copy_and_updates_the_path() {
         let once = with_hooks(json!({}), &cmd(), Shell::Bash).unwrap();
-        let moved = command(Path::new(r"D:\Apps\topbar.exe"), Shell::Bash);
+        let moved = command(Path::new(r"D:\Apps\cay.exe"), Shell::Bash);
         let twice = with_hooks(once, &moved, Shell::Bash).unwrap();
         assert_eq!(ours_in(&twice, "Stop"), 1);
         assert_eq!(twice["hooks"]["Stop"][0]["hooks"][0]["command"], moved);
@@ -339,6 +350,35 @@ mod tests {
     }
 
     #[test]
+    fn topbar_entries_are_replaced_but_do_not_count_as_connected() {
+        let old = "'C:/Users/DELL 7300/AppData/Local/TopBar/topbar.exe' hook";
+        let old_ps = r"& 'C:\Users\DELL 7300\AppData\Local\TopBar\topbar.exe' hook";
+        let settings = json!({ "hooks": {
+            "Stop": [{ "hooks": [{ "type": "command", "command": old }] }],
+            "Notification": [{ "hooks": [{ "type": "command", "command": old_ps }] }]
+        } });
+        assert!(!installed(&settings));
+        assert_eq!(ours_in(&settings, "Stop"), 1);
+
+        let merged = with_hooks(settings.clone(), &cmd(), Shell::Bash).unwrap();
+        assert!(installed(&merged));
+        assert_eq!(ours_in(&merged, "Stop"), 1);
+        assert_eq!(merged["hooks"]["Stop"][0]["hooks"][0]["command"], cmd());
+        assert_eq!(without_hooks(settings).unwrap(), json!({}));
+    }
+
+    #[test]
+    fn other_exes_ending_in_the_name_are_not_ours() {
+        for command in [
+            "'C:/Tools/decay.exe' hook",
+            r"& 'C:\Tools\mytopbar.exe' hook",
+            "cay.exe' hook",
+        ] {
+            assert!(!is_ours(&json!({ "command": command })), "{command}");
+        }
+    }
+
+    #[test]
     fn refuses_shapes_it_does_not_understand() {
         assert!(with_hooks(json!([1, 2]), &cmd(), Shell::Bash).is_err());
         assert!(with_hooks(json!({ "hooks": "nope" }), &cmd(), Shell::Bash).is_err());
@@ -348,7 +388,7 @@ mod tests {
 
     #[test]
     fn files_are_backed_up_and_bad_json_is_left_alone() {
-        let dir = std::env::temp_dir().join(format!("topbar-hooks-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("cay-hooks-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("settings.json");
         assert_eq!(read(&path), Ok(None));

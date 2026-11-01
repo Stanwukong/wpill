@@ -1,7 +1,7 @@
-//! `topbar.exe hook`: run by Claude Code as a hook command. Reads the hook's JSON from stdin, keeps the few
-//! fields TopBar uses, adds its ancestor chain, writes one message to the pipe and exits.
+//! `cay.exe hook`: run by Claude Code as a hook command. Reads the hook's JSON from stdin, keeps the few
+//! fields Cay uses, adds its ancestor chain, writes one message to the pipe and exits.
 //!
-//! It runs before Tauri (checked in `main.rs`), never prints, and always exits 0: if TopBar isn't running
+//! It runs before Tauri (checked in `main.rs`), never prints, and always exits 0: if Cay isn't running
 //! the pipe doesn't exist and it returns at once. Every wait is bounded so a hook never hangs Claude Code.
 
 use std::io::Read;
@@ -96,7 +96,7 @@ fn send(name: &HSTRING, bytes: &[u8]) -> Result<()> {
                 // SAFETY: waits on the pipe name; returns early when an instance frees up.
                 let _ = unsafe { WaitNamedPipeW(name, BUSY_WAIT_MS) };
             }
-            // Not found: TopBar isn't running.
+            // Not found: Cay isn't running.
             Err(e) => return Err(e),
         }
     }

@@ -6,7 +6,7 @@
 //! anchor, so DST doesn't shift it.
 //!
 //! The scheduler thread asks `check` about each routine: the latest due time after the last one handled is run
-//! on time (within two minutes), or, when it was missed (TopBar closed, the PC asleep), run once after things
+//! on time (within two minutes), or, when it was missed (Cay closed, the PC asleep), run once after things
 //! settle or skipped. Only the latest missed time counts, so there's never a burst of catch-up runs.
 
 use crate::ipc::{IfMissed, Schedule, SkipReason, Weekday};
@@ -18,9 +18,9 @@ pub const DAY: i64 = 24 * HOUR;
 pub const ON_TIME: i64 = 2 * MINUTE;
 /// A missed due time older than this is skipped even with `ifMissed: once`.
 pub const CATCH_UP_WITHIN: i64 = DAY;
-/// Catch-up runs wait this long after TopBar starts or the PC wakes.
+/// Catch-up runs wait this long after Cay starts or the PC wakes.
 pub const SETTLE: i64 = 2 * MINUTE;
-/// `start` routines run this long after TopBar starts.
+/// `start` routines run this long after Cay starts.
 pub const START_DELAY: i64 = 2 * MINUTE;
 pub const MIN_HOURS: u32 = 1;
 pub const MAX_HOURS: u32 = 24;
@@ -118,7 +118,7 @@ fn at_local(zone: &dyn Zone, day: i64, minute: i64) -> i64 {
 pub struct Times {
     /// When the schedule was set or turned on: earlier due times don't count, and `every` counts from its day.
     pub since_ms: i64,
-    /// When TopBar started (for `start`).
+    /// When Cay started (for `start`).
     pub launched_ms: i64,
 }
 
@@ -175,7 +175,7 @@ pub struct Check<'a> {
     pub enabled: bool,
     pub if_missed: IfMissed,
     pub last_due_ms: i64,
-    /// Catch-up runs wait until then (TopBar's start or the PC's wake, plus `SETTLE`).
+    /// Catch-up runs wait until then (Cay's start or the PC's wake, plus `SETTLE`).
     pub settle_until_ms: i64,
     pub paused: bool,
     /// Its previous run is still going.
@@ -424,7 +424,7 @@ mod tests {
                 late: false
             }
         );
-        // TopBar was closed from 08:00 to 13:00: one catch-up once it has settled, for the latest due time only.
+        // Cay was closed from 08:00 to 13:00: one catch-up once it has settled, for the latest due time only.
         let reopened = Check {
             settle_until_ms: utc(day, 13, 2),
             last_due_ms: utc(day - 3, 9, 0),

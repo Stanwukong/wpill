@@ -260,7 +260,7 @@ fn layout_of(target: isize) -> HKL {
 /// `KEYEVENTF_UNICODE` (`VK_PACKET`) character is only read back when the app translates the message, so in an app
 /// that handles input slowly (Windows 11 Notepad) queued packets all come out as the latest one ("Hello" → "ooooo",
 /// C11). Packets are kept for what the layout can't type (emoji, other scripts), each followed by a longer pause.
-/// The target and your input are checked before every unit; `check` runs every `TYPE_BATCH` units (TopBar asks
+/// The target and your input are checked before every unit; `check` runs every `TYPE_BATCH` units (Cay asks
 /// UIA whether the focus moved into a password field). Returns how many units were typed.
 pub fn type_units(
     guard: &Guard,

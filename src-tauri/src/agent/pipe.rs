@@ -1,4 +1,4 @@
-//! The agent pipe, `\\.\pipe\topbar-agent-<user SID>`: duplex, message mode, one instance per bridge, locked to
+//! The agent pipe, `\\.\pipe\cay-agent-<user SID>`: duplex, message mode, one instance per bridge, locked to
 //! the current user like 2.6's (D17/D20). Both ends use overlapped handles so a blocked read never holds up a
 //! write (an `approve` answer goes out from a command while the connection thread waits for the next message).
 
@@ -32,7 +32,7 @@ const CONNECT_BUDGET_MS: u32 = 2000;
 
 pub fn name() -> Option<HSTRING> {
     Some(HSTRING::from(format!(
-        r"\\.\pipe\topbar-agent-{}",
+        r"\\.\pipe\cay-agent-{}",
         win32::user_sid()?
     )))
 }

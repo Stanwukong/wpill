@@ -1,4 +1,4 @@
-//! The `agent` block in `%APPDATA%\dev.wpill.topbar\settings.json`, next to the activity switches. Edited by
+//! The `agent` block in `%APPDATA%\io.github.stanwukong.cay\settings.json`, next to the activity switches. Edited by
 //! hand until Phase 4b; read at launch, and missing keys are written back with their defaults.
 
 use std::path::{Path, PathBuf};
@@ -23,7 +23,7 @@ pub struct AgentSettings {
     pub max_turns: u32,
     /// `null` for no budget cap.
     pub max_budget_usd: Option<f64>,
-    /// Only TopBar's MCP server in agent runs (`--strict-mcp-config`); off loads your own servers too.
+    /// Only Cay's MCP server in agent runs (`--strict-mcp-config`); off loads your own servers too.
     pub strict_mcp_config: bool,
     /// Load your user settings (allow rules, hooks, plugins). Off passes `--setting-sources project,local`.
     pub user_settings: bool,

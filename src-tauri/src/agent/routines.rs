@@ -1,4 +1,4 @@
-//! Saved routines (2.7e): `%APPDATA%\dev.wpill.topbar\routines.json`, written by TopBar (not by hand, unlike
+//! Saved routines (2.7e): `%APPDATA%\io.github.stanwukong.cay\routines.json`, written by Cay (not by hand, unlike
 //! `settings.json`), replaced atomically. Validation is pure and unit-tested; the folder check is passed in.
 //!
 //! A routine run is an ordinary agent run. Nothing here changes what's approved: no allow list, no permission
@@ -354,7 +354,7 @@ mod tests {
 
     #[test]
     fn the_file_round_trips_and_is_replaced() {
-        let dir = std::env::temp_dir().join(format!("topbar-routines-{}", random_hex(4)));
+        let dir = std::env::temp_dir().join(format!("cay-routines-{}", random_hex(4)));
         let path = dir.join("routines.json");
         let mut store = Store::load(path.clone());
         assert!(store.file.routines.is_empty());

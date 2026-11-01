@@ -85,7 +85,7 @@ pub fn created(pid: u32) -> Option<u64> {
     }
 }
 
-/// Whether `p` is this TopBar process: a hook from a Claude Code session TopBar started itself (an agent run,
+/// Whether `p` is this Cay process: a hook from a Claude Code session Cay started itself (an agent run,
 /// which `agent/` reports on its own).
 pub fn is_self(p: &Proc) -> bool {
     static SELF: std::sync::OnceLock<Option<(u32, u64)>> = std::sync::OnceLock::new();
