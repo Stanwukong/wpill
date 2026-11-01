@@ -6,6 +6,8 @@ pub mod events {
     pub const HOVER_ENTER: &str = "island:hover-enter";
     pub const HOVER_LEAVE: &str = "island:hover-leave";
     pub const VISIBILITY: &str = "island:visibility";
+    /// The island's monitor, resolution or DPI scale changed; React measures again (Phase 4a-2).
+    pub const MONITOR_CHANGED: &str = "monitor:changed";
     pub const MEDIA_STATE: &str = "media:state";
     pub const ACTIVITY_SHOW: &str = "activity:show";
     pub const ACTIVITY_HIDE: &str = "activity:hide";
@@ -23,6 +25,13 @@ pub mod events {
 pub struct VisibilityPayload {
     pub hidden: bool,
     pub reason: Option<&'static str>,
+}
+
+/// `monitor:changed`: the island's new DPI scale (1.0 at 96 DPI, without Text size).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MonitorChangedPayload {
+    pub scale: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]

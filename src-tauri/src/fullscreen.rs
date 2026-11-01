@@ -1,14 +1,15 @@
-//! Detects a fullscreen app in the foreground on the primary monitor (where the island lives).
+//! Detects a fullscreen app in the foreground on the island's monitor (the primary one).
 
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONULL,
+    MONITOR_DEFAULTTOPRIMARY,
 };
 use windows::Win32::UI::Shell::{
     SHQueryUserNotificationState, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetShellWindow, GetWindowRect, IsZoomed, MONITORINFOF_PRIMARY,
+    GetForegroundWindow, GetShellWindow, GetWindowRect, IsZoomed,
 };
 
 use crate::win32;
@@ -39,17 +40,16 @@ pub fn foreground_is_fullscreen(own: HWND) -> bool {
         if GetWindowRect(fg, &mut rect).is_err() {
             return false;
         }
+        // Only a fullscreen app on the island's own monitor hides it.
         let monitor = MonitorFromWindow(fg, MONITOR_DEFAULTTONULL);
-        if monitor.is_invalid() {
+        if monitor.is_invalid() || monitor != MonitorFromWindow(own, MONITOR_DEFAULTTOPRIMARY) {
             return false;
         }
         let mut info = MONITORINFO {
             cbSize: size_of::<MONITORINFO>() as u32,
             ..Default::default()
         };
-        if !GetMonitorInfoW(monitor, &mut info).as_bool()
-            || info.dwFlags & MONITORINFOF_PRIMARY == 0
-        {
+        if !GetMonitorInfoW(monitor, &mut info).as_bool() {
             return false;
         }
 

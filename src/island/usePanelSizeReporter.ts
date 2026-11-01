@@ -1,5 +1,5 @@
 import { useEffect, type RefObject } from "react";
-import { commands, type RectMode } from "../lib/ipc";
+import { commands, on, unlistenAll, type RectMode } from "../lib/ipc";
 
 /**
  * While expanded or showing an activity, tells Rust where the island is, so its hit tests (leaving the
@@ -8,6 +8,8 @@ import { commands, type RectMode } from "../lib/ipc";
  * Reports physical px: CSS px × devicePixelRatio, which folds in Windows' text-size zoom
  * (WebView2 applies it; Rust's monitor scale factor doesn't include it).
  * Uses offset* (layout box), which ignores Framer Motion's in-flight transforms.
+ * Reports again when the pixel ratio changes (a new display scale or Text size) and on `monitor:changed`, since
+ * the CSS size, and so the ResizeObserver, can stay the same while the physical size doesn't.
  */
 export function usePanelSizeReporter(ref: RefObject<HTMLElement | null>, mode: RectMode | null) {
   useEffect(() => {
@@ -24,9 +26,33 @@ export function usePanelSizeReporter(ref: RefObject<HTMLElement | null>, mode: R
       last = rect;
       void commands.setPanelRect(rect.width, rect.bottom, mode);
     };
+    // Rust forgot the old rect, so send it even if this side thinks nothing changed.
+    const reportAgain = () => {
+      last = { width: 0, bottom: 0 };
+      report();
+    };
 
     const observer = new ResizeObserver(report);
     observer.observe(el);
-    return () => observer.disconnect();
+
+    // A media query on the current ratio fires once when it stops matching; watch the new ratio after that.
+    let ratio: MediaQueryList | null = null;
+    const watchRatio = () => {
+      ratio?.removeEventListener("change", onRatio);
+      ratio = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+      ratio.addEventListener("change", onRatio);
+    };
+    const onRatio = () => {
+      watchRatio();
+      reportAgain();
+    };
+    watchRatio();
+
+    const pending = [on.monitorChanged(reportAgain)];
+    return () => {
+      observer.disconnect();
+      ratio?.removeEventListener("change", onRatio);
+      unlistenAll(pending);
+    };
   }, [ref, mode]);
 }

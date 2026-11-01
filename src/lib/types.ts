@@ -136,6 +136,11 @@ export interface VisibilityPayload {
   reason: "fullscreen" | null;
 }
 
+/** `monitor:changed`: the island's monitor, resolution or DPI scale changed (scale without Text size). */
+export interface MonitorChangedPayload {
+  scale: number;
+}
+
 export interface WindowInfo {
   hwnd: number;
   title: string;

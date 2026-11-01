@@ -52,7 +52,7 @@ the drive once); `cargo clean --profile dev` when space runs low.
 ## Layout
 
 - `src-tauri/src/`: `lib.rs` (setup and command registration), `ipc.rs` (event names and DTOs), `error.rs`,
-  `win32.rs` (shared HWND/class/pid helpers), `window/` (create, styles, show/hide),
+  `win32.rs` (shared HWND/class/pid helpers), `window/` (create, styles, show/hide, placement: pure `place`, `current`, `keep_at`),
   `hover/` (`mod.rs` = poller thread + commands, `logic.rs` = pure state machine + hit tests, unit-tested),
   `fullscreen.rs`, `apps/` (`enumerate.rs`, `icon.rs`, `activate.rs`), `tray.rs` (tray menu),
   `autostart.rs` (Run-key entry, quoted path, respects Task Manager's enable flag),
@@ -149,6 +149,14 @@ the drive once); `cargo clean --profile dev` when space runs low.
 - **Startup visibility race.** On a cold start Tauri can apply the builder's `visible(false)`
   *after* our show in `setup()`. The poller therefore re-shows the window every 250 ms
   whenever it should be visible and isn't.
+- **Display changes are polled, not cached (D31).** The poller re-reads the primary monitor every 250 ms
+  (`window::current`) and re-places the island with `window::keep_at` (async, never activating); it also undoes Tao's
+  own `WM_DPICHANGED` resize. Don't keep a copy of `Geometry` anywhere else. A changed geometry clears React's rect and
+  emits `monitor:changed`. Test scale changes with `SystemParametersInfo(SPI_SETLOGICALDPIOVERRIDE = 0x9F, step,
+  …, SPIF_UPDATEINIFILE)` (relative to the recommended scale; read and restore the step with `0x9E`), resolution with
+  `ChangeDisplaySettings` without `CDS_UPDATEREGISTRY` (temporary; reset with `ChangeDisplaySettings(NULL, 0)`): ask
+  first. Measuring helpers must call `SetProcessDpiAwarenessContext(-4)` first, or other windows' rects come back scaled
+  to 96 DPI (C13).
 - **Never call Tauri's `set_ignore_cursor_events` on the island.** It toggles `WS_EX_LAYERED` along
   with `WS_EX_TRANSPARENT`, and DWM drops the surface of a WebView2 window for ~150 ms whenever
   `WS_EX_LAYERED` changes, so the island visibly blinks out. Use `window::set_click_through(hwnd, bool)`.

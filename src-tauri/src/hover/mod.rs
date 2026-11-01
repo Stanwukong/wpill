@@ -15,7 +15,8 @@ use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 use crate::activity::{self, Activities, Signal};
 use crate::error::AppResult;
 use crate::ipc::{
-    events, Activity, ActivityHidePayload, CapsLockActivity, IslandStatePayload, VisibilityPayload,
+    events, Activity, ActivityHidePayload, CapsLockActivity, IslandStatePayload,
+    MonitorChangedPayload, VisibilityPayload,
 };
 use crate::window::{self, Geometry};
 use crate::{fullscreen, win32};
@@ -81,7 +82,7 @@ pub fn spawn(app: AppHandle, window: &WebviewWindow, geo: Geometry) -> AppResult
     Ok(())
 }
 
-fn run(app: AppHandle, geo: Geometry, own: isize) {
+fn run(app: AppHandle, mut geo: Geometry, own: isize) {
     let island = app.state::<Island>();
     let activities = app.state::<Activities>();
     let incoming = activities.take_receiver();
@@ -105,6 +106,29 @@ fn run(app: AppHandle, geo: Geometry, own: isize) {
             }
             // Also self-heal the extended style in case anything (e.g. Tao) rewrote it.
             window::set_click_through(win32::from_raw(own), ignoring);
+            // Displays change under us (docking, resolution, scale). Re-read the monitor and keep the window where
+            // it belongs: Tao also resizes it on `WM_DPICHANGED`, possibly after we placed it.
+            if let Some((next, at)) = window::current() {
+                window::keep_at(win32::from_raw(own), at);
+                if next != geo {
+                    log::info!(
+                        "monitor changed: {}x{} at x={} (scale {} -> {})",
+                        at.width,
+                        at.height,
+                        at.x,
+                        geo.scale,
+                        next.scale
+                    );
+                    geo = next;
+                    // The last reported rect was measured at the old scale; use the defaults until React re-reports.
+                    island.lock().rect = None;
+                    emit(
+                        &app,
+                        events::MONITOR_CHANGED,
+                        MonitorChangedPayload { scale: geo.scale },
+                    );
+                }
+            }
             let changed = {
                 let mut s = island.lock();
                 let changed = s.hidden != fullscreen;

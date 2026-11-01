@@ -24,7 +24,8 @@ and never for the run, stopped by any input of yours, with all 12 manual checks 
 TopBar runs), with all 12 manual checks passed. Phase 2.7 is complete.**
 **Now: [Phase 4a](#phase-4a-release-readiness) (release readiness)**, kick-off prompt
 [prompts/phase-4a-release-readiness.md](prompts/phase-4a-release-readiness.md). 4a-1 (own visual identity: the amber
-wave, D30) is done (2026-11-01); **next: 4a-2 (multi-monitor and per-monitor DPI)**, proposal pending approval.
+wave, D30) and 4a-2 (display changes followed live, D31; dock check pending) are done (2026-11-01); **next: 4a-3
+(final name, README, LICENSE)**: propose names and wait for a choice.
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -313,7 +314,7 @@ startFailed`.
 |---|---|---|
 | 3 | command | `list_heavy_processes(limit) → ProcessGroup[]` (`{ name, pids, memoryBytes, icon, protected }`) |
 | 3 | command | `end_process_group(name, pids) → EndResult` (per pid: `ok \| accessDenied \| protected \| notFound`) |
-| 4a | event | `monitor:changed` |
+| 4a | event | `monitor:changed` `{ scale }`: **in use since 4a-2**. The poller sends it when the island's monitor rect or DPI scale changes; `usePanelSizeReporter` measures again (it also does on a `devicePixelRatio` change, e.g. Text size) |
 | 4b | event | `settings:changed` |
 | 4b | command | `get_settings`, `set_settings` |
 | 5 | command | timer: `timer_start(ms)`, `timer_cancel`; event `timer:tick` |
@@ -899,11 +900,34 @@ Kick-off prompt: [prompts/phase-4a-release-readiness.md](prompts/phase-4a-releas
       from two rounds of headless-Edge candidates (motion-designer). Prompt: [prompts/spinner-redesign.md](prompts/spinner-redesign.md).
       Checked live (`pnpm tauri dev`, haiku via `agent-test`): the wave beside the clock while working, the approval
       card, "Done" with the amber edge, the command window. Typecheck, fmt, clippy and 145 Rust tests clean
-- [ ] Multi-monitor + per-monitor DPI: re-read geometry on `WM_DISPLAYCHANGE` / `WM_DPICHANGED` and
-      reposition. Choose the island's monitor (primary by default)
+- [x] **4a-2 Multi-monitor + per-monitor DPI** (2026-11-01, D31): the poller's 250 ms tick re-reads the primary
+      monitor's rect and DPI (`window::current`, pure `window::place`, 3 tests) and keeps the island at top centre,
+      sized to D2's largest panel (`window::keep_at`: `SWP_NOACTIVATE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS`, also
+      undoing Tao's own `WM_DPICHANGED` resize); on a change it drops the reported rect and emits `monitor:changed`.
+      Fullscreen hiding compares with the island's monitor. The island stays on the primary monitor; a choice is
+      Phase 4b. The glow, screen capture and command window already read their monitor per use.
+      Verified on this machine (`pnpm tauri dev`): scale 100 → 125 → 150 → 100 % (850×550 at x=535, 1020×660 at
+      x=450, back to 680×440 at x=620, each within a tick, foreground unchanged, still click-through), a temporary
+      1280×720 (x=300) and back, and a borderless fullscreen window still hiding the island. 148 Rust tests
+- [ ] Manual check (Phase 4a-2, below): needs a dock or second monitor
 - [ ] Final name (bundle identifier, `%APPDATA%` migration), README, LICENSE, privacy note
 - [ ] Code signing (certificate or Azure Trusted Signing) wired into `tauri build`
 - [ ] Rerun the manual checklist; publish v0.2 installer
+
+**Manual check (Phase 4a-2)** (`pnpm tauri dev` with `$env:RUST_LOG='info,topbar_lib=debug'`; each step logs
+`monitor changed: …`)
+1. **Dock:** with TopBar running on the laptop alone, connect the dock / external monitor. The island stays at the top
+   centre of the primary monitor; hover opens it and the panel's click area matches what you see.
+2. **Change the main display:** Settings → Display → "Make this my main display" on the external monitor. Within a
+   moment the island moves to its top centre; hover and click work there.
+3. **Mixed scale:** laptop at 150 %, external at 100 % (or the reverse). Switch the main display between them: the island
+   is the right size on each, and its text is sharp.
+4. **Undock:** unplug the monitor the island is on. It comes back on the laptop's screen at the right size.
+5. **Sleep while docked:** sleep, undock, wake (and the reverse). The island is in place without a restart.
+6. **Fullscreen on the other monitor:** a fullscreen video on the monitor *without* the island doesn't hide it; on the
+   island's monitor it does.
+7. **Text size:** change Settings → Accessibility → Text size while the panel is open: after a moment, leaving and
+   re-entering the panel still matches its edges.
 
 ### Phase 3: memory-heavy apps (behind a settings toggle)
 `sysinfo` refresh every ~2 s while expanded only. Group by process name, sum memory, sort.
@@ -930,7 +954,8 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
   (the original Phase 4 item).
 
 ## Known limitations
-- Geometry (monitor, scale) is read once at startup. Display changes need a restart until Phase 4a.
+- The island lives on the primary monitor only (it follows the primary monitor when that changes); choosing another
+  monitor is Phase 4b. Display changes apply within 250 ms.
 - Single instance is keyed on the bundle identifier, so a dev build and the installed release build
   can't run at the same time. Quit one from the tray first.
 - Icons are cached per HICON/exe path. An app that changes its window icon at runtime may show a stale icon.

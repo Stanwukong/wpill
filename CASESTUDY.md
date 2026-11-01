@@ -475,6 +475,26 @@ A breathing pill was deliberately not used: breathing already means "waiting on 
 *Alternatives:* keeping Claude Code's look (not allowed for a public product); the orbit (strong, but the author
 preferred a wave); a breathing indicator (confuses working with waiting).
 
+### D31: Display changes are followed by polling, not by listening for messages (Phase 4a-2)
+*Why:* only the island's geometry was fixed at startup; the glow, screen capture and command window already looked up
+their monitor on each use. The proposal was a `display-watcher` thread with a hidden top-level window (a message-only
+window never gets the `WM_DISPLAYCHANGE` / `WM_SETTINGCHANGE` broadcasts) plus a polling backstop. Writing it showed the
+backstop alone does the whole job: the poller already wakes every 250 ms for the fullscreen check, and reading the
+primary monitor's rect (`GetMonitorInfoW`) and DPI (`GetDpiForMonitor`) costs microseconds. Polling can't miss a change,
+whatever Windows does or doesn't tell a hidden window, and it fixes an ordering problem messages would have: Tao handles
+`WM_DPICHANGED` on the island itself and resizes it to Windows' suggested rect, possibly *after* TopBar placed it.
+So each tick compares the window's actual rect with where it belongs (`window::place`, pure and tested) and puts it
+back (`SWP_NOACTIVATE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS`, so the poller never waits on the main thread), the same
+self-healing as D8. When the geometry itself changes, the poller drops React's last rect (measured at the old scale),
+falls back to the defaults and emits `monitor:changed`; `usePanelSizeReporter` then measures again. The hook also
+re-reports when `devicePixelRatio` changes (a `matchMedia` on the current resolution), which covers Text size changes,
+a case that was already stale before: the CSS size, and so the `ResizeObserver`, can stay the same while the physical
+size changes. Fullscreen hiding now compares with the island's monitor rather than the primary flag. The island stays
+on the primary monitor: "the monitor with the cursor" would make it jump between screens as the mouse moves, and a
+fixed choice belongs in Phase 4b's settings.
+*Alternatives:* the watcher window from the proposal (a thread and a window for ~250 ms less latency); reacting only to
+Tao's `ScaleFactorChanged` (misses resolution and primary-monitor changes); following the cursor's monitor.
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -604,6 +624,14 @@ going. *Fix:* the tests drive `agent-test` from Git Bash; the skip is correct (t
 Object, and Stop is what ends it) and is listed as a known limitation. *Lesson:* "done" in the transcript and "no
 process" are different facts; scheduling decisions use the process.
 
+### C13: The island "didn't resize" at 150 %
+*Symptom:* while testing 4a-2, TopBar's log said it had moved the island to 1020×660 at x=450 after the scale went to
+150 %, but a PowerShell check of its window rect still read 680×440 at x=300. *Diagnosis:* PowerShell isn't DPI-aware,
+so Windows reports other windows' rects to it scaled down to 96 DPI: 1020 / 1.5 = 680 and 450 / 1.5 = 300, an exact
+match. *Fix:* the test helpers call `SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2)` first; the same check then read
+1020×660 at x=450, and screen captures at 150 % show the pill centred. *Lesson:* at anything but 100 %, a measuring tool
+needs the same DPI awareness as the app it measures, or it reports a consistent but scaled answer that looks like a bug.
+
 ### Still open
 - **Foreground-lock rules** in practice: the fallback chain is implemented but not yet exercised
   against elevated or minimized targets (manual test 7).
@@ -648,6 +676,7 @@ process" are different facts; scheduling decisions use the process.
 | 2026-10-31 | Stage 2.7e built: routines saved in `routines.json`, run now or on a schedule by one Rust thread (D28), patient approvals and desktop tools off by default for unattended runs (D29), the routines list and editor in the command window (motion-designer). Verified from outside with haiku runs (run now, a schedule firing once, approval and deny, overlap, Stop and stop-all, pause, a missed time caught up once and one skipped, delete); manual checklist pending. |
 | 2026-10-31 | Stage 2.7e signed off: all 12 manual checks pass (save as routine, run now, edit, schedule, approval, away, overlap, missed while closed, pause, stop, delete, text sizes). **Phase 2.7 complete.** Phase 4a (release readiness) starts. |
 | 2026-11-01 | Stage 4a-1: TopBar's own look (D30). The Claude Code-style spinner, `✻` and orange are replaced by an amber wave, its mark and an amber edge, chosen from two rounds of rendered candidates (motion-designer); checked live with a haiku run. |
+| 2026-11-01 | Stage 4a-2: the island follows display changes (D31): the poller re-reads the primary monitor every 250 ms and re-places the island; `monitor:changed` makes React measure again. Verified at 100/125/150 %, a temporary 1280×720 and a fullscreen window (C13); the dock check is the user's. |
 
 ## 7. Results & metrics
 

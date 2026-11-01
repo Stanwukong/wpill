@@ -18,6 +18,7 @@ import type {
   ClaudeSessions,
   IslandState,
   MediaState,
+  MonitorChangedPayload,
   VisibilityPayload,
   WindowInfo,
 } from "./types";
@@ -26,6 +27,7 @@ const EVENTS = {
   hoverEnter: "island:hover-enter",
   hoverLeave: "island:hover-leave",
   visibility: "island:visibility",
+  monitorChanged: "monitor:changed",
   mediaState: "media:state",
   activityShow: "activity:show",
   activityHide: "activity:hide",
@@ -90,6 +92,8 @@ export const on = {
   hoverLeave: (cb: () => void): Promise<UnlistenFn> => listen(EVENTS.hoverLeave, () => cb()),
   visibility: (cb: (payload: VisibilityPayload) => void): Promise<UnlistenFn> =>
     listen<VisibilityPayload>(EVENTS.visibility, (e) => cb(e.payload)),
+  monitorChanged: (cb: (payload: MonitorChangedPayload) => void): Promise<UnlistenFn> =>
+    listen<MonitorChangedPayload>(EVENTS.monitorChanged, (e) => cb(e.payload)),
   mediaState: (cb: (payload: MediaState) => void): Promise<UnlistenFn> =>
     listen<MediaState>(EVENTS.mediaState, (e) => cb(e.payload)),
   activityShow: (cb: (payload: ActivityPayload) => void): Promise<UnlistenFn> =>
