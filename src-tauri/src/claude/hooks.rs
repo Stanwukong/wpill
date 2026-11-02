@@ -36,9 +36,11 @@ impl Run {
 }
 
 /// The hooks we register, and how each runs.
-pub const EVENTS: [(&str, Run); 8] = [
+pub const EVENTS: [(&str, Run); 9] = [
     ("SessionStart", Run::Background),
     ("UserPromptSubmit", Run::Background),
+    // The live step line (2.8d): in the background, so it never slows a tool or decides anything.
+    ("PreToolUse", Run::Background),
     ("PostToolUse", Run::Background),
     ("Notification", Run::Background),
     ("Stop", Run::Background),

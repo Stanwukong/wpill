@@ -97,3 +97,13 @@
   font-size: 13px;
   color: var(--island-muted);
 }
+
+/* The live step beside the wave (2.8d). A fixed width, so the pill grows once when work starts and shrinks when it
+   ends (the layout spring) rather than with every step; long steps ellipsize. Closer to its wave, a little further
+   from the clock so the count doesn't read as part of the time. */
+.pill-step {
+  flex: none;
+  width: 180px;
+  margin: 0 6px 0 -4px;
+  color: var(--island-muted);
+}

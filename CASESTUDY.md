@@ -623,6 +623,18 @@ The entry's timeout went to 660 s, and `installed` now compares timeouts, so Con
 matcher), answering from the island only (no room for free text or a plan), a Markdown dependency (an in-house renderer
 of React elements is enough and can't inject HTML).
 
+### D39: The live step line comes from a background `PreToolUse` hook, summarized by the forwarder (Phase 2.8d)
+*What:* the pill shows the current tool and its target beside the wave ("Edit · src/hover/logic.rs") and `n/m` from the
+latest `TodoWrite`; panel rows and the run header show the same. Sessions get it from a new `PreToolUse` hook entry
+(async, no output), runs from stream-json; both use `describe::step_line` and `todo_count`. *Why the forwarder
+summarizes:* the pipe only ever carries a ≤64-character line and two counts, never the tool's input (file contents,
+commands' full text), keeping 2.6's rule that the hook pipe holds no content. *Why async:* the hook fires before every
+tool; a blocking hook would slow every call and could be mistaken for a decision. It never prints. *Width:* the step
+sits in a fixed 180 px box so the island grows once when work starts, not on every tool. *Costs:* one short-lived
+`cay.exe hook` per tool call in connected sessions; Connect must be run again (new entry). *Alternatives:* reading the
+session transcript (`transcript_path`) for the latest tool (file I/O and parsing a format that isn't public), showing
+only `PostToolUse` (the step would always lag one tool behind).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -810,6 +822,7 @@ needs the same DPI awareness as the app it measures, or it reports a consistent 
 | 2026-11-01 | 4a-5 (v0.2) set aside at the author's call to start Phase 2.8 (D34). Stage 2.8a: terminal sessions' permission requests answered from the island (D36), checked with a real `claude -p` run, then signed off by hand. Kick-off prompt for 2.8b–f written. |
 | 2026-11-01 | Stage 2.8b built: diffs and whole commands on approval cards, built in Rust (D37); the whole preview and session requests in the command window (motion-designer). Manual checklist pending. |
 | 2026-11-01 | Stage 2.8c built: questions and plans from sessions and agent runs, answered in the island and the command window, never with a bare allow (D38); spiked first with Claude Code 2.1.314. Manual checklist pending. |
+| 2026-11-02 | Stage 2.8d built: the live step line and to-do progress in the pill and panel, from a background `PreToolUse` hook and stream-json (D39). Stage 2.8e spiked: a running stream-json run accepts `set_permission_mode`, and per-run ask rules keep filesystem shell commands asking under Accept edits. Manual checklist pending. |
 
 ## 7. Results & metrics
 

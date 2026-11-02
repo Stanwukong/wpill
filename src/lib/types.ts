@@ -281,6 +281,16 @@ export interface ClaudeSession {
   status: ClaudeStatus;
   /** Unix epoch ms of the last status change. */
   updatedAtMs: number;
+  /** The tool it's using and on what ("Edit · hover/logic.rs"), from Rust (2.8d); `null` between tasks. */
+  step: string | null;
+  /** Its to-do list's progress, from the latest `TodoWrite` (2.8d). */
+  todos: TodoCount | null;
+}
+
+/** `TodoWrite`'s progress (2.8d): items completed and in all. */
+export interface TodoCount {
+  done: number;
+  total: number;
 }
 
 export interface ClaudeSessions {
@@ -302,8 +312,10 @@ export interface AgentRun {
   status: AgentStatus;
   /** Set once the run has ended. */
   reason: AgentEndReason | null;
-  /** What it's doing now ("Running git status"), while working. */
+  /** What it's doing now ("Bash · git status", 2.8d), while working. */
   step: string | null;
+  /** The latest `TodoWrite`'s progress (2.8d), while working. */
+  todos: TodoCount | null;
   turns: number;
   /** Claude Code's own estimate for the session. */
   costUsd: number | null;

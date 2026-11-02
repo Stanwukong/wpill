@@ -148,3 +148,51 @@
   font-variant-numeric: tabular-nums;
   color: var(--island-muted);
 }
+
+/*
+ * The live step (2.8d): "Tool · target", ellipsized, then the to-do count. Each new step fades in from 0.25 over
+ * 180 ms ease-out (keyed in StepLabel.tsx), so a few updates a second read as calm changes, not flicker. The count
+ * swaps without motion. Reduced motion: the text just swaps.
+ */
+.step {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+  font-family: var(--font-claude);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.step__text {
+  min-width: 0;
+  /* Cascadia touches its cell edge: a little slack so the clip doesn't shave the last glyph. */
+  padding-right: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: step-in 180ms ease-out;
+}
+
+.step__todos {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes step-in {
+  from {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step__text {
+    animation: none;
+  }
+}
+
+/* Session rows: the step replaces "Working", right-aligned beside the time; the project gives way first. */
+.claude-row__step {
+  flex: 0 1 auto;
+  max-width: 55%;
+}

@@ -2,7 +2,7 @@
 //! Pure; unit-tested. The listener thread owns the only instance.
 
 use crate::ipc::{
-    Activity, ClaudeDoneActivity, ClaudeNeedsInputActivity, ClaudeSession, ClaudeStatus,
+    Activity, ClaudeDoneActivity, ClaudeNeedsInputActivity, ClaudeSession, ClaudeStatus, TodoCount,
 };
 
 use super::protocol::{Event, Message, Proc};
@@ -26,6 +26,9 @@ pub struct Session {
     last_event_ms: i64,
     /// The forwarder's ancestors, nearest first: used to find the window and check the session is alive.
     pub chain: Vec<Proc>,
+    /// The tool it's using now (2.8d), cleared when the task ends.
+    step: Option<String>,
+    todos: Option<TodoCount>,
 }
 
 impl Session {
@@ -40,6 +43,8 @@ impl Session {
             project: self.project.clone(),
             status: self.status,
             updated_at_ms: self.updated_at_ms,
+            step: self.step.clone(),
+            todos: self.todos,
         }
     }
 
@@ -95,6 +100,18 @@ impl Sessions {
         if !msg.chain.is_empty() {
             s.chain = msg.chain;
         }
+        // The step line (2.8d): set by each tool start, kept through the task, cleared when it ends or a new one
+        // begins. To-dos are kept until a later `TodoWrite` or the end of the task.
+        let (step, todos) = match msg.event {
+            Event::ToolStart => (msg.step.clone(), msg.todos.or(s.todos)),
+            Event::ToolDone | Event::NeedsInput | Event::SessionStart { compact: true } => {
+                (s.step.clone(), s.todos)
+            }
+            _ => (None, None),
+        };
+        let step_changed = step != s.step || todos != s.todos;
+        s.step = step;
+        s.todos = todos;
 
         let before = s.status;
         let needs_input = || {
@@ -117,6 +134,9 @@ impl Sessions {
             }
             // A new task makes a "done" from the last one old news.
             Event::Prompt => (ClaudeStatus::Working, Some(Effect::Retract(s.id))),
+            // Before a tool runs (it may still ask): working, unless a prompt is already waiting on you.
+            Event::ToolStart if before == ClaudeStatus::NeedsInput => (before, None),
+            Event::ToolStart => (ClaudeStatus::Working, None),
             Event::ToolDone => {
                 let answered = before == ClaudeStatus::NeedsInput;
                 (
@@ -131,7 +151,7 @@ impl Sessions {
             Event::StopFailure => (ClaudeStatus::Done, Some(done(true))),
             Event::SessionEnd => unreachable!("handled above"),
         };
-        let changed = created || status != before;
+        let changed = created || status != before || step_changed;
         if status != before {
             s.status = status;
             s.updated_at_ms = msg.at_ms;
@@ -168,6 +188,8 @@ impl Sessions {
             updated_at_ms: msg.at_ms,
             last_event_ms: i64::MIN,
             chain: Vec::new(),
+            step: None,
+            todos: None,
         });
         self.list.len() - 1
     }
@@ -208,7 +230,43 @@ mod tests {
                 exe: "claude.exe".into(),
                 created: 1,
             }],
+            step: None,
+            todos: None,
         }
+    }
+
+    #[test]
+    fn tool_starts_set_the_step_until_the_task_ends() {
+        let mut s = Sessions::default();
+        s.apply(msg("a", 1, Event::Prompt));
+        let tool = |at, step: &str, todos| Message {
+            step: Some(step.into()),
+            todos,
+            ..msg("a", at, Event::ToolStart)
+        };
+        let (changed, effects) = s.apply(tool(2, "Edit · src/main.rs", None));
+        assert!(changed && effects.is_empty());
+        assert_eq!(
+            s.list()[0].ipc().step.as_deref(),
+            Some("Edit · src/main.rs")
+        );
+        let two = Some(TodoCount { done: 1, total: 2 });
+        s.apply(tool(3, "TodoWrite", two));
+        s.apply(tool(4, "Bash · cargo test", None));
+        let ipc = s.list()[0].ipc();
+        assert_eq!(ipc.step.as_deref(), Some("Bash · cargo test"));
+        assert_eq!(ipc.todos, two, "kept until the next TodoWrite");
+        assert_eq!(ipc.status, ClaudeStatus::Working);
+        s.apply(msg("a", 5, Event::NeedsInput));
+        s.apply(tool(6, "Read · x", None));
+        assert_eq!(
+            status(&s, 0),
+            ClaudeStatus::NeedsInput,
+            "a prompt still waits"
+        );
+        s.apply(msg("a", 7, Event::Stop));
+        let ipc = s.list()[0].ipc();
+        assert_eq!((ipc.step, ipc.todos), (None, None));
     }
 
     fn status(s: &Sessions, i: usize) -> ClaudeStatus {

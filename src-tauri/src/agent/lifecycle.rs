@@ -25,6 +25,8 @@ pub struct Run {
     pub status: AgentStatus,
     pub reason: Option<AgentEndReason>,
     step: Option<String>,
+    /// The latest `TodoWrite`'s progress (2.8d).
+    todos: Option<crate::ipc::TodoCount>,
     turns: u32,
     cost_usd: Option<f64>,
     /// Claude Code's session id, from `system/init`; needed to resume.
@@ -62,6 +64,7 @@ impl Run {
             status: AgentStatus::Starting,
             reason: None,
             step: None,
+            todos: None,
             turns: 0,
             cost_usd: None,
             session: None,
@@ -127,7 +130,10 @@ impl Run {
             }
             StreamEvent::Tool { id, name, input } => {
                 let label = describe::step_label(&name, &input, &self.cwd);
-                self.step = Some(label.clone());
+                self.step = Some(describe::step_line(&name, &input, &self.cwd));
+                if let Some(todos) = describe::todo_count(&name, &input) {
+                    self.todos = Some(todos);
+                }
                 let name = describe::display_tool(&name);
                 applied
                     .entries
@@ -143,6 +149,7 @@ impl Run {
                 self.cost_usd = result.total_cost_usd.or(self.cost_usd);
                 self.queued = self.queued.saturating_sub(1);
                 self.step = None;
+                self.todos = None;
                 let (status, reason, error) = outcome(&result);
                 if let Some(error) = error {
                     applied.entries.push(self.push(
@@ -201,6 +208,7 @@ impl Run {
         }
         self.updated_at_ms = at_ms;
         self.step = None;
+        self.todos = None;
         self.queued = 0;
         let (status, reason) = if self.stopping {
             (AgentStatus::Stopped, AgentEndReason::Stopped)
@@ -257,6 +265,7 @@ impl Run {
             status: self.status,
             reason: self.reason,
             step: self.is_live().then(|| self.step.clone()).flatten(),
+            todos: self.is_live().then_some(self.todos).flatten(),
             turns: self.turns,
             cost_usd: self.cost_usd,
             model: self.model.clone(),
@@ -348,7 +357,7 @@ mod tests {
             },
             3,
         );
-        assert_eq!(r.ipc(vec![]).step.as_deref(), Some("Running dir"));
+        assert_eq!(r.ipc(vec![]).step.as_deref(), Some("Bash · dir"));
         let a = r.apply(result("success", 2, 0.01), 4);
         assert!(a.close_stdin && a.finished);
         assert_eq!(r.status, AgentStatus::Done);

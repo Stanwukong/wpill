@@ -307,6 +307,51 @@ pub fn step_label(tool: &str, input: &Value, cwd: &str) -> String {
     truncate(label.trim(), MAX_LABEL)
 }
 
+/// The live step line (2.8d): the tool and what it works on, "Edit · hover/logic.rs", "Bash · git status",
+/// "WebFetch · docs.rs". Paths are relative to the folder when inside it, else just the file name.
+pub fn step_line(tool: &str, input: &Value, cwd: &str) -> String {
+    let name = display_tool(tool);
+    let target = if SHELL_TOOLS.contains(&tool) {
+        one_line(str_field(input, "command"))
+    } else if let Some(path) = path_field(input) {
+        let rel = relative(path, cwd);
+        if rel == path {
+            file_name(path).to_string()
+        } else {
+            rel
+        }
+    } else {
+        match tool {
+            "WebFetch" => host(str_field(input, "url")).to_string(),
+            "WebSearch" => one_line(str_field(input, "query")),
+            "Glob" | "Grep" => one_line(str_field(input, "pattern")),
+            "Task" | "Agent" => one_line(str_field(input, "description")),
+            _ => String::new(),
+        }
+    };
+    let line = if target.is_empty() {
+        name
+    } else {
+        format!("{name} · {target}")
+    };
+    truncate(&line, MAX_LABEL)
+}
+
+/// A `TodoWrite`'s progress: items whose `status` is `completed`, of all (at most 1000 counted).
+pub fn todo_count(tool: &str, input: &Value) -> Option<crate::ipc::TodoCount> {
+    if tool != "TodoWrite" {
+        return None;
+    }
+    let todos = input.get("todos")?.as_array()?;
+    let total = todos.len().min(1000) as u32;
+    let done = todos
+        .iter()
+        .take(1000)
+        .filter(|t| t.get("status").and_then(Value::as_str) == Some("completed"))
+        .count() as u32;
+    Some(crate::ipc::TodoCount { done, total })
+}
+
 /// What "allow for this run" covers, or `None` if it can't be offered: `input` actions, and shell commands with
 /// operators (remembering `cd` would also allow `cd x && rm -rf y`). Shell commands are remembered by their
 /// first word (`Bash:git`), edits as one group, fetches per host, everything else per tool.
@@ -620,6 +665,43 @@ mod tests {
         );
         let long = json!({ "command": "x".repeat(400) });
         assert_eq!(summary("Bash", &long, CWD).chars().count(), MAX_SUMMARY);
+    }
+
+    #[test]
+    fn step_lines() {
+        let edit = json!({ "file_path": r"C:\Users\me\GitHub\wpill\src-tauri\src\hover\logic.rs" });
+        assert_eq!(
+            step_line("Edit", &edit, CWD),
+            "Edit · src-tauri/src/hover/logic.rs"
+        );
+        let outside = json!({ "file_path": r"D:\notes\todo.md" });
+        assert_eq!(step_line("Read", &outside, CWD), "Read · todo.md");
+        assert_eq!(
+            step_line("Bash", &json!({ "command": "git   status\nmore" }), CWD),
+            "Bash · git status …"
+        );
+        assert_eq!(
+            step_line("WebFetch", &json!({ "url": "https://docs.rs/x" }), CWD),
+            "WebFetch · docs.rs"
+        );
+        assert_eq!(step_line("TodoWrite", &json!({}), CWD), "TodoWrite");
+        assert_eq!(
+            step_line("mcp__cay__screenshot", &json!({}), CWD),
+            "desktop · screenshot"
+        );
+        let long = json!({ "command": "x".repeat(200) });
+        assert_eq!(step_line("Bash", &long, CWD).chars().count(), MAX_LABEL);
+        let todos = json!({ "todos": [
+            { "content": "a", "status": "completed" },
+            { "content": "b", "status": "in_progress" },
+            { "content": "c", "status": "pending" },
+        ]});
+        assert_eq!(
+            todo_count("TodoWrite", &todos),
+            Some(crate::ipc::TodoCount { done: 1, total: 3 })
+        );
+        assert_eq!(todo_count("Edit", &todos), None);
+        assert_eq!(todo_count("TodoWrite", &json!({})), None);
     }
 
     #[test]

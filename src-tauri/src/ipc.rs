@@ -231,6 +231,18 @@ pub struct ClaudeSession {
     pub status: ClaudeStatus,
     /// Unix epoch ms of the last status change.
     pub updated_at_ms: i64,
+    /// The tool it's using and on what ("Edit · hover/logic.rs"), from `PreToolUse` (2.8d); `None` between tasks.
+    pub step: Option<String>,
+    /// Its to-do list's progress, from the latest `TodoWrite` (2.8d).
+    pub todos: Option<TodoCount>,
+}
+
+/// `TodoWrite`'s progress (2.8d): items completed and in all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoCount {
+    pub done: u32,
+    pub total: u32,
 }
 
 /// How much an agent step can affect: reading, changing files or running commands, or input into other apps.
@@ -434,8 +446,10 @@ pub struct AgentRun {
     pub status: AgentStatus,
     /// Set once the run has ended.
     pub reason: Option<AgentEndReason>,
-    /// What it's doing now ("Running git status"), while working.
+    /// What it's doing now ("Bash · git status", 2.8d), while working.
     pub step: Option<String>,
+    /// The latest `TodoWrite`'s progress (2.8d), while working.
+    pub todos: Option<TodoCount>,
     pub turns: u32,
     /// Claude Code's own estimate for the session.
     pub cost_usd: Option<f64>,

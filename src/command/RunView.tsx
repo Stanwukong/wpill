@@ -5,6 +5,7 @@ import { ClockGlyph, RiskGlyph, StopGlyph } from "../features/agent/AgentGlyphs"
 import { endLabel, RISK_LABEL, runLabel } from "../features/agent/labels";
 import { changePreview, PreviewBlock } from "../features/agent/PreviewBlock";
 import { decide, isLive, stopRun } from "../features/agent/useAgentRuns";
+import { StepLabel } from "../features/claude/StepLabel";
 import { PlanView, QuestionForm } from "./InteractionViews";
 import type { RoutineSeed } from "./routineLabels";
 import { useWholePreview } from "./useClaudeAsks";
@@ -64,10 +65,14 @@ export function RunView({
         <span className="run__cwd" title={run?.cwd}>
           {run?.cwd}
         </span>
-        {run && (
-          <span className="run__status" data-status={run.status}>
-            {runLabel(run)}
-          </span>
+        {run?.status === "working" ? (
+          <StepLabel className="run__status" text={runLabel(run)} todos={run.todos} />
+        ) : (
+          run && (
+            <span className="run__status" data-status={run.status}>
+              {runLabel(run)}
+            </span>
+          )
         )}
         {run && !live && !run.routine && (
           <button

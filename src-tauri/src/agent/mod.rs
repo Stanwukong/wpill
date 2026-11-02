@@ -97,6 +97,14 @@ pub fn describe_tool(tool: &str, input: &Value, cwd: &str) -> (String, String, A
     )
 }
 
+/// A terminal session's live step and to-do progress (2.8d), from its `PreToolUse` hook.
+pub fn step_of(tool: &str, input: &Value, cwd: &str) -> (String, Option<crate::ipc::TodoCount>) {
+    (
+        describe::step_line(tool, input, cwd),
+        describe::todo_count(tool, input),
+    )
+}
+
 /// A terminal session's request (2.8b): the card's and the command window's diff or command. `cut` names the input
 /// fields shortened on the way (`claude::ask`). For a `Write`, the file it replaces is read here (≤256 KB).
 pub fn preview_tool(

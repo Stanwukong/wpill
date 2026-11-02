@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { ClaudeSession, ClaudeStatus } from "../../lib/types";
+import { StepLabel } from "./StepLabel";
 import { WorkingIndicator } from "./WorkingGlyphs";
 import { focusClaudeSession } from "./useClaudeSessions";
 import "./claude.css";
@@ -39,7 +40,11 @@ export function ClaudeSection({ sessions, agent }: { sessions: ClaudeSession[]; 
                 {s.status === "working" ? <WorkingIndicator small /> : <span className="claude-row__dot" />}
               </span>
               <span className="claude-row__project">{s.project}</span>
-              <span className="claude-row__status">{STATUS[s.status]}</span>
+              {s.status === "working" && (s.step || s.todos) ? (
+                <StepLabel className="claude-row__status claude-row__step" text={s.step ?? STATUS.working} todos={s.todos} />
+              ) : (
+                <span className="claude-row__status">{STATUS[s.status]}</span>
+              )}
               <span className="claude-row__time">{ago(s.updatedAtMs)}</span>
             </button>
           </li>

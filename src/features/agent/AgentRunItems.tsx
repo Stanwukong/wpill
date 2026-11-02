@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { AgentApprovalActivity, AgentRun } from "../../lib/types";
+import { StepLabel } from "../claude/StepLabel";
 import { WorkingIndicator } from "../claude/WorkingGlyphs";
 import { ClockGlyph, RunDot, StopGlyph } from "./AgentGlyphs";
 import { ago, runLabel } from "./labels";
@@ -41,7 +42,11 @@ function AgentRunItem({ run }: { run: AgentRun }) {
             {run.routine?.trigger === "schedule" && <ClockGlyph />}
             agent
           </span>
-          <span className="agent-row__status">{runLabel(run)}</span>
+          {run.status === "working" ? (
+            <StepLabel className="agent-row__status" text={runLabel(run)} todos={run.todos} />
+          ) : (
+            <span className="agent-row__status">{runLabel(run)}</span>
+          )}
           {live ? (
             <button
               className="agent-row__stop"

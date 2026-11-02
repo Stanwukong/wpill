@@ -27,8 +27,9 @@ Cay runs), with all 12 manual checks passed. Phase 2.7 is complete.**
 decided (v0.2 unsigned, D33) (2026-11-01). **4a-5 (release v0.2) and the dock check are set aside** at the author's
 call (2026-11-01) to start 2.8; they resume after it.
 **Now: [Phase 2.8 agent UX](#phase-28-agent-ux-started-2026-11-01) (D34).** 2.8a (approve terminal sessions from the
-island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the card, D37) and 2.8c (questions and
-plans, D38) are built, manual checks pending. **Next: 2.8d–f**, kick-off prompt
+island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the card, D37) , 2.8c (questions and
+plans, D38) and 2.8d (live step line, D39) are built, manual checks pending. **Next: 2.8e** (spiked, design awaiting
+the author's changes) **and 2.8f**, kick-off prompt
 [prompts/phase-2.8-agent-ux.md](prompts/phase-2.8-agent-ux.md).
 Proposed, not started: [6 Google Calendar and Gmail](#phase-6-google-calendar-and-gmail-proposed-2026-11-01-not-started)
 (D35) and [2.9 other agents and open models](#phase-29-other-agents-and-open-models-proposed-2026-11-01-not-started).
@@ -331,6 +332,8 @@ startFailed`.
 | type | `ApprovalPreview` (plan) | `{ kind: "plan", markdown, cut }` | From the preview commands only. |
 | command | `agent_answer` / `claude_answer` | `(requestId, answer: { question, labels: string[], other: string \| null })` | One question. Errors `agentInvalid` (not an option), `agentApprovalGone`. |
 | command | `agent_plan` / `claude_plan` | `(requestId, approve, feedback?)` | `approve: false` needs feedback (sent back as the deny message). |
+| field | `ClaudeSession.step`, `ClaudeSession.todos`, `AgentRun.todos` | `string \| null`, `{ done, total } \| null` | 2.8d. `AgentRun.step` now reads "Tool · target". |
+| pipe field | `Envelope.step`, `Envelope.todos` | `PreToolUse` only | ≤96 chars, no control characters; todos ≤1000. The tool input never reaches the pipe. |
 | pipe reply | `ask::Decision` | `"allow" \| "deny" \| "pass" \| { "answers": {…} } \| "approvePlan" \| { "feedback": "…" }` | The forwarder echoes the original input; a plain allow on a question or plan prints nothing. |
 
 ### Reserved for later phases (names fixed now so they slot in)
@@ -1088,9 +1091,26 @@ restart open sessions)
 7. **Agent run question:** start a run asking Claude to ask you something first. Answer on the card; the run continues.
 8. **Skip:** Skip a question: Claude is told you chose not to answer and carries on.
 
-**2.8d Live step line**
-- [ ] Current tool and target beside the wave ("Edit · hover/logic.rs"), from `PreToolUse` and stream-json; `n/m` from
-      `TodoWrite`. Panel rows show the same. No new permissions; no timers in React (Rust sends updates)
+**2.8d Live step line** (built 2026-11-02, D39)
+- [x] Current tool and target beside the wave in the pill ("Edit · src/hover/logic.rs", Cascadia Mono, a fixed 180 px
+      box so the pill doesn't resize per step), `n/m` from the latest `TodoWrite`. Session rows, run rows and the
+      command window's run header show the same. Built in Rust (`describe::step_line`, `todo_count`)
+- [x] Sessions: a background `PreToolUse` hook (`async`, no output, decides nothing); the forwarder sends only the step
+      line and the counts, never the tool input. `ClaudeSession.step` / `todos`, cleared when the task ends. The
+      entry is new, so Connect offers the update (together with 2.8c's timeout)
+- [x] Agent runs: from stream-json; `AgentRun.step` now uses the same format and gains `todos`
+- [x] Checked: Rust 180 tests, clippy, typecheck, `pnpm build`; renders of the pill (idle, long step, `n/m`, a newer
+      run winning), panel rows and the run header at 100/120/150 % (motion-designer)
+- [ ] Manual check (below)
+
+**Manual check (Phase 2.8d)** (Connect again from the tray; restart sessions)
+1. **Session:** ask a terminal session to read and edit a few files. The pill shows "Read · …", then "Edit · …" beside the
+   wave, changing as it works; the pill doesn't jump in width per step.
+2. **To-dos:** ask for a task Claude plans with a to-do list. `1/4`, `2/4`, … follow its progress.
+3. **Panel:** expand: the session's row shows the same step; an idle session shows "Idle".
+4. **Agent run:** start a run; its row and the command window's header show "Bash · …" style steps.
+5. **Done:** when the task ends, the step goes and the pill shows the clock again.
+6. **Speed:** a session running many quick tools stays smooth (no stutter, no flicker).
 
 **2.8e Permission modes** (like Claude Code's Shift+Tab cycle)
 - [ ] Modes for agent runs: **Ask** (`default`, as today) → **Accept edits** (`acceptEdits`) → **Plan** (`plan`).

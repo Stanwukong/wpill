@@ -110,8 +110,8 @@ the drive once); `cargo clean --profile dev` when space runs low.
   `features/agent/PreviewBlock.tsx` renders an `ApprovalPreview` exactly as Rust built it (island and command window),
   `features/activities/` (`ActivityView` per kind, `ScreenshotActivity` with the drag/click gesture, `ClaudeActivity`,
   inline SVG `icons`), `features/claude/` (`useClaudeSessions` lives in `Island`, `WorkingGlyphs.tsx` =
-  `WorkingIndicator` (the amber wave while something works) and `AgentMark` (the wave at rest), the panel's
-  `ClaudeSection`; `--agent` (amber, with `--agent-rgb`/`-deep`/`-ink`) is a fixed token like `--charge`, mirrored by
+  `WorkingIndicator` (the amber wave while something works) and `AgentMark` (the wave at rest), `StepLabel` (the
+  live step line and `n/m`, 2.8d), the panel's `ClaudeSection`; `--agent` (amber, with `--agent-rgb`/`-deep`/`-ink`) is a fixed token like `--charge`, mirrored by
   `COLOR` in `window/glow.rs`; never reintroduce Claude Code's spinner, `✻` or orange (D30); Claude content uses
   `--font-claude`, Cascadia Mono). The equaliser uses `--media-accent`: the art's accent, or soft white with no art, `features/agent/` (`useAgentRuns` lives in `Island`, panel rows `AgentRunItems` in ClaudeSection's
   `agent` slot; the `agentApproval` view is `features/activities/AgentApproval.tsx`), `command/` (the command window's
@@ -239,6 +239,8 @@ the drive once); `cargo clean --profile dev` when space runs low.
   Write tool, not a Git Bash heredoc (it collapsed the doubled backslashes and the forwarder silently ignored the invalid
   JSON). For `PermissionRequest` in `-p` mode use a recent Claude Code (2.1.314 under the VS Code extension runs it;
   2.1.123 on PATH doesn't), a scratch folder and a command that really asks (`touch`, not `echo`).
+- **The `PreToolUse` hook (2.8d) is background-only and summarized in the forwarder.** It must never print or block:
+  a `PreToolUse` output can allow or deny a tool. Only the step line and to-do counts go on the pipe, never the input.
 - **Editing Rust while `pnpm tauri dev` runs restarts Cay**, and a `cay.exe agent-test …` sent during the rebuild finds
   no instance and starts a full Cay of its own; the dev build's relaunch then hands off to it and exits. Check
   `Get-Process cay` before driving tests, and stop a stray instance.

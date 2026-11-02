@@ -5,6 +5,7 @@ import { questionNeedsRoom } from "../features/activities/InteractionCards";
 import { AgentRunItems } from "../features/agent/AgentRunItems";
 import { isLive, recentRuns, useAgentRuns } from "../features/agent/useAgentRuns";
 import { AppsList } from "../features/apps/AppsList";
+import { latestStep, StepLabel } from "../features/claude/StepLabel";
 import { WorkingIndicator } from "../features/claude/WorkingGlyphs";
 import { ClaudeSection } from "../features/claude/ClaudeSection";
 import { useClaudeSessions } from "../features/claude/useClaudeSessions";
@@ -16,7 +17,7 @@ import { Clock } from "./Clock";
 import { ACTIVITY_RADIUS, contentFade, islandSpring, PANEL_RADIUS, PILL_RADIUS } from "./motion";
 import { useIslandState } from "./useIslandState";
 import { usePanelSizeReporter } from "./usePanelSizeReporter";
-import type { ActivityPayload } from "../lib/types";
+import type { ActivityPayload, AgentRun, ClaudeSession } from "../lib/types";
 import "./island.css";
 
 const RADIUS = { pill: PILL_RADIUS, activity: ACTIVITY_RADIUS, panel: PANEL_RADIUS } as const;
@@ -46,7 +47,11 @@ export function Island() {
   const media = useMedia();
   const claudeSessions = useClaudeSessions();
   const agentRuns = useAgentRuns();
-  const claudeWorking = claudeSessions.some((s) => s.status === "working") || agentRuns.some((r) => isLive(r.status));
+  const workingSessions = claudeSessions.filter((s) => s.status === "working");
+  const liveRuns = agentRuns.filter((r) => isLive(r.status));
+  const claudeWorking = workingSessions.length > 0 || liveRuns.length > 0;
+  // The pill's step line (2.8d): whichever working session or live run changed last and has a step.
+  const pillStep = latestStep<ClaudeSession | AgentRun>([...workingSessions, ...liveRuns]);
   // Computed at render (no timer): the panel remounts on every expand and re-renders on run events.
   const panelRuns = expanded ? recentRuns(agentRuns) : [];
   const nowPlaying = media.active?.status === "playing" ? media.active : null;
@@ -125,6 +130,7 @@ export function Island() {
             >
               {nowPlaying && <PillArt session={nowPlaying} />}
               {claudeWorking && <WorkingIndicator />}
+              {pillStep?.step && <StepLabel className="pill-step" text={pillStep.step} todos={pillStep.todos} />}
               <Clock variant="pill" />
               {nowPlaying && <Equalizer />}
             </motion.div>
