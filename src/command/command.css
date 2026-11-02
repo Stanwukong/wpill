@@ -29,11 +29,11 @@ textarea {
 /* Title bar: the whole strip drags the window (data-tauri-drag-region), except its buttons. */
 .cmd__bar {
   flex: none;
-  height: 40px;
+  height: 44px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 6px 0 12px;
+  gap: 10px;
+  padding: 0 8px 0 16px;
   border-bottom: 1px solid var(--island-border);
 }
 
@@ -43,8 +43,9 @@ textarea {
 }
 
 .cmd__title {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .cmd__spacer {
@@ -52,17 +53,20 @@ textarea {
   align-self: stretch;
 }
 
-.cmd__hotkey {
+/* Key chips (the hotkey, Ctrl+Enter): a soft fill, no outline. */
+.cmd__hotkey,
+.task__hint {
   font-family: inherit;
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
   color: var(--island-muted);
-  padding: 1px 6px;
-  border-radius: 5px;
-  box-shadow: inset 0 0 0 1px var(--island-border);
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .cmd__hotkey--error {
-  box-shadow: none;
+  background: transparent;
   color: rgba(255, 107, 107, 0.8);
 }
 
@@ -103,10 +107,10 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 8px 6px;
+  padding: 10px 8px;
   box-sizing: border-box;
   border-right: 1px solid var(--island-border);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.025);
 }
 
 /* Windows' Text size zooms the page inside a fixed-size window; give the transcript the room. */
@@ -131,34 +135,68 @@ textarea {
   background: rgba(255, 255, 255, 0.05);
 }
 
+/* Selected: a faint fill and Windows 11's short amber indicator at the left edge. */
 .cmd-new[aria-pressed="true"],
 .cmd-run[aria-pressed="true"] {
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.075);
 }
 
+.cmd-run[aria-pressed="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 16px;
+  margin-top: -8px;
+  border-radius: 2px;
+  background: var(--agent);
+}
+
+.cmd-new:focus-visible,
+.cmd-run:focus-visible,
+.cmd-run__remove:focus-visible {
+  outline: 2px solid rgba(var(--agent-rgb), 0.55);
+  outline-offset: -2px;
+}
+
+/* New task: the one filled row in the sidebar. */
 .cmd-new {
-  height: 32px;
+  flex: none;
+  height: 34px;
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 0 10px;
+  background: rgba(255, 255, 255, 0.055);
   font-size: 12.5px;
   font-weight: 600;
 }
 
+.cmd-new[aria-pressed="false"]:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .cmd-new__plus {
+  flex: none;
   width: 14px;
-  text-align: center;
-  font-size: 15px;
-  font-weight: 400;
+  height: 14px;
   color: var(--agent);
 }
 
+/* Runs: the rest of the sidebar's height, scrolling. */
 .cmd-runs {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+}
+
+.cmd-runs__list {
   list-style: none;
-  margin: 6px 0 0;
-  padding: 6px 0 0;
-  border-top: 1px solid var(--island-border);
+  margin: 0;
+  padding: 0;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -166,12 +204,69 @@ textarea {
 }
 
 .cmd-run {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 7px 10px;
-  margin-bottom: 1px;
+  gap: 3px;
+  padding: 8px 10px;
+  margin-bottom: 2px;
   white-space: nowrap;
+}
+
+/* An ended run's remove button sits over its time, shown on hover or keyboard focus (the time gives way). */
+.cmd-runitem {
+  position: relative;
+}
+
+.cmd-run__remove {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--island-muted);
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.cmd-run__remove svg {
+  width: 12px;
+  height: 12px;
+}
+
+.cmd-runitem:hover .cmd-run__remove,
+.cmd-runitem:focus-within .cmd-run__remove {
+  opacity: 1;
+}
+
+.cmd-run__remove:hover {
+  color: var(--island-fg);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.cmd-runitem[data-removable="true"] .cmd-run__time {
+  transition: opacity 120ms ease;
+}
+
+.cmd-runitem[data-removable="true"]:hover .cmd-run__time,
+.cmd-runitem[data-removable="true"]:focus-within .cmd-run__time {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cmd-run__remove,
+  .cmd-runitem .cmd-run__time {
+    transition: none;
+  }
 }
 
 .cmd-run__line,
@@ -198,9 +293,8 @@ textarea {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: var(--font-claude);
   font-size: 12.5px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .cmd-run__time {
@@ -212,7 +306,7 @@ textarea {
 
 .cmd-run__detail {
   padding-left: 22px;
-  font-size: 11px;
+  font-size: 11.5px;
 }
 
 .cmd-run__status {
@@ -233,8 +327,7 @@ textarea {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: var(--font-claude);
-  color: rgba(245, 245, 247, 0.38);
+  color: rgba(245, 245, 247, 0.4);
 }
 
 /* Terminal sessions' held requests (2.8b): only while there are some, right under New task (they wait on you). */
@@ -242,9 +335,7 @@ textarea {
   flex: none;
   display: flex;
   flex-direction: column;
-  margin-top: 6px;
-  padding-top: 4px;
-  border-top: 1px solid var(--island-border);
+  margin-top: 12px;
 }
 
 .cmd-asks__list {
@@ -272,13 +363,13 @@ textarea {
   flex: none;
   display: flex;
   flex-direction: column;
-  margin-top: 6px;
-  padding-top: 4px;
-  border-top: 1px solid var(--island-border);
+  margin-top: 12px;
 }
 
+/* Section heads (sessions, routines, runs): a sentence-case label and quiet text actions. */
 .cmd-routines__head {
-  height: 26px;
+  flex: none;
+  height: 28px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -286,16 +377,14 @@ textarea {
 }
 
 .cmd-routines__label {
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--island-muted);
 }
 
 /* Paused: a quiet amber word; Resume sits beside it. */
 .cmd-routines__paused {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--agent);
 }
 
@@ -312,9 +401,9 @@ textarea {
 
 .cmd-routines__pause {
   flex: none;
-  padding: 2px 6px;
+  padding: 3px 7px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   background: transparent;
   font-size: 11px;
   color: var(--island-muted);
@@ -394,7 +483,7 @@ textarea {
 /* Run: top right of its row, on the name's line. */
 .cmd-routine__run {
   position: absolute;
-  top: 4px;
+  top: 5px;
   right: 5px;
 }
 
@@ -493,9 +582,17 @@ textarea {
     opacity 120ms ease;
 }
 
+.cmd-btn:focus-visible {
+  outline: 2px solid rgba(var(--agent-rgb), 0.55);
+  outline-offset: 2px;
+}
+
 .cmd-btn--primary {
+  min-width: 76px;
+  justify-content: center;
   background: var(--agent);
   color: var(--agent-ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 .cmd-btn--primary:hover {
@@ -507,11 +604,12 @@ textarea {
 }
 
 .cmd-btn--quiet {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 500;
 }
 
-.cmd-btn--quiet:hover {
-  background: rgba(255, 255, 255, 0.12);
+.cmd-btn--quiet:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .cmd-btn--text {
@@ -538,7 +636,10 @@ textarea {
   color: var(--danger);
 }
 
-/* Inputs: a faint well with a hairline, amber hairline when focused. */
+/*
+ * Inputs: a faint well with a hairline. Focused, the well lifts a little and takes a soft amber ring (a dim hairline
+ * plus a 3 px halo) rather than a hard amber border: the prompt is focused whenever the window shows.
+ */
 .task__prompt,
 .composer__box,
 .task-field select,
@@ -548,10 +649,20 @@ textarea {
 .iplan__feedback {
   border: 0;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.04);
   box-shadow: inset 0 0 0 1px var(--island-border);
   outline: none;
-  transition: box-shadow 120ms ease;
+  transition:
+    box-shadow 120ms ease,
+    background-color 120ms ease;
+}
+
+.task__prompt:hover,
+.composer__box:hover,
+.task-field select:hover,
+.task-field input:hover,
+.routine input:hover {
+  background: rgba(255, 255, 255, 0.055);
 }
 
 .task__prompt:focus,
@@ -561,7 +672,10 @@ textarea {
 .routine input:focus,
 .iq__other:focus,
 .iplan__feedback:focus {
-  box-shadow: inset 0 0 0 1px rgba(var(--agent-rgb), 0.6);
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--agent-rgb), 0.4),
+    0 0 0 3px rgba(var(--agent-rgb), 0.1);
 }
 
 /* New task */
@@ -571,21 +685,24 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 16px 18px;
+  padding: 16px 22px;
   overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 /* Six to eight lines: it takes the spare height but never crowds Folder, Options and Run out of view. */
 .task__prompt {
   flex: 1 1 auto;
-  min-height: 140px;
+  min-height: 96px;
   max-height: 184px;
   resize: none;
-  padding: 12px 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
   font-family: var(--font-claude);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.55;
   user-select: text;
+  scrollbar-width: thin;
 }
 
 .task__prompt::placeholder,
@@ -597,15 +714,14 @@ textarea {
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
 }
 
+/* Section labels: sentence case, a step quieter than the content. */
 .task__label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--island-muted);
+  color: rgba(245, 245, 247, 0.72);
 }
 
 /* Room for four folders; more scroll. */
@@ -621,18 +737,19 @@ textarea {
 
 .task-folder {
   width: 100%;
-  height: 30px;
+  height: 32px;
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 0 8px 0 26px;
+  padding: 0 10px 0 28px;
   position: relative;
   border: 0;
   border-radius: 8px;
   background: transparent;
   text-align: left;
   white-space: nowrap;
-  line-height: 30px;
+  line-height: 32px;
+  overflow: hidden;
   transition: background-color 120ms ease;
 }
 
@@ -642,14 +759,14 @@ textarea {
 
 /* The chosen folder: an amber dot in the gutter and a faint fill. */
 .task-folder[aria-selected="true"] {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .task-folder[aria-selected="true"]::before {
   content: "";
   position: absolute;
-  left: 10px;
-  top: 12px;
+  left: 12px;
+  top: 13px;
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -661,9 +778,8 @@ textarea {
   max-width: 45%;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: var(--font-claude);
   font-size: 12.5px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .task-folder__path {
@@ -697,11 +813,9 @@ textarea {
   border: 0;
   background: transparent;
   text-align: left;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--island-muted);
+  color: rgba(245, 245, 247, 0.72);
   white-space: nowrap;
 }
 
@@ -725,9 +839,8 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   margin-left: 4px;
+  font-size: 11.5px;
   font-weight: 400;
-  letter-spacing: 0;
-  text-transform: none;
   color: rgba(245, 245, 247, 0.4);
 }
 
@@ -777,13 +890,17 @@ textarea {
   flex: none;
   position: sticky;
   bottom: -16px;
-  margin: auto -18px -16px;
-  padding: 10px 18px 16px;
+  margin: auto -22px -16px;
+  padding: 12px 22px 16px;
   background: #141416;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 10px;
+}
+
+.task__footer .cmd-btn {
+  height: 32px;
 }
 
 .task__footer .cmd-error {
@@ -791,8 +908,8 @@ textarea {
 }
 
 .task__hint {
-  font-size: 11px;
-  color: rgba(245, 245, 247, 0.4);
+  margin-right: 2px;
+  color: rgba(245, 245, 247, 0.45);
 }
 
 @media (max-width: 560px) {
@@ -855,14 +972,13 @@ textarea {
   max-height: 140px;
 }
 
-/* Segmented choice: a faint well, the chosen item lifted. */
+/* Segmented choice: a faint well without an outline, the chosen item lifted on a soft shadow. */
 .seg {
   display: flex;
-  padding: 2px;
+  padding: 3px;
   gap: 2px;
-  border-radius: 9px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.04);
-  box-shadow: inset 0 0 0 1px var(--island-border);
 }
 
 .seg__item {
@@ -872,6 +988,7 @@ textarea {
   padding: 0 8px;
   border: 0;
   border-radius: 7px;
+  outline: none;
   background: transparent;
   font-size: 12px;
   color: var(--island-muted);
@@ -880,6 +997,7 @@ textarea {
   text-overflow: ellipsis;
   transition:
     background-color 120ms ease,
+    box-shadow 120ms ease,
     color 120ms ease;
 }
 
@@ -888,8 +1006,14 @@ textarea {
 }
 
 .seg__item[aria-checked="true"] {
-  background: rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   color: var(--island-fg);
+  font-weight: 500;
+}
+
+.seg__item:focus-visible {
+  box-shadow: inset 0 0 0 1.5px rgba(var(--agent-rgb), 0.55);
 }
 
 .seg--small .seg__item {
@@ -1114,7 +1238,7 @@ textarea {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 0 14px 0 18px;
+  padding: 0 14px 0 22px;
   line-height: 44px;
   border-bottom: 1px solid var(--island-border);
   white-space: nowrap;
@@ -1180,7 +1304,7 @@ textarea {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px 18px 8px;
+  padding: 16px 22px 8px;
   scrollbar-width: thin;
   user-select: text;
   cursor: text;
@@ -1371,7 +1495,7 @@ textarea {
   scrollbar-width: thin;
   list-style: none;
   margin: 0;
-  padding: 8px 14px 0;
+  padding: 8px 18px 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1514,7 +1638,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 14px 18px;
+  padding: 16px 22px;
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -1567,7 +1691,7 @@ textarea {
 
 .ask__gone--alone {
   margin: 0;
-  padding: 14px 18px;
+  padding: 16px 22px;
   text-align: left;
 }
 
@@ -1906,7 +2030,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px 14px 14px;
+  padding: 10px 18px 16px;
 }
 
 .composer__box {

@@ -1927,6 +1927,28 @@ pub fn agent_stop(app: AppHandle, agents: State<'_, Agents>, run_id: String) -> 
 }
 
 #[tauri::command]
+/// Removes an ended run from the list (and its "finished" notice). A live run must be stopped first.
+pub fn agent_remove(app: AppHandle, agents: State<'_, Agents>, run_id: String) -> AppResult<()> {
+    let mut after = After::default();
+    {
+        let mut inner = agents.lock();
+        let slot = inner.slot(&run_id).ok_or(AppError::AgentRunGone)?;
+        if slot.run.is_live() || slot.process.is_some() {
+            return Err(AppError::AgentInvalid(
+                "Stop the run before removing it.".into(),
+            ));
+        }
+        inner.slots.retain(|s| s.run.id != run_id);
+        after
+            .signals
+            .push(Signal::Retract(format!("agent:{run_id}")));
+        after.runs_changed = true;
+    }
+    after.run(&app, &agents);
+    Ok(())
+}
+
+#[tauri::command]
 pub fn agent_runs(agents: State<'_, Agents>) -> AgentRunsPayload {
     agents.payload()
 }

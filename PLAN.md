@@ -259,6 +259,7 @@ Activity kinds: `claudeDone { sessionId, project, failed }` (`failed`: `StopFail
 | command | `agent_start` | `({ request: { prompt, cwd, model?, maxTurns?, maxBudgetUsd?, claudePath? } }) → { runId }` | Async. Folder normalised to its long path. Errors `agentInvalid`, `agentNoClaude`, `agentStart`. |
 | command | `agent_send` | `(runId, text) → void` | Queued into the running turn, or resumes a finished run (`--resume`). |
 | command | `agent_stop` | `(runId) → void` | Kills the run's Job Object (the whole tree). |
+| command | `agent_remove` | `(runId) → void` | Drops an ended run from the list and retracts its notice; refuses live runs (D45). |
 | command | `agent_runs` / `agent_transcript` | `() → { runs }` / `(runId) → AgentEntry[]` | Initial sync; the transcript keeps the last 400 entries. |
 | command | `agent_decide` | `(requestId, decision: "allow" \| "deny", remember: "once" \| "run")` | Error `agentApprovalGone` if it was already answered or expired. |
 | command | `agent_options` | `() → AgentOptions` | Installs (newest first), default install, recent folders, defaults, hotkey and `hotkeyError`. |

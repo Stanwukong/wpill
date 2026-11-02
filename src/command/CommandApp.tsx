@@ -142,6 +142,12 @@ export function CommandApp() {
     setEditing(null);
     setSelected({ kind: "ask", requestId });
   };
+  const ended = runs.filter((r) => !isLive(r.status));
+  /** Rust drops the run and sends `agent:runs`; the list follows that, never ahead of it. */
+  const remove = (id: string) => {
+    if (id === runId) setSelected(null);
+    commands.agentRemove(id).catch((err: unknown) => console.debug("agent remove", err));
+  };
   const editRoutine = (initial: RoutineDraft) => setEditing((e) => ({ key: (e?.key ?? 0) + 1, id: initial.id, initial }));
   const newRoutine = (seed: RoutineSeed = {}) => options && editRoutine(newDraft(seed, options));
 
@@ -150,7 +156,7 @@ export function CommandApp() {
       <header className="cmd__bar" data-tauri-drag-region>
         <AgentMark />
         <span className="cmd__title" data-tauri-drag-region>
-          Claude agent
+          Cay
         </span>
         <span className="cmd__spacer" data-tauri-drag-region />
         {options?.hotkeyError ? (
@@ -185,9 +191,9 @@ export function CommandApp() {
               setSelected(null);
             }}
           >
-            <span className="cmd-new__plus" aria-hidden="true">
-              +
-            </span>
+            <svg className="cmd-new__plus" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M8 3.5v9M3.5 8h9" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" />
+            </svg>
             New task
           </button>
           {asks.asks.length > 0 && (
@@ -215,13 +221,35 @@ export function CommandApp() {
             onNew={() => newRoutine()}
             onStarted={showRun}
           />
-          <ul className="cmd-runs">
-            {runs.map((r) => (
-              <li key={r.runId}>
-                <RunItem run={r} selected={editing === null && r.runId === runId} onSelect={() => showRun(r.runId)} />
-              </li>
-            ))}
-          </ul>
+          {runs.length > 0 && (
+            <section className="cmd-runs" aria-label="Runs">
+              <div className="cmd-routines__head">
+                <span className="cmd-routines__label">Runs</span>
+                <span className="cmd__spacer" />
+                {ended.length > 0 && (
+                  <button
+                    className="cmd-routines__pause"
+                    title="Remove every finished run from this list"
+                    onClick={() => ended.forEach((r) => remove(r.runId))}
+                  >
+                    Clear ended
+                  </button>
+                )}
+              </div>
+              <ul className="cmd-runs__list">
+                {runs.map((r) => (
+                  <li key={r.runId}>
+                    <RunItem
+                      run={r}
+                      selected={editing === null && r.runId === runId}
+                      onSelect={() => showRun(r.runId)}
+                      onRemove={() => remove(r.runId)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </nav>
         <main className="cmd__main">
           {/* Kept mounted (hidden) so a draft survives looking at a run. */}
@@ -297,29 +325,46 @@ function AskItem({ ask, selected, onSelect }: { ask: ClaudeApprovalActivity; sel
   );
 }
 
-function RunItem({ run, selected, onSelect }: { run: AgentRun; selected: boolean; onSelect: () => void }) {
-  const status =
-    run.status === "waiting"
-      ? "Needs approval"
-      : isLive(run.status)
-        ? "Working"
-        : endLabel(run.status, run.reason);
+/** A run's row: the row selects it; an ended run also gets a remove button (a sibling, shown on hover or focus). */
+function RunItem({
+  run,
+  selected,
+  onSelect,
+  onRemove,
+}: {
+  run: AgentRun;
+  selected: boolean;
+  onSelect: () => void;
+  onRemove: () => void;
+}) {
+  const live = isLive(run.status);
+  const status = run.status === "waiting" ? "Needs approval" : live ? "Working" : endLabel(run.status, run.reason);
+  const name = run.routine?.name ?? run.project;
   return (
-    <button className="cmd-run" data-status={run.status} aria-pressed={selected} onClick={onSelect} title={run.cwd}>
-      <span className="cmd-run__line">
-        <span className="cmd-run__mark">
-          {run.status === "working" || run.status === "starting" ? <WorkingIndicator small /> : <RunDot status={run.status} />}
+    <div className="cmd-runitem" data-removable={!live}>
+      <button className="cmd-run" data-status={run.status} aria-pressed={selected} onClick={onSelect} title={run.cwd}>
+        <span className="cmd-run__line">
+          <span className="cmd-run__mark">
+            {run.status === "working" || run.status === "starting" ? <WorkingIndicator small /> : <RunDot status={run.status} />}
+          </span>
+          <span className="cmd-run__project">
+            {run.routine?.trigger === "schedule" && <ClockGlyph />}
+            {name}
+          </span>
+          <span className="cmd-run__time">{ago(run.updatedAtMs)}</span>
         </span>
-        <span className="cmd-run__project">
-          {run.routine?.trigger === "schedule" && <ClockGlyph />}
-          {run.routine?.name ?? run.project}
+        <span className="cmd-run__detail">
+          <span className="cmd-run__status">{status}</span>
+          <span className="cmd-run__prompt">{run.prompt}</span>
         </span>
-        <span className="cmd-run__time">{ago(run.updatedAtMs)}</span>
-      </span>
-      <span className="cmd-run__detail">
-        <span className="cmd-run__status">{status}</span>
-        <span className="cmd-run__prompt">{run.prompt}</span>
-      </span>
-    </button>
+      </button>
+      {!live && (
+        <button className="cmd-run__remove" aria-label={`Remove ${name}`} title="Remove from list" onClick={onRemove}>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" aria-hidden="true">
+            <path d="M5 5l6 6M11 5l-6 6" />
+          </svg>
+        </button>
+      )}
+    </div>
   );
 }

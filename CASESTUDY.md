@@ -729,6 +729,18 @@ only while an event is Soon or Now (it showed on tomorrow's), and the tasks as o
 *Alternatives:* keeping per-section caps tuned per Text size (fragile, still overlapping in edge cases); a fade mask
 at the scroller's edges (decoration; a hard clip is what Windows lists do).
 
+### D45: The command window is Cay's, and ended runs can be removed (after Phase 6b)
+*What:* the command window's title says "Cay" instead of "Claude agent"; the window is the user's Cay console, and
+Claude stays named only where it is what runs (the prompt's placeholder, transcripts). Each ended run in the sidebar
+gets a × (shown on hover or focus, in place of its time) and the Runs list a "Clear ended" action, both through a new
+`agent_remove` command: Rust refuses live runs, drops the slot, retracts its "finished" notice and emits `agent:runs`
+(the list never removes a row ahead of Rust). Runs are only in memory, so removing one forgets nothing on disk (the
+audit trail stays). The window was restyled to read lighter (motion-designer): sentence-case section labels, filled
+rather than outlined controls, a soft accent focus ring instead of a permanent amber border, a Windows 11 style
+selected row with a short accent bar, and Segoe instead of Cascadia for sidebar names and prompt snippets.
+*Alternatives:* removing live runs too (Stop already exists, and a hidden live run would be a process nobody sees);
+persisting a "hidden" flag (runs don't outlive Cay anyway).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -932,6 +944,7 @@ the old crate's artifacts are never reused or cleaned by cargo; remove them by h
 | 2026-11-02 | Phase 6 research and design agreed (D42): Cay's own OAuth client (In Production, unverified until release), no iCal fallback, no sync tokens, WinHTTP and Credential Manager instead of new crates. Stage 6a built: the `google/` module, the `google-watcher` thread, `google:state` / `calendar:upcoming`, tray Connect/Disconnect Google. Checked with fixtures, a live WinHTTP test without an account and a debug Cay (C14: the drive filled mid-build); the manual check waits for the author's Google client. |
 | 2026-11-02 | Stage 6a signed off by the author. Google wouldn't publish the External project without a home page and privacy policy, so it runs in Testing with the author as a test user (7-day sign-ins) until those exist before release. |
 | 2026-11-02 | Stage 6b built (D43): the calendar mark in the pill (Google's icon once the author adds it), "starting soon" with Join, the panel's Calendar section (motion-designer, renders at 100/120/150 %). Manual checklist pending. |
+| 2026-11-02 | Command window restyled as Cay (D45): ended runs removable from the sidebar (`agent_remove`, "Clear ended"), lighter controls. |
 
 ## 7. Results & metrics
 

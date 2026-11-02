@@ -101,6 +101,7 @@ pub fn run() {
             agent::agent_start,
             agent::agent_send,
             agent::agent_stop,
+            agent::agent_remove,
             agent::agent_runs,
             agent::agent_transcript,
             agent::agent_decide,

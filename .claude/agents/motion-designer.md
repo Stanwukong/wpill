@@ -32,7 +32,7 @@ Read `CLAUDE.md` first (architecture rules and Windows gotchas apply to you too)
   static mark is `AgentMark`: the wave at rest (two periods, 1.8 px) in the 22 px icon slot, 18 px in the command bar.
 - **Claude content uses `--font-claude`** (Cascadia Mono → Consolas fallback): project names (13.5 px, weight 500;
   Cascadia's 600 reads heavy), statuses (11 px, 400, `--agent-status`), commands, prompts and transcripts. Headings,
-  buttons and other chrome stay Segoe; the wave and the mark are SVG. Cascadia's glyphs touch the
+  buttons and other chrome stay Segoe (so do the command window's sidebar names and prompt snippets, D45); the wave and the mark are SVG. Cascadia's glyphs touch the
   cell edge, so clips around its text need ~2 px of slack.
 - **Agent UI** (Phase 2.7): `features/agent/` (shared `agent.css`: `agent-btn` with Allow as the only filled, amber
   button (`--agent-ink` text, `--agent-deep` pressed), `agent-link` for quiet text choices, `agent-risk` (reads/changes quiet, input a red tag), `agent-dot` that

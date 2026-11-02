@@ -90,6 +90,8 @@ export const commands = {
   /** A follow-up: queued into the running turn, or resumes a finished run. */
   agentSend: (runId: string, text: string) => invoke<void>("agent_send", { runId, text }),
   agentStop: (runId: string) => invoke<void>("agent_stop", { runId }),
+  /** Removes an ended run from the list. Errors `agentInvalid` while it still runs, `agentRunGone`. */
+  agentRemove: (runId: string) => invoke<void>("agent_remove", { runId }),
   agentRuns: () => invoke<AgentRuns>("agent_runs"),
   agentTranscript: (runId: string) => invoke<AgentEntry[]>("agent_transcript", { runId }),
   agentDecide: (requestId: number, decision: "allow" | "deny", remember: "once" | "run") =>
