@@ -123,9 +123,8 @@ the drive once, and again in 6a, C14); `cargo clean --profile dev` when space ru
   `features/media/` (`useMedia` lives in `Island` so state survives the panel remounting; `MediaCard`, `PillMedia`, `useProgress`,
   `artTheme` = album-art colors → `--tint-from`/`--tint-to`/`--accent`, set on `.stage`; those are `@property`-registered in
   `global.css` so they can transition. Use `var(--accent)` for highlights, not a fixed color),
-  `features/calendar/` (Phase 6b: `useCalendar` lives in `Island`; `CalendarMark` = Google's Calendar icon from
-  `src/assets/google-calendar.{svg,png}` when the author has added it, unaltered, else Cay's own line glyph; never draw a
-  look-alike or tint it; `CalendarSoon` activity, `CalendarSection` in the panel),
+  `features/calendar/` (Phase 6b: `useCalendar` lives in `Island`; `CalendarMark` = Cay's own line calendar (D43: not
+  Google's icon, and never a look-alike of it); `CalendarSoon` activity, `CalendarSection` in the panel),
   `features/agent/PreviewBlock.tsx` renders an `ApprovalPreview` exactly as Rust built it (island and command window),
   `features/activities/` (`ActivityView` per kind, `ScreenshotActivity` with the drag/click gesture, `ClaudeActivity`,
   inline SVG `icons`), `features/claude/` (`useClaudeSessions` lives in `Island`, `WorkingGlyphs.tsx` =

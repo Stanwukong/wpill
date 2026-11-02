@@ -1,24 +1,11 @@
 /**
- * Google's Calendar product icon, shown unaltered (full colour, only resized; Google's API brand rules: no recolouring,
- * filters, theme tint or merging with Cay's marks). The author drops Google's own file at
- * `src/assets/google-calendar.svg` (or `.png`); until it exists the glob is empty and Cay's own neutral calendar
- * glyph stands in. This is the one place that picks between them.
+ * Cay's calendar mark: a plain line calendar in soft white (icons.tsx style), in the pill and the "starting soon"
+ * activity. The author chose it over Google's product icon (D43), so no Google artwork ships with Cay.
  */
-const official = Object.values(
-  import.meta.glob<string>("../../assets/google-calendar.{svg,png}", { eager: true, query: "?url", import: "default" }),
-)[0];
-
 export function CalendarMark({ size = 16, className }: { size?: number; className?: string }) {
-  const cls = className ? `calendar-mark ${className}` : "calendar-mark";
-  if (official) {
-    return (
-      <img className={cls} src={official} width={size} height={size} alt="Google Calendar" draggable={false} />
-    );
-  }
-  // Cay's stand-in: a plain line calendar in soft white (icons.tsx style), deliberately unlike Google's design.
   return (
     <svg
-      className={`${cls} calendar-mark--fallback`}
+      className={className ? `calendar-mark ${className}` : "calendar-mark"}
       width={size}
       height={size}
       viewBox="0 0 24 24"

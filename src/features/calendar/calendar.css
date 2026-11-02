@@ -8,13 +8,10 @@
   --calendar-join-ink: #0f0f0f;
 }
 
-/* Google's icon is shown as-is (no filter, no tint); only Cay's stand-in glyph takes a colour. */
+/* Cay's own line calendar (D43), soft white like the other glyphs. */
 .calendar-mark {
   flex: none;
   display: block;
-}
-
-.calendar-mark--fallback {
   color: rgba(245, 245, 247, 0.85);
 }
 

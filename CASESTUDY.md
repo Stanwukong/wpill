@@ -706,10 +706,10 @@ the claude.ai connectors only (can't feed the pill); Testing status (weekly sign
 stale after 2 min, interactive while hovered), offered once per event and start time when the watcher reaches the
 event's lead time; `next_boundary` now takes every offset it should wake at (soon, lead), so there's no polling and no
 React timer. The minutes are Rust's ("in 5 min"), fixed at offer time; a moved event is announced again. Join and the
-row's click retract the card through `Signal::Retract`, the same channel sessions use. *Icon:* the author chose
-Google's own Calendar icon (D35), which only Google's brand resources provide and which may not be altered, so
-`CalendarMark` loads it from `src/assets/` by glob and falls back to a plain line calendar of Cay's own: the repo never
-carries a look-alike, and the build doesn't depend on a file the author adds by hand. *Join:* neutral soft white, not
+row's click retract the card through `Signal::Retract`, the same channel sessions use. *Icon (reverses D35's
+"the Google Calendar icon"):* the author first picked Google's product icon, then, with it in hand, kept Cay's own
+plain line calendar: a full-colour mark beside the monochrome clock fought D30's minimal look, and no Google artwork
+or brand terms come into the repo. The panel can still name Google Calendar in words. *Join:* neutral soft white, not
 `--accent`: on the plain island that token is the charging green, and amber is the agent's (D30). *Pill width:* 375 px
 with everything at once; the mark adds 24 px to the 180 px step line's 351 px, still within the narrowest viewport (453
 CSS px at 150 %). *Alternatives:* a sticky notice until the event starts (a calendar reminder isn't a question waiting on

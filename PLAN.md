@@ -33,7 +33,7 @@ hand.** **Now: [Phase 6 Google Calendar and Gmail](#phase-6-google-calendar-and-
 `calendar:upcoming`, tray Connect) is signed off (2026-11-02). Now: 6b (the island).** The Cloud project runs in
 Testing with the author as a test user until a home page and privacy policy exist (Google won't publish without them).
 **6b (the calendar icon in the pill, "starting soon" with Join, the panel's Calendar section) is built; manual check
-pending.** The pill uses Google's own Calendar icon once the author adds it at `src/assets/google-calendar.svg`. Kick-off prompt: [prompts/phase-6-google.md](prompts/phase-6-google.md).
+pending.** The mark is Cay's own line calendar (the author's call; no Google artwork ships). Kick-off prompt: [prompts/phase-6-google.md](prompts/phase-6-google.md).
 History of 2.8: 2.8a (approve terminal sessions from the
 island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the card, D37), 2.8c (questions and
 plans, D38) and 2.8d (live step line, D39) are built with their manual checks pending, and 2.8e (Claude Code's
@@ -1363,9 +1363,8 @@ Cloud project (D35). Replaces the "calendar peek" spike.
 
 **6b In the island** (built 2026-11-02, D43; motion-designer)
 - [x] **Pill:** the calendar mark right of the clock while `pending` (an event within 15 min or in progress, or a task
-      due today or overdue): art · wave · step line · clock · **mark** · equaliser. 16 px. `CalendarMark` shows Google's
-      own icon from `src/assets/google-calendar.{svg,png}` (the author's download, unaltered: no tint, filter or
-      recolouring) and Cay's own line calendar until that file exists (`import.meta.glob`, so the build never breaks)
+      due today or overdue): art · wave · step line · clock · **mark** · equaliser. 16 px. `CalendarMark` is Cay's own
+      line calendar in soft white: the author chose it over Google's product icon (D43)
 - [x] **Activity `calendarSoon`:** mark · calendar colour dot · title · "in 5 min" / "now" · **Join** (only with a
       meeting link). The row opens the event; Join opens the link; both close the card. Rust offers it once per event
       and start time at `google.leadMinutes` (the watcher wakes at that boundary too); switch `activities.calendar`
@@ -1381,8 +1380,7 @@ Cloud project (D35). Replaces the "calendar peek" spike.
 `cay.exe google-test refresh` so you don't wait for the 5-minute poll)
 1. **Icon:** with nothing pending the pill is unchanged. Add an event 10 min ahead (or a task due today): the mark
    appears right of the clock; it goes when the event ends and nothing else is pending.
-2. **Google's icon:** put Google's Calendar icon at `src/assets/google-calendar.svg`; after Vite reloads, the pill and
-   activity show it in full colour, also on an album-tinted island.
+2. **Tinted island:** with an album playing, the mark stays soft white and readable beside the art.
 3. **Starting soon:** an event 7 min ahead with a Meet link: at 5 min before, "title · in 5 min · Join" shows once,
    for about 8 s (longer while hovered). It doesn't come back on the next refresh.
 4. **Join:** hover it and click Join: the meeting opens in your browser and the card goes. Another event: click the
