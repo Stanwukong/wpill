@@ -1,9 +1,3 @@
-.apps {
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
 .apps__heading {
   margin: 0 0 8px;
   font-size: 12px;
@@ -31,10 +25,9 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 2px;
-  min-height: 0;
-  max-height: 300px;
-  overflow-y: auto;
-  scrollbar-width: thin;
+  /* The tiles rise 4 px as they appear (AppsList); clip that so it never makes the panel's scroller scroll (and show
+     its thumb) for a moment when everything fits. The tiles' hover backgrounds sit inside the grid's box. */
+  overflow: clip;
 }
 
 .app-tile {

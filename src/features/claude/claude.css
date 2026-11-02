@@ -50,12 +50,8 @@
   color: var(--agent);
 }
 
-/* Panel section */
+/* Panel section, at its natural height in the panel's scroller (island.css). */
 .claude {
-  flex: 0 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
   margin-bottom: 14px;
 }
 
@@ -82,15 +78,10 @@
   color: var(--island-muted);
 }
 
-/* At most six rows (agent approvals add rows); more scroll. */
 .claude__list {
   list-style: none;
   margin: 0 -6px;
   padding: 0;
-  min-height: 30px;
-  max-height: 180px;
-  overflow-y: auto;
-  scrollbar-width: thin;
 }
 
 .claude-row {

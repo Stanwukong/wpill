@@ -22,9 +22,10 @@ use crate::error::{AppError, AppResult};
 
 pub const LABEL: &str = "island";
 
-/// Window size in logical px: the largest panel plus room for its shadow.
+/// Window size in logical px: the largest panel plus room for its shadow. Taller than the panel usually is (600, was
+/// 440 until 6b): the window is transparent and click-through outside the reported panel rect, so the room is free.
 pub const WINDOW_WIDTH: f64 = 680.0;
-pub const WINDOW_HEIGHT: f64 = 440.0;
+pub const WINDOW_HEIGHT: f64 = 600.0;
 /// Gap between the monitor's top edge and the island. Mirrors `PANEL_TOP_PX` in `src/island/motion.ts`.
 pub const PANEL_TOP: f64 = 6.0;
 
@@ -257,7 +258,7 @@ mod tests {
                 x: 620,
                 y: 0,
                 width: 680,
-                height: 440
+                height: 600
             }
         );
     }
@@ -279,7 +280,7 @@ mod tests {
                 x: -1280 - 425,
                 y: -200,
                 width: 850,
-                height: 550
+                height: 750
             }
         );
     }

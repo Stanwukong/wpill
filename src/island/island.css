@@ -54,13 +54,54 @@
   gap: 10px;
 }
 
-/* Fits the window (minus the top gap and room for the shadow); the apps grid shrinks first. */
+/* Fits the window (minus the top gap and room for the shadow). The clock and media card stay put; past them,
+   .island__scroll takes what's left. The island's box (what usePanelSizeReporter sends Rust) is this capped height. */
 .island__panel {
   padding: 16px 18px 18px;
   max-height: calc(100vh - 6px - 34px);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+}
+
+/*
+ * Calendar, Claude Code and Running apps at their natural heights, scrolling together once the panel is full. It
+ * reaches 6 px left and 12 px right into the panel's padding: room for the rows' -6 px hover bleed on both sides and
+ * a 6 px gutter on the right (always reserved, so rows line up with the header whether or not it scrolls), which
+ * sits 6 px in from the island's edge. The thumb is a 4 px hairline that shows only while the pointer is over the
+ * list (scrolling needs the pointer there).
+ */
+.island__scroll {
+  flex: 0 1 auto;
+  min-height: 0;
+  margin: 0 -12px 0 -6px;
+  padding: 0 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.island__scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.island__scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.island__scroll::-webkit-scrollbar-thumb {
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background-clip: padding-box;
+  background-color: transparent;
+}
+
+.island__scroll:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.island__scroll::-webkit-scrollbar-thumb:active {
+  background-color: rgba(255, 255, 255, 0.32);
 }
 
 .island__header {

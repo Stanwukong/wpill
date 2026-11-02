@@ -118,13 +118,16 @@ export function Island() {
                 <Clock variant="panel" />
               </header>
               <MediaCard media={media} />
-              {calendarListed && <CalendarSection upcoming={calendar.upcoming} />}
-              <ClaudeSection
-                sessions={claudeSessions}
-                limits={claudeLimits}
-                agent={panelRuns.length > 0 ? <AgentRunItems runs={panelRuns} /> : null}
-              />
-              <AppsList />
+              {/* One scroller under the fixed clock and media card; each section keeps its natural height. */}
+              <div className="island__scroll">
+                {calendarListed && <CalendarSection upcoming={calendar.upcoming} />}
+                <ClaudeSection
+                  sessions={claudeSessions}
+                  limits={claudeLimits}
+                  agent={panelRuns.length > 0 ? <AgentRunItems runs={panelRuns} /> : null}
+                />
+                <AppsList />
+              </div>
             </motion.div>
           ) : (
             <motion.div

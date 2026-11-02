@@ -715,6 +715,20 @@ with everything at once; the mark adds 24 px to the 180 px step line's 351 px, s
 CSS px at 150 %). *Alternatives:* a sticky notice until the event starts (a calendar reminder isn't a question waiting on
 you, D19); a second notice at the start (noise if you've already joined); recounting minutes in React (needs a clock).
 
+### D44: One scroller for the panel's lists, and a quieter Calendar section (Phase 6b)
+*What:* the island window grows to 680×600 logical px (was 440; it's transparent and click-through outside the
+reported rect, so the room is free). In the panel, the clock and the media card stay fixed and everything after them
+(Calendar, Claude Code, Running apps) sits in one `overflow-y: auto` column at natural heights. The per-section
+shrink-and-scroll rules (Calendar's `min-height` + inner scroller, Claude's 180 px list, the apps grid's 300 px) are
+gone: three nested scrollers competing for one flex column is what made "Claude Code" draw over "Running apps" and
+rows disappear at 120 % Text size. The scroller reaches into the panel's padding (6 px left, 12 px right) so the rows'
+−6 px hover bleed survives and a 6 px gutter (always reserved, so rows line up with the header) sits 6 px in from the
+edge; its 4 px thumb shows only while the pointer is over the list. The island's box, which Rust hit-tests, stays the
+capped panel height. Calendar: at most 3 of today's events, tomorrow's first only when today has nothing left, Join
+only while an event is Soon or Now (it showed on tomorrow's), and the tasks as one line that opens the first task.
+*Alternatives:* keeping per-section caps tuned per Text size (fragile, still overlapping in edge cases); a fade mask
+at the scroller's edges (decoration; a hard clip is what Windows lists do).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it

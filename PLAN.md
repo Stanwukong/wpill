@@ -1371,6 +1371,11 @@ Cloud project (D35). Replaces the "calendar peek" spike.
 - [x] **Panel:** a Calendar section between the media card and Claude Code: up to 4 events (local time, colour dot,
       title, Now / Soon or a weekday for tomorrow, Join) and 3 tasks (Overdue / Today), "+n more"; a row opens the
       item. It shrinks to one row and scrolls when the panel is short
+- [x] **Panel, decluttered (D44):** at 120 % the sections overlapped and rows vanished. The window is 680×600 now;
+      the clock and media card stay put and Calendar, Claude Code and Running apps share one scroller
+      (`.island__scroll`) at their natural heights (no per-section scrollers). Calendar: at most 3 of today's events
+      (tomorrow's first only once today is over), Join only while Soon / Now, "+n more" counts events, and the tasks
+      are one line ("2 tasks due · 1 overdue" + the first title, which it opens)
 - [x] Checked: Rust 212 tests (announcements once inside the lead time, the lead boundary), clippy, typecheck,
       `pnpm build`; headless-Edge renders of the pill, activity and panel at 100/120/150 %, plain and tinted
       (motion-designer). The full pill is 375 px (351 px before the mark: the 180 px step line), not the ≈330 estimated

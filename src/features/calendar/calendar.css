@@ -116,19 +116,13 @@
   color: var(--danger);
 }
 
-/* Panel section: ClaudeSection's density (30 px rows, 12 px uppercase heading). When the panel runs out of height
-   (large Text size) the list shrinks and scrolls, down to one row: the min-height is the heading + a row + "+n more",
-   so the section never spills over the apps (no overflow clip: it would cut the rows' -6 px hover bleed). */
+/* Panel section: ClaudeSection's density (30 px rows, 12 px uppercase heading), at its natural height in the panel's
+   scroller (island.css): at most three events and one tasks line, so it never needs a scroller of its own. */
 .calendar {
-  flex: 0 1 auto;
-  min-height: 72px;
-  display: flex;
-  flex-direction: column;
   margin-bottom: 14px;
 }
 
 .calendar__heading {
-  flex: none;
   margin: 0 0 6px;
   font-size: 12px;
   font-weight: 600;
@@ -141,10 +135,6 @@
   list-style: none;
   margin: 0 -6px;
   padding: 0;
-  min-height: 30px;
-  max-height: 210px;
-  overflow-y: auto;
-  scrollbar-width: thin;
 }
 
 .calendar-row {
@@ -168,18 +158,13 @@
   background: var(--tile-active);
 }
 
-/* Times right-aligned in tabular figures so "9:30" and "10:00" line up; tasks put their day here, muted. */
+/* Times right-aligned in tabular figures so "9:30" and "10:00" line up; the tasks line leaves it empty. */
 .calendar-row__when {
   flex: none;
   min-width: 52px;
   text-align: right;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-}
-
-.calendar-row--task .calendar-row__when {
-  font-size: 11px;
-  color: var(--island-muted);
 }
 
 .calendar-row__mark {
@@ -205,6 +190,15 @@
   text-overflow: ellipsis;
 }
 
+/* The tasks line: the counts, then the first task's title, muted; the counts never shrink. */
+.calendar-row__count {
+  flex: none;
+}
+
+.calendar-row--tasks .calendar-row__title {
+  color: var(--island-muted);
+}
+
 .calendar-row__tag {
   flex: none;
   padding-right: 4px;
@@ -217,15 +211,14 @@
   font-weight: 600;
 }
 
+/* Under the last event's title (the rows' 8 px padding + 52 px time + 8 px mark + two 10 px gaps), above the tasks. */
 .calendar__more {
-  flex: none;
-  margin: 4px 0 0 82px; /* under the titles */
+  padding: 0 0 4px 88px;
   font-size: 11px;
   color: var(--island-muted);
 }
 
 .calendar__error {
-  flex: none;
   margin: 6px 0 0;
   font-size: 12px;
   color: var(--danger);
