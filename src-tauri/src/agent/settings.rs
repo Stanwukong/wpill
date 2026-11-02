@@ -29,6 +29,8 @@ pub struct AgentSettings {
     pub user_settings: bool,
     /// An approval nobody answers is denied after this long.
     pub approval_timeout_secs: u64,
+    /// The mode a new task starts in (2.8e): `auto` unless changed here.
+    pub default_mode: crate::ipc::AgentMode,
 }
 
 impl Default for AgentSettings {
@@ -43,6 +45,7 @@ impl Default for AgentSettings {
             strict_mcp_config: true,
             user_settings: true,
             approval_timeout_secs: 600,
+            default_mode: crate::ipc::AgentMode::Auto,
         }
     }
 }

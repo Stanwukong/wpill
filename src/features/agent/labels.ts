@@ -1,4 +1,4 @@
-import type { AgentEndReason, AgentRisk, AgentRun, AgentStatus } from "../../lib/types";
+import type { AgentEndReason, AgentMode, AgentRisk, AgentRun, AgentStatus } from "../../lib/types";
 
 /** How an ended run is described: in the finished activity, the panel, the command window. */
 export function endLabel(status: AgentStatus, reason: AgentEndReason | null): string {
@@ -45,4 +45,41 @@ export function ago(atMs: number, now = Date.now()): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours} h ago`;
   return `${Math.floor(hours / 24)} d ago`;
+}
+
+/** Permission modes (2.8e), in the New task picker's order (Auto, the default, first). */
+export const MODES: AgentMode[] = ["auto", "default", "acceptEdits", "plan"];
+
+export const MODE_LABEL: Record<AgentMode, string> = {
+  auto: "Auto",
+  default: "Ask",
+  acceptEdits: "Accept edits",
+  plan: "Plan",
+};
+
+/** The picker's line under the choice. */
+export const MODE_HINT: Record<AgentMode, string> = {
+  auto: "Claude Code's classifier approves everyday steps and blocks risky ones; questions still come to you.",
+  default: "Every step Claude Code would ask about waits for you.",
+  acceptEdits: "File edits and simple file commands in the folder go ahead; everything else asks.",
+  plan: "Claude plans first and asks you to approve the plan before changing anything.",
+};
+
+/**
+ * A terminal session's mode as a tag (2.8e), or `null` for plain `default` and anything unknown. Sessions can also
+ * be in modes Cay never offers (the user's own terminal): those get their own words.
+ */
+export function sessionModeLabel(mode: string | null): string | null {
+  switch (mode) {
+    case "auto":
+    case "acceptEdits":
+    case "plan":
+      return MODE_LABEL[mode];
+    case "bypassPermissions":
+      return "Bypass";
+    case "dontAsk":
+      return "Don't ask";
+    default:
+      return null;
+  }
 }

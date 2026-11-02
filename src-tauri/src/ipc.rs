@@ -235,6 +235,26 @@ pub struct ClaudeSession {
     pub step: Option<String>,
     /// Its to-do list's progress, from the latest `TodoWrite` (2.8d).
     pub todos: Option<TodoCount>,
+    /// Its permission mode as its hooks report it (`default`, `acceptEdits`, `plan`, `auto`, …; 2.8e). Shown
+    /// read-only: Cay never changes a terminal session's mode.
+    pub mode: Option<String>,
+}
+
+/// An agent run's permission mode (2.8e, D40): Claude Code's own names. Auto by default; `bypassPermissions` and
+/// `dontAsk` are never offered (they don't deserialize).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AgentMode {
+    /// Claude Code's classifier approves routine actions and blocks risky ones.
+    Auto,
+    /// Ask: every tool Claude Code would ask about comes to the island.
+    Default,
+    AcceptEdits,
+    Plan,
+}
+
+fn ask_mode() -> AgentMode {
+    AgentMode::Default
 }
 
 /// `TodoWrite`'s progress (2.8d): items completed and in all.
@@ -450,6 +470,10 @@ pub struct AgentRun {
     pub step: Option<String>,
     /// The latest `TodoWrite`'s progress (2.8d), while working.
     pub todos: Option<TodoCount>,
+    /// Its permission mode as Claude Code last reported it (or as Cay just set it) (2.8e).
+    pub mode: AgentMode,
+    /// A mode chosen while no process runs: applies with your next message.
+    pub next_mode: Option<AgentMode>,
     pub turns: u32,
     /// Claude Code's own estimate for the session.
     pub cost_usd: Option<f64>,
@@ -572,6 +596,9 @@ pub struct Routine {
     pub wait_for_me: bool,
     /// Cay's desktop looks and actions; off passes them in `--disallowedTools`.
     pub desktop_tools: bool,
+    /// The mode its runs start in (2.8e). Routines saved before 2.8e read as Ask.
+    #[serde(default = "ask_mode")]
+    pub mode: AgentMode,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
     /// When the schedule was last set or turned on: due times before it don't count; anchors `every`.
@@ -695,6 +722,8 @@ pub struct AgentOptions {
     pub hotkey: String,
     /// Set when the hotkey couldn't be registered (taken by another app).
     pub hotkey_error: Option<String>,
+    /// The mode a new task starts in (2.8e).
+    pub mode: AgentMode,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]

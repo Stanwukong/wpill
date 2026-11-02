@@ -29,6 +29,8 @@ pub struct Session {
     /// The tool it's using now (2.8d), cleared when the task ends.
     step: Option<String>,
     todos: Option<TodoCount>,
+    /// Its permission mode, from the latest hook that reported one (2.8e). Read-only: Cay never changes it.
+    mode: Option<String>,
 }
 
 impl Session {
@@ -45,6 +47,7 @@ impl Session {
             updated_at_ms: self.updated_at_ms,
             step: self.step.clone(),
             todos: self.todos,
+            mode: self.mode.clone(),
         }
     }
 
@@ -109,9 +112,11 @@ impl Sessions {
             }
             _ => (None, None),
         };
-        let step_changed = step != s.step || todos != s.todos;
+        let mode = msg.mode.clone().or_else(|| s.mode.clone());
+        let step_changed = step != s.step || todos != s.todos || mode != s.mode;
         s.step = step;
         s.todos = todos;
+        s.mode = mode;
 
         let before = s.status;
         let needs_input = || {
@@ -190,6 +195,7 @@ impl Sessions {
             chain: Vec::new(),
             step: None,
             todos: None,
+            mode: None,
         });
         self.list.len() - 1
     }
@@ -232,6 +238,7 @@ mod tests {
             }],
             step: None,
             todos: None,
+            mode: None,
         }
     }
 

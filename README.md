@@ -27,8 +27,9 @@ collapsed it doesn't block a single click.
 - **Claude Code sessions** (optional). Cay shows when a session in your terminal or editor is working, when it's done
   and when it needs your input; click to jump to its window.
 - **Claude agent** (optional). Press **Win+Alt+A**, type a task, pick a folder and walk away. Cay runs Claude Code in
-  the background, shows progress in the island, and asks you to **Allow** or **Deny** each risky step right there.
-  With your approval Claude can also look at windows and, one approved step at a time, click and type for you.
+  the background, shows progress in the island, and works like Claude Code's own permission modes: **Auto** by default (Claude Code
+  judges each step; questions and plans still come to you), or **Ask**, **Accept edits** and **Plan**, switched from
+  a chip on the run. Claude can also look at windows and click and type for you.
   **Win+Alt+Escape** stops every run. Tasks can be saved as routines that run on a schedule while Cay is running.
 
 ## Install
@@ -81,16 +82,18 @@ browser).
   its own session transcript under `~/.claude/projects`, outside Cay's control. Cay never captures itself or a
   password field's contents.
 
-## Agent runs never get more permission than you give
+## Agent runs get the permission mode you pick, never more
 
-- Cay always starts Claude Code with `--permission-mode default` and routes every permission prompt to the island. It
-  never uses `bypassPermissions` or `--dangerously-skip-permissions`, and never changes your Claude Code settings for
-  a run. Your own allow rules in Claude Code still apply.
-- Each look at the screen and each desktop action is approved on its own. Clicks and typing are never remembered "for
-  this run". Any key you press or mouse move you make stops an action immediately, and the island stays out of the
-  way while it acts.
-- An unanswered approval is denied after 10 minutes. Routines can wait for you while you're away, but are never
-  pre-approved.
+- Runs use Claude Code's own permission modes: **Auto** (the default: Claude Code's classifier approves everyday steps
+  and blocks risky ones), **Ask** (every step Claude Code would ask about waits for you in the island), **Accept
+  edits** and **Plan**. You pick one per task or routine and can switch a running task from its chip. Every change is
+  in the audit trail. Cay never uses `bypassPermissions` or `--dangerously-skip-permissions`, never changes your Claude
+  Code settings for a run, and never changes the mode of a session you run in a terminal.
+- Whatever Claude Code asks about comes to the island, and only your click answers it; questions and plans come to you
+  in every mode. Outside Auto, each look at the screen and each desktop action is approved on its own, and clicks and
+  typing are never remembered "for this run". In every mode, any key you press or mouse move you make stops an action
+  immediately, and the screen's edge glows while Claude looks or acts.
+- An unanswered approval is denied after 10 minutes. Scheduled routines can wait for you while you're away.
 - Everything a run starts lives in a Windows Job Object: Stop, Win+Alt+Escape or quitting Cay ends the whole process
   tree.
 

@@ -899,6 +899,21 @@ textarea {
   font-size: 11.5px;
 }
 
+/* Items sized by their labels (the spare room shared), so "Accept edits" isn't cut at large Text size. */
+.seg--fit .seg__item {
+  flex: 1 1 auto;
+  padding: 0 6px;
+}
+
+/* The chosen mode's meaning (2.8e): two lines' room, so switching modes never moves the form below. */
+.task__mode-hint {
+  margin: 0;
+  min-height: calc(2 * 1.4em);
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: rgba(245, 245, 247, 0.42);
+}
+
 .routine__when {
   display: flex;
   flex-direction: column;
@@ -1141,6 +1156,16 @@ textarea {
 
 .run__status[data-status="failed"] {
   color: var(--danger);
+}
+
+/* The mode chip (2.8e) sits on the header's middle, not the text baseline. */
+.run__head .mode-chip {
+  align-self: center;
+}
+
+.mode-chip:focus-visible {
+  outline: 1px solid rgba(var(--agent-rgb), 0.7);
+  outline-offset: 1px;
 }
 
 .run__stop {

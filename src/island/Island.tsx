@@ -96,7 +96,7 @@ export function Island() {
               exit={{ opacity: 0 }}
               transition={contentFade}
             >
-              <ActivityView activity={activity} />
+              <ActivityView activity={activity} agentRuns={agentRuns} />
             </motion.div>
           ) : expanded ? (
             <motion.div

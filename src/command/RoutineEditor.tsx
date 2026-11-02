@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MutableRefObject, type ReactNode } from "react";
 import { commands, errorMessage } from "../lib/ipc";
-import type { AgentOptions, IfMissed, RoutineDraft, RoutineView, Schedule, Weekday } from "../lib/types";
+import type { AgentMode, AgentOptions, IfMissed, RoutineDraft, RoutineView, Schedule, Weekday } from "../lib/types";
 import { ALL_DAYS, lastLine, scheduleLine, sortDays, WEEKDAYS, WORKDAYS } from "./routineLabels";
-import { FolderField, LimitsField, useFolders, type Limits } from "./TaskFields";
+import { FolderField, LimitsField, ModeField, useFolders, type Limits } from "./TaskFields";
 
 type Kind = Schedule["kind"];
 
@@ -88,6 +88,7 @@ export function RoutineEditor({
   const [ifMissed, setIfMissed] = useState<IfMissed>(initial.ifMissed);
   const [waitForMe, setWaitForMe] = useState(initial.waitForMe);
   const [desktopTools, setDesktopTools] = useState(initial.desktopTools);
+  const [mode, setMode] = useState<AgentMode>(initial.mode);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -110,6 +111,7 @@ export function RoutineEditor({
     ifMissed,
     waitForMe,
     desktopTools,
+    mode,
   });
 
   // The saved routine as this form normalizes it (first render only), so an untouched form counts as saved.
@@ -209,7 +211,7 @@ export function RoutineEditor({
           ))}
       </div>
 
-      {!view && <p className="routine__status">Its runs ask for approval like any other task.</p>}
+      {!view && <p className="routine__status">Its runs ask like any other task, in the mode below.</p>}
       {view && last && (
         <p className="routine__status">
           <span>{scheduleLine(view, paused)}</span>
@@ -372,6 +374,8 @@ export function RoutineEditor({
         </div>
       </div>
 
+      <ModeField mode={mode} onChange={setMode} />
+
       <LimitsField options={options} limits={limits} onChange={setLimits} budgetRequired />
 
       <div className="task__section routine__switches">
@@ -388,7 +392,11 @@ export function RoutineEditor({
         <Switch
           checked={desktopTools}
           onChange={setDesktopTools}
-          hint="Each look and action still asks you first."
+          hint={
+            mode === "auto"
+              ? "In Auto, Claude Code's classifier approves or blocks each look and action, like its other steps."
+              : "Each look and action still asks you first."
+          }
         >
           Can use desktop tools (look at and act on windows)
         </Switch>

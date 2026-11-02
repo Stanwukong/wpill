@@ -12,7 +12,9 @@ use windows::Win32::System::Threading::{CREATE_NO_WINDOW, CREATE_SUSPENDED};
 
 use super::job::Job;
 use super::mcp::{APPROVE_TOOL, SERVER_NAME};
+use super::mode;
 use super::{actions, tools};
+use crate::ipc::AgentMode;
 
 /// A stdout line longer than this (a huge tool result) is skipped.
 const MAX_LINE: usize = 16 * 1024 * 1024;
@@ -21,17 +23,17 @@ const STDERR_TAIL: usize = 2000;
 
 /// Appended to Claude Code's system prompt for every agent run.
 pub const GUIDANCE: &str = "You are running headless, started from Cay, a Windows desktop helper. The user \
-isn't watching a terminal: they see a one-line status at the top of the screen and approve risky steps with Allow \
-or Deny buttons there. Nobody can answer questions while you work, so don't ask; make a sensible choice and state \
-your assumptions. If you truly can't go on, stop and say exactly what you need in your final message; the user can \
-reply with a follow-up. Prefer the shell and files. Never type, print or send passwords, tokens or other secrets. \
+isn't watching a terminal: they see a one-line status at the top of the screen and answer there whatever Claude \
+Code asks them, which depends on the run's permission mode. Make sensible choices and state your assumptions; when \
+you truly need the user's decision, ask with AskUserQuestion (a few short options) and they'll answer from there. \
+Prefer the shell and files. Never type, print or send passwords, tokens or other secrets. \
 Avoid interactive commands and commands that never end, and don't leave servers or watchers running. End with a \
 short summary of what you did and where the results are.
 
 Cay's desktop tools (mcp__cay__list_windows, focused_window, ui_tree, screenshot) let you look at the user's \
-screen. Use them only when the task is about what's on screen and the shell or files can't answer it. Every look is \
-approved by the user and makes the screen edges glow, so before each one say in one sentence what you're looking \
-for. Get a window's hwnd from list_windows (list again if a window has closed). Prefer ui_tree (text, cheap, exact) \
+screen. Use them only when the task is about what's on screen and the shell or files can't answer it. Every look \
+makes the screen edges glow (and, unless the run is in auto mode, waits for the user's approval), so before each \
+one say in one sentence what you're looking for. Get a window's hwnd from list_windows (list again if a window has closed). Prefer ui_tree (text, cheap, exact) \
 over screenshot; take a screenshot only for visual questions (layout, images, charts) or when the tree is empty. \
 Don't repeat sensitive things you happen to see that the task doesn't need.
 
@@ -40,8 +42,8 @@ desktop. Use them only when the task needs something done in an app and the shel
 of preference: the shell and files; then invoke and set_value on an element's [n] ref from your latest ui_tree \
 (no mouse, works with the window behind); then click, type_text and press_keys (the real mouse and keyboard); \
 launch only for links and Start-menu apps. Look before you act and look again after, one action at a time, \
-and before each action say in one sentence what you're about to do and why. The user approves every action \
-separately and can stop it by touching the mouse or keyboard: if an action is aborted or denied, don't retry it; \
+and before each action say in one sentence what you're about to do and why. Unless the run is in auto \
+mode, the user approves every action separately; they can always stop one by touching the mouse or keyboard: if an action is aborted or denied, don't retry it; \
 stop and say what you were trying to do. Never type or set passwords, tokens or other secrets.";
 
 #[derive(Debug, Clone)]
@@ -59,9 +61,12 @@ pub struct Launch {
     pub name: Option<String>,
     /// Cay's desktop looks and actions; off disallows them.
     pub desktop_tools: bool,
+    /// The permission mode to start in (2.8e): one of the four Cay offers, never `bypassPermissions`.
+    pub mode: AgentMode,
 }
 
-/// The arguments after `claude.exe`. Never `bypassPermissions`: every prompt goes to `approve`.
+/// The arguments after `claude.exe`. The run's mode (2.8e) decides what Claude Code asks about; whatever it asks
+/// goes to `approve`. Never `bypassPermissions` or `dontAsk`.
 pub fn args(l: &Launch, mcp_config: &Path) -> Vec<String> {
     let mut a: Vec<String> = [
         "-p",
@@ -71,7 +76,7 @@ pub fn args(l: &Launch, mcp_config: &Path) -> Vec<String> {
         "stream-json",
         "--verbose",
         "--permission-mode",
-        "default",
+        mode::cli(l.mode),
     ]
     .map(String::from)
     .into();
@@ -223,6 +228,7 @@ mod tests {
             user_settings: true,
             name: None,
             desktop_tools: true,
+            mode: AgentMode::Default,
         }
     }
 
@@ -256,6 +262,14 @@ mod tests {
             .iter()
             .any(|x| x.contains("bypass") || x.contains("dangerously")));
         assert_eq!(a.last().map(String::as_str), Some(GUIDANCE));
+        let auto = args(
+            &Launch {
+                mode: AgentMode::Auto,
+                ..launch()
+            },
+            Path::new("m.json"),
+        );
+        assert!(has_pair(&auto, "--permission-mode", "auto"));
     }
 
     #[test]

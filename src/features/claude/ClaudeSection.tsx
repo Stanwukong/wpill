@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { ClaudeSession, ClaudeStatus } from "../../lib/types";
+import { SessionModeTag } from "../agent/ModeChip";
 import { StepLabel } from "./StepLabel";
 import { WorkingIndicator } from "./WorkingGlyphs";
 import { focusClaudeSession } from "./useClaudeSessions";
@@ -23,7 +24,8 @@ function ago(updatedAtMs: number): string {
 }
 
 /**
- * Panel section: one row per local Claude Code session; a click focuses its terminal or editor. `agent` holds the
+ * Panel section: one row per local Claude Code session; a click focuses its terminal or editor. A session's mode
+ * shows as a read-only tag unless it's plain `default` (2.8e). `agent` holds the
  * agent runs' rows (`<li>`s, features/agent), listed first; null when there are none.
  */
 export function ClaudeSection({ sessions, agent }: { sessions: ClaudeSession[]; agent?: ReactNode }) {
@@ -45,6 +47,7 @@ export function ClaudeSection({ sessions, agent }: { sessions: ClaudeSession[]; 
               ) : (
                 <span className="claude-row__status">{STATUS[s.status]}</span>
               )}
+              <SessionModeTag mode={s.mode} />
               <span className="claude-row__time">{ago(s.updatedAtMs)}</span>
             </button>
           </li>

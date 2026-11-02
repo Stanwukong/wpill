@@ -5,6 +5,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   ActivityHidePayload,
   AgentEntry,
+  AgentMode,
   AgentOptions,
   AgentOutput,
   AgentRuns,
@@ -97,6 +98,10 @@ export const commands = {
   /** Approve a run's waiting plan, or send it back with feedback (required then). */
   agentPlan: (requestId: number, approve: boolean, feedback?: string) =>
     invoke<void>("agent_plan", { requestId, approve, feedback: feedback ?? null }),
+  /** Sets a run's permission mode (2.8e): at once while it runs, else for your next message. */
+  agentSetMode: (runId: string, mode: AgentMode) => invoke<void>("agent_set_mode", { runId, mode }),
+  /** The chip's click: the next mode in Claude Code's cycle (Ask → Accept edits → Plan → Auto), chosen in Rust. */
+  agentCycleMode: (runId: string) => invoke<void>("agent_cycle_mode", { runId }),
   agentOptions: () => invoke<AgentOptions>("agent_options"),
   /** The shell's folder picker; `null` if cancelled. */
   agentPickFolder: () => invoke<string | null>("agent_pick_folder"),

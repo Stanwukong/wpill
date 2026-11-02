@@ -38,7 +38,8 @@ pnpm tauri build            # release build + NSIS installer (~11 min cold: fat 
 cd src-tauri; cargo fmt; cargo clippy --all-targets; cargo test
 pnpm typecheck              # tsc --noEmit
 # Debug builds only: drive agent runs from outside (forwarded to the running Cay; results in its log)
-.\src-tauri\target\debug\cay.exe agent-test start <folder> "<prompt>" haiku 4
+.\src-tauri\target\debug\cay.exe agent-test start <folder> "<prompt>" haiku 4 [auto|default|acceptEdits|plan]   # mode defaults to default (Ask) for tests
+.\src-tauri\target\debug\cay.exe agent-test mode <runId> acceptEdits   # switch a run's permission mode (2.8e)
 .\src-tauri\target\debug\cay.exe agent-test decide <requestId> allow|deny [run]   # also: send, stop, stop-all, show, hide, quit
 .\src-tauri\target\debug\cay.exe agent-test look screenshot '{"hwnd":123}' C:\tmp\shot.png   # a desktop look without Claude (also list_windows, focused_window, ui_tree)
 .\src-tauri\target\debug\cay.exe agent-test act type_text '{"hwnd":123,"text":"hi"}'   # an action without Claude or approvals (no refs; real input: ask first)
@@ -80,7 +81,8 @@ the drive once); `cargo clean --profile dev` when space runs low.
   `bridge.rs` = `cay.exe mcp` (run from `main.rs`, relays stdio JSON-RPC ↔ `pipe.rs`); `hotkey.rs`, `folder.rs`
   (picker + long paths), `installs.rs` (find `claude.exe`, recent folders), `audit.rs` (jsonl trail, run ids),
   `settings.rs` (`agent` block in settings.json). Pure and unit-tested: `stream.rs` (stream-json), `lifecycle.rs`
-  (run state), `approvals.rs`, `describe.rs` (risk, summaries, remember keys), `mcp.rs`, `preview.rs` (2.8b: the card's
+  (run state), `approvals.rs`, `describe.rs` (risk, summaries, remember keys), `mcp.rs`, `mode.rs` (2.8e: the cycle,
+  `set_permission_mode` lines, when desktop tools follow Claude Code), `preview.rs` (2.8b: the card's
   and the command window's diff or wrapped command; `read_existing` is its one file read).
   Routines (2.7e): `routines.rs` (`routines.json` store, validation, the Windows time zone) and `schedule.rs` (pure:
   due times, DST, missed/overlap verdicts); the `agent-routines` thread and `start_run` (shared with `agent_start`) are
@@ -244,9 +246,11 @@ the drive once); `cargo clean --profile dev` when space runs low.
 - **Editing Rust while `pnpm tauri dev` runs restarts Cay**, and a `cay.exe agent-test …` sent during the rebuild finds
   no instance and starts a full Cay of its own; the dev build's relaunch then hands off to it and exits. Check
   `Get-Process cay` before driving tests, and stop a stray instance.
-- **Agent runs never weaken permissions.** Cay always passes `--permission-mode default` and
-  `--permission-prompt-tool mcp__cay__approve`; never `bypassPermissions` or `--dangerously-skip-permissions`, and
-  never write the user's `~/.claude/settings.json` for a run (per-run files live under `%APPDATA%\io.github.stanwukong.cay\
+- **Agent runs use Claude Code's permission modes, never bypass (D40).** Runs start in the mode the user picked (Auto
+  by default; Ask, Accept edits, Plan) and always pass `--permission-prompt-tool mcp__cay__approve`, so whatever
+  Claude Code asks about reaches the island. Never `bypassPermissions`, `dontAsk` or `--dangerously-skip-permissions`
+  (`AgentMode` can't hold them), never change a terminal session's mode, and never write the user's
+  `~/.claude/settings.json` for a run (per-run files live under `%APPDATA%\io.github.stanwukong.cay\
   agent\runs\<runId>\`, deleted when the process exits). The prompt tool's reply is a text block holding
   `{"behavior":"allow","updatedInput":…}` / `{"behavior":"deny","message":…}`.
 - **Agent processes:** `claude.exe` must start `CREATE_SUSPENDED`, be assigned to its Job Object, then resumed
@@ -286,9 +290,10 @@ the drive once); `cargo clean --profile dev` when space runs low.
   max turns. Don't send synthetic keystrokes while the user is at the machine; they land in whatever has focus.
   UI Automation actions (`invoke`, `set_value`) send no input and work with the window behind; ask before testing
   `focus_window`, `click`, `type_text`, `press_keys` or `launch`.
-- **Routines never pre-approve.** A routine's run goes through `start_run` like a new task; its only differences are
-  `--name`, the desktop tools disallowed unless the routine allows them, and patient approvals (timeout paused while
-  you're away, 12 h cap) for scheduled runs. Don't add allow lists or permission modes to routines. Schedules are
+- **Routines run like a new task.** A routine's run goes through `start_run`; its only differences are `--name`, its
+  own mode (Auto for new routines, Ask for ones saved before 2.8e), the desktop tools disallowed unless the routine
+  allows them, and patient approvals (timeout paused while you're away, 12 h cap) for scheduled runs. Don't add allow
+  lists to routines. Schedules are
   checked by the `agent-routines` thread (at least once a minute; never a JS timer). `routines.json` is Cay's file:
   test with `agent-test routine …`, and test due times with `routine due <id>` or a time two minutes ahead, never by
   changing the clock.

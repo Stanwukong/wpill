@@ -1,7 +1,8 @@
-import { useState } from "react";
-import type { AgentApprovalActivity, AgentRisk } from "../../lib/types";
+import { useState, type ReactNode } from "react";
+import type { AgentApprovalActivity, AgentRisk, AgentRun } from "../../lib/types";
 import { ChevronGlyph, RiskGlyph } from "../agent/AgentGlyphs";
 import { RISK_LABEL } from "../agent/labels";
+import { ModeChip } from "../agent/ModeChip";
 import { changePreview, PreviewBlock, type ChangePreview } from "../agent/PreviewBlock";
 import { decide, openRun } from "../agent/useAgentRuns";
 import { AgentMark } from "../claude/WorkingGlyphs";
@@ -13,8 +14,9 @@ export type ApprovalChoice = "allow" | "deny" | "run";
  * An agent run asks to use a tool: mark · project (or routine) · tool · risk, the command or path on its own line, or
  * its diff / wrapped command (click it for the command window), then Deny / Allow and, where Rust offers it, "Allow … for this run". Sticky: Rust withdraws
  * it once answered, so a click only marks the choice as pending. Interactive while hovered (Rust's hit test).
+ * `run` (found by `runId` in Island's runs) adds its mode chip to the head (2.8e).
  */
-export function AgentApproval({ approval }: { approval: AgentApprovalActivity }) {
+export function AgentApproval({ approval, run }: { approval: AgentApprovalActivity; run?: AgentRun }) {
   const { requestId, runId, project, routineName, tool, summary, risk, rememberAs, desktop } = approval;
   const [chosen, setChosen] = useState<ApprovalChoice | null>(null);
 
@@ -34,6 +36,7 @@ export function AgentApproval({ approval }: { approval: AgentApprovalActivity })
       tool={tool}
       risk={risk}
       desktop={desktop}
+      mode={run && <ModeChip run={run} />}
       summary={summary}
       preview={changePreview(approval.preview)}
       summaryHint="Details"
@@ -59,6 +62,7 @@ export function ApprovalCard({
   tool,
   risk,
   desktop,
+  mode,
   summary,
   preview,
   summaryHint,
@@ -74,6 +78,8 @@ export function ApprovalCard({
   tool: string;
   risk: AgentRisk;
   desktop: boolean;
+  /** The run's mode chip (agent runs only). */
+  mode?: ReactNode;
   summary: string;
   preview?: ChangePreview | null;
   summaryHint?: string;
@@ -94,6 +100,7 @@ export function ApprovalCard({
         tool={tool}
         risk={risk}
         desktop={desktop}
+        mode={mode}
       />
       {preview && onSummary ? (
         <button
@@ -153,7 +160,8 @@ export function ApprovalCard({
 
 /**
  * The approval head (2.8a), shared with the question and plan cards (2.8c): mark · title (a quiet button with
- * `onTitle`) · origin · tool, then `count` ("1/2", questions) and the risk badge (omitted without `risk`).
+ * `onTitle`) · origin · tool, then `count` ("1/2", questions), the risk badge (omitted without `risk`) and the run's
+ * mode chip (2.8e).
  */
 export function ApprovalHead({
   title,
@@ -164,6 +172,7 @@ export function ApprovalHead({
   count,
   risk,
   desktop = false,
+  mode,
 }: {
   title: string;
   titleHint?: string;
@@ -173,6 +182,7 @@ export function ApprovalHead({
   count?: string;
   risk?: AgentRisk;
   desktop?: boolean;
+  mode?: ReactNode;
 }) {
   return (
     <div className="approval__head">
@@ -195,6 +205,7 @@ export function ApprovalHead({
           {RISK_LABEL[risk]}
         </span>
       )}
+      {mode}
     </div>
   );
 }

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MutableRefObject } from "react";
 import { commands, errorMessage } from "../lib/ipc";
-import type { AgentOptions } from "../lib/types";
+import type { AgentMode, AgentOptions } from "../lib/types";
 import type { RoutineSeed } from "./routineLabels";
-import { defaultLimits, FolderField, LimitsField, useFolders, type Limits } from "./TaskFields";
+import { defaultLimits, FolderField, LimitsField, ModeField, useFolders, type Limits } from "./TaskFields";
 
 /**
- * The new-task form: the prompt, the folder it runs in (recent folders, or Browse…), and the run's limits behind
+ * The new-task form: the prompt, the folder it runs in (recent folders, or Browse…), its permission mode, and the run's limits behind
  * an Options disclosure. Ctrl+Enter or Run starts it; "Save as routine" opens the routine editor with it.
  */
 export function NewTask({
@@ -25,6 +25,7 @@ export function NewTask({
   const [prompt, setPrompt] = useState("");
   const { folders, cwd, setCwd, add } = useFolders(options);
   const [limits, setLimits] = useState<Limits>(() => defaultLimits(options));
+  const [mode, setMode] = useState<AgentMode>(options.mode);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
@@ -50,6 +51,7 @@ export function NewTask({
         maxTurns: Number.isFinite(turns) && turns > 0 ? turns : null,
         maxBudgetUsd: Number.isFinite(usd) && usd > 0 ? usd : null,
         claudePath: limits.claudePath || null,
+        mode,
       });
       setPrompt("");
       onStarted(runId);
@@ -68,6 +70,7 @@ export function NewTask({
       maxTurns: Number.isFinite(turns) && turns > 0 ? turns : null,
       maxBudgetUsd: Number.isFinite(usd) && usd > 0 ? usd : null,
       claudePath: limits.claudePath || null,
+      mode,
     });
 
   const onPromptKey = (e: KeyboardEvent) => {
@@ -101,6 +104,8 @@ export function NewTask({
         }}
         onError={setError}
       />
+
+      <ModeField mode={mode} onChange={setMode} />
 
       <LimitsField options={options} limits={limits} onChange={setLimits} />
 

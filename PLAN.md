@@ -28,8 +28,8 @@ decided (v0.2 unsigned, D33) (2026-11-01). **4a-5 (release v0.2) and the dock ch
 call (2026-11-01) to start 2.8; they resume after it.
 **Now: [Phase 2.8 agent UX](#phase-28-agent-ux-started-2026-11-01) (D34).** 2.8a (approve terminal sessions from the
 island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the card, D37) , 2.8c (questions and
-plans, D38) and 2.8d (live step line, D39) are built, manual checks pending. **Next: 2.8e** (spiked, design awaiting
-the author's changes) **and 2.8f**, kick-off prompt
+plans, D38) , 2.8d (live step line, D39) and 2.8e (Claude Code's permission modes, Auto by default, D40) are
+built, manual checks pending. **Next: 2.8f**, kick-off prompt
 [prompts/phase-2.8-agent-ux.md](prompts/phase-2.8-agent-ux.md).
 Proposed, not started: [6 Google Calendar and Gmail](#phase-6-google-calendar-and-gmail-proposed-2026-11-01-not-started)
 (D35) and [2.9 other agents and open models](#phase-29-other-agents-and-open-models-proposed-2026-11-01-not-started).
@@ -334,6 +334,11 @@ startFailed`.
 | command | `agent_plan` / `claude_plan` | `(requestId, approve, feedback?)` | `approve: false` needs feedback (sent back as the deny message). |
 | field | `ClaudeSession.step`, `ClaudeSession.todos`, `AgentRun.todos` | `string \| null`, `{ done, total } \| null` | 2.8d. `AgentRun.step` now reads "Tool · target". |
 | pipe field | `Envelope.step`, `Envelope.todos` | `PreToolUse` only | ≤96 chars, no control characters; todos ≤1000. The tool input never reaches the pipe. |
+| type | `AgentMode` | `"auto" \| "default" \| "acceptEdits" \| "plan"` | 2.8e. Claude Code's names; no bypass. |
+| field | `AgentRun.mode`, `AgentRun.nextMode`, `AgentStartRequest.mode`, `AgentOptions.mode`, `Routine.mode` | `AgentMode` | `nextMode`: chosen between messages. Routines missing `mode` read as `default`. |
+| field | `ClaudeSession.mode` | `string \| null` | A terminal session's mode from its hooks, read-only. |
+| command | `agent_set_mode` / `agent_cycle_mode` | `(runId, mode)` / `(runId)` | Live: `set_permission_mode` control request; else for the next message. Audited. |
+| stream | `control_request` `set_permission_mode`; `system/status` `permissionMode`; `control_response` | | Verified on 2.1.314. |
 | pipe reply | `ask::Decision` | `"allow" \| "deny" \| "pass" \| { "answers": {…} } \| "approvePlan" \| { "feedback": "…" }` | The forwarder echoes the original input; a plain allow on a question or plan prints nothing. |
 
 ### Reserved for later phases (names fixed now so they slot in)
@@ -1112,19 +1117,39 @@ restart open sessions)
 5. **Done:** when the task ends, the step goes and the pill shows the clock again.
 6. **Speed:** a session running many quick tools stays smooth (no stutter, no flicker).
 
-**2.8e Permission modes** (like Claude Code's Shift+Tab cycle)
-- [ ] Modes for agent runs: **Ask** (`default`, as today) → **Accept edits** (`acceptEdits`) → **Plan** (`plan`).
-      `bypassPermissions` is never offered (rule kept; D34)
-- [ ] Chosen per task in the command window (default Ask), shown as a chip on the run's panel row and approval card;
-      clicking the chip cycles the mode while hovered (island click, no keyboard)
-- [ ] Switching mid-run: spike the stream-json `control_request` (`set_permission_mode`, as the SDK's streaming client
-      does; wire format unconfirmed). If it can't, the change applies to the next follow-up and the chip says so
-- [ ] Whatever the mode: desktop looks and actions, shell commands, web and MCP tools still ask (Accept edits only
-      covers file edits inside the run's folder); the audit records each mode change
-- [ ] Routines stay at Ask (D29: routines never pre-approve)
-- [ ] Terminal sessions: show the session's mode (hook payload `permission_mode`) on its row; Cay doesn't change it
-- [ ] Update CLAUDE.md's "Agent runs never weaken permissions" gotcha when this lands (the user picks Accept edits;
-      Cay never picks it for them)
+**2.8e Permission modes** (built 2026-11-02, D40; the author reversed "every step asks": runs now match Claude Code)
+- [x] Spiked (2.1.314, haiku, scratch folder): a running `-p` stream-json session accepts
+      `{"type":"control_request","request":{"subtype":"set_permission_mode","mode":…}}`, answers `control_response`
+      success and a `system/status` with the new `permissionMode` (Ask denied a Write, Accept edits wrote it, Plan
+      didn't); `--permission-mode auto` works headless (a `touch` and a Write ran without asking). Not checked:
+      switching while a turn is mid-tool
+- [x] Modes for agent runs, Claude Code's own: **Auto** (default) · **Ask** (`default`) · **Accept edits** · **Plan**.
+      `bypassPermissions` and `dontAsk` are never offered (they don't deserialize). `agent.defaultMode` in settings.json
+- [x] Chosen per task in the command window, shown as a chip on the run's panel row, its cards and the run header;
+      clicking the chip cycles Ask → Accept edits → Plan → Auto (`agent_cycle_mode`, Rust picks the next). A live run
+      switches at once; between messages the choice applies to the next follow-up (`nextMode`, the chip says so). The
+      chip shows what Claude Code reports (`system/init`/`status`), and a refused switch falls back with a note
+- [x] Questions and plans reach the island in every mode (2.8c). In Auto, Cay's own check before desktop looks and
+      actions is skipped (they follow Claude Code's classifier like any tool, the author's call); the glow and the
+      your-input-aborts guard stay. In the other modes they ask as before
+- [x] Routines: a mode per routine, Auto for new ones; routines saved before read as Ask (reverses D29's "stay at Ask")
+- [x] Terminal sessions show their mode (hooks' `permission_mode`) on their row, read-only; Cay never changes it
+- [x] The audit records the start mode and each change (`mode` line: from, to, applies now / next message, by you).
+      The run guidance now tells Claude to ask with `AskUserQuestion` when it needs you
+- [x] `agent-test start … <mode>` (default `default`, so tests still see approvals) and `agent-test mode <runId> <mode>`
+- [x] Checked: Rust 185 tests, clippy, typecheck; UI renders (motion-designer)
+- [ ] Manual check (below)
+
+**Manual check (Phase 2.8e)**
+1. **Default Auto:** start a task that edits a file and runs a command: no approval cards; the chip reads Auto.
+2. **Ask:** pick Ask for a task: approvals come to the island as before.
+3. **Switch mid-run:** while a long task runs in Auto, click the chip until it reads Ask: the next risky step asks.
+4. **Between messages:** after a run ends, click its chip: it says "next message"; send a follow-up: it runs in that mode.
+5. **Plan:** pick Plan: Claude plans, "Plan ready" shows; approve it in the command window and it starts working.
+6. **Question in Auto:** ask Claude to ask you something first: the question card shows even in Auto.
+7. **Desktop in Auto:** a task that takes a screenshot: the glow shows, no approval card. In Ask it asks.
+8. **Routine:** a new routine's editor starts at Auto; an old routine shows Ask.
+9. **Terminal session:** Shift+Tab a terminal session to Accept edits: its panel row shows "Accept edits".
 
 **2.8f Connect you can trust, and small things**
 - [ ] Connect shows the exact `settings.json` change first, keeps a dated backup, Disconnect removes only Cay's entries

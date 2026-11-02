@@ -285,7 +285,18 @@ export interface ClaudeSession {
   step: string | null;
   /** Its to-do list's progress, from the latest `TodoWrite` (2.8d). */
   todos: TodoCount | null;
+  /**
+   * Its permission mode as its hooks report it (2.8e): `default`, `acceptEdits`, `plan`, `auto`, or another of
+   * Claude Code's (`bypassPermissions`, `dontAsk`). Read-only: Cay never changes a terminal session's mode.
+   */
+  mode: string | null;
 }
+
+/**
+ * An agent run's permission mode (2.8e), Claude Code's names: `auto` (its classifier approves everyday steps; the
+ * default), `default` (Ask), `acceptEdits`, `plan`. Bypass is never offered.
+ */
+export type AgentMode = "auto" | "default" | "acceptEdits" | "plan";
 
 /** `TodoWrite`'s progress (2.8d): items completed and in all. */
 export interface TodoCount {
@@ -316,6 +327,10 @@ export interface AgentRun {
   step: string | null;
   /** The latest `TodoWrite`'s progress (2.8d), while working. */
   todos: TodoCount | null;
+  /** Its permission mode as Claude Code last reported it, or as just set (2.8e). */
+  mode: AgentMode;
+  /** Chosen while no process runs: applies with your next message (the chip says so). */
+  nextMode: AgentMode | null;
   turns: number;
   /** Claude Code's own estimate for the session. */
   costUsd: number | null;
@@ -390,6 +405,8 @@ export interface RoutineDraft {
   waitForMe: boolean;
   /** Cay's desktop looks and actions. Off by default. */
   desktopTools: boolean;
+  /** The mode its runs start in (2.8e); new routines start at `auto`, ones saved before 2.8e read as `default`. */
+  mode: AgentMode;
 }
 
 /** A saved routine, as Rust stores it. */
@@ -446,6 +463,8 @@ export interface AgentStartRequest {
   maxTurns?: number | null;
   maxBudgetUsd?: number | null;
   claudePath?: string | null;
+  /** The permission mode (2.8e); omitted uses the default (`auto`). */
+  mode?: AgentMode | null;
 }
 
 export interface ClaudeInstall {
@@ -465,6 +484,8 @@ export interface AgentOptions {
   hotkey: string;
   /** Set when a hotkey couldn't be registered. */
   hotkeyError: string | null;
+  /** The mode a new task starts in (2.8e; `auto` unless changed in settings.json). */
+  mode: AgentMode;
 }
 
 export interface AppError {

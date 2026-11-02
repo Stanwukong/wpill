@@ -41,6 +41,13 @@ pub struct RoutineDraft {
     pub if_missed: IfMissed,
     pub wait_for_me: bool,
     pub desktop_tools: bool,
+    /// The mode its runs start in (2.8e); a new routine's form starts at Auto.
+    #[serde(default = "auto_mode")]
+    pub mode: crate::ipc::AgentMode,
+}
+
+fn auto_mode() -> crate::ipc::AgentMode {
+    crate::ipc::AgentMode::Auto
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -191,6 +198,7 @@ pub fn validate(
         if_missed: draft.if_missed,
         wait_for_me: draft.wait_for_me,
         desktop_tools: draft.desktop_tools,
+        mode: draft.mode,
         created_at_ms: existing.map_or(now, |old| old.created_at_ms),
         updated_at_ms: now,
         schedule_since_ms: since,
@@ -257,6 +265,7 @@ mod tests {
             if_missed: IfMissed::Once,
             wait_for_me: true,
             desktop_tools: false,
+            mode: crate::ipc::AgentMode::Auto,
         }
     }
 

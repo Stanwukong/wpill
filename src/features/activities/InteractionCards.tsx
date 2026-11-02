@@ -2,12 +2,14 @@ import { useState } from "react";
 import { commands } from "../../lib/ipc";
 import type {
   AgentApprovalActivity,
+  AgentRun,
   ClaudeApprovalActivity,
   Interaction,
   QuestionAnswer,
   QuestionView,
 } from "../../lib/types";
 import { ChevronGlyph } from "../agent/AgentGlyphs";
+import { ModeChip } from "../agent/ModeChip";
 import { decide, openRun } from "../agent/useAgentRuns";
 import { decideClaude, focusClaudeSession } from "../claude/useClaudeSessions";
 import { ApprovalHead } from "./AgentApproval";
@@ -20,13 +22,16 @@ type HeadProps = Parameters<typeof ApprovalHead>[0];
 export function AgentInteraction({
   approval,
   interaction,
+  run,
 }: {
   approval: AgentApprovalActivity;
   interaction: Interaction;
+  /** Its run, for the mode chip (2.8e): questions and plans reach you in every mode. */
+  run?: AgentRun;
 }) {
   const { requestId, runId, project, routineName, risk } = approval;
   const open = () => openRun(runId);
-  const head = { title: routineName ?? project, risk };
+  const head = { title: routineName ?? project, risk, mode: run && <ModeChip run={run} /> };
   return interaction.kind === "question" ? (
     <QuestionCard
       head={{ ...head, tool: approval.tool }}

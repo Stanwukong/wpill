@@ -7,6 +7,9 @@
 
 use serde_json::Value;
 
+use super::mode;
+use crate::ipc::AgentMode;
+
 /// Longest text kept per transcript entry; the command window shows the rest as cut.
 pub const MAX_TEXT: usize = 20_000;
 pub const MAX_TOOL_RESULT: usize = 2_000;
@@ -17,6 +20,10 @@ pub enum StreamEvent {
         session_id: String,
         model: Option<String>,
     },
+    /// The session's permission mode, from `system/init` or `system/status` (2.8e).
+    Mode(AgentMode),
+    /// A `control_request` (a mode change) was refused.
+    ControlError(String),
     /// Claude's text in the main conversation (subagents' text is left out).
     Text(String),
     Tool {
@@ -53,12 +60,26 @@ pub fn parse(line: &[u8]) -> Vec<StreamEvent> {
     let main = m.get("parent_tool_use_id").is_none_or(Value::is_null);
     match m.get("type").and_then(Value::as_str) {
         Some("system") if m.get("subtype").and_then(Value::as_str) == Some("init") => {
-            match str_of(&m, "session_id") {
+            let mut events = match str_of(&m, "session_id") {
                 Some(session_id) => vec![StreamEvent::Init {
                     session_id,
                     model: str_of(&m, "model"),
                 }],
                 None => Vec::new(),
+            };
+            events.extend(reported_mode(&m));
+            events
+        }
+        Some("system") if m.get("subtype").and_then(Value::as_str) == Some("status") => {
+            reported_mode(&m).into_iter().collect()
+        }
+        Some("control_response") => {
+            let response = m.get("response").unwrap_or(&Value::Null);
+            if response.get("subtype").and_then(Value::as_str) == Some("error") {
+                let why = str_of(response, "error").unwrap_or_else(|| "refused".into());
+                vec![StreamEvent::ControlError(cut(&why, 500))]
+            } else {
+                Vec::new()
             }
         }
         Some("assistant") => blocks(&m)
@@ -105,6 +126,13 @@ pub fn parse(line: &[u8]) -> Vec<StreamEvent> {
         })],
         _ => Vec::new(),
     }
+}
+
+fn reported_mode(m: &Value) -> Option<StreamEvent> {
+    m.get("permissionMode")
+        .and_then(Value::as_str)
+        .and_then(mode::parse)
+        .map(StreamEvent::Mode)
 }
 
 /// The message's content blocks (a plain string content has none).
@@ -164,13 +192,39 @@ mod tests {
     const RESULT: &str = r#"{"type":"result","subtype":"error_max_turns","is_error":true,"num_turns":2,"total_cost_usd":0.0325,"errors":["Reached maximum number of turns (1)"],"terminal_reason":"max_turns"}"#;
 
     #[test]
+    fn mode_reports_and_refused_switches() {
+        // From the 2.8e spike (2.1.314).
+        let status = r#"{"type":"system","subtype":"status","status":null,"permissionMode":"acceptEdits","uuid":"u","session_id":"s"}"#;
+        assert_eq!(
+            parse(status.as_bytes()),
+            vec![StreamEvent::Mode(AgentMode::AcceptEdits)]
+        );
+        let ok = r#"{"type":"control_response","response":{"subtype":"success","request_id":"mode-1","response":{"mode":"acceptEdits"}}}"#;
+        assert_eq!(parse(ok.as_bytes()), vec![]);
+        let refused = r#"{"type":"control_response","response":{"subtype":"error","request_id":"mode-1","error":"not allowed"}}"#;
+        assert_eq!(
+            parse(refused.as_bytes()),
+            vec![StreamEvent::ControlError("not allowed".into())]
+        );
+        let bypass = r#"{"type":"system","subtype":"status","permissionMode":"bypassPermissions"}"#;
+        assert_eq!(
+            parse(bypass.as_bytes()),
+            vec![],
+            "never shown as one of ours"
+        );
+    }
+
+    #[test]
     fn init_tool_and_denied_result() {
         assert_eq!(
             parse(INIT.as_bytes()),
-            vec![StreamEvent::Init {
-                session_id: "432c70f9-8329".into(),
-                model: Some("claude-haiku-4-5-20251001".into()),
-            }]
+            vec![
+                StreamEvent::Init {
+                    session_id: "432c70f9-8329".into(),
+                    model: Some("claude-haiku-4-5-20251001".into()),
+                },
+                StreamEvent::Mode(AgentMode::Default)
+            ]
         );
         assert_eq!(
             parse(TOOL.as_bytes()),

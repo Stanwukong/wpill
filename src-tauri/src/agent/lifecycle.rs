@@ -9,7 +9,9 @@ use std::collections::VecDeque;
 
 use super::describe;
 use super::stream::{StreamEvent, TurnResult};
-use crate::ipc::{AgentEndReason, AgentEntry, AgentEvent, AgentRun, AgentRunRoutine, AgentStatus};
+use crate::ipc::{
+    AgentEndReason, AgentEntry, AgentEvent, AgentMode, AgentRun, AgentRunRoutine, AgentStatus,
+};
 
 /// Entries kept per run for the command window (oldest dropped first).
 const MAX_ENTRIES: usize = 400;
@@ -27,6 +29,12 @@ pub struct Run {
     step: Option<String>,
     /// The latest `TodoWrite`'s progress (2.8d).
     todos: Option<crate::ipc::TodoCount>,
+    /// The permission mode shown (2.8e): Claude Code's latest report, or a switch Cay just sent.
+    mode: AgentMode,
+    /// Claude Code's latest report, to fall back to if a switch is refused.
+    reported: AgentMode,
+    /// Chosen while no process runs; used by the next follow-up.
+    next_mode: Option<AgentMode>,
     turns: u32,
     cost_usd: Option<f64>,
     /// Claude Code's session id, from `system/init`; needed to resume.
@@ -65,6 +73,9 @@ impl Run {
             reason: None,
             step: None,
             todos: None,
+            mode: AgentMode::Auto,
+            reported: AgentMode::Auto,
+            next_mode: None,
             turns: 0,
             cost_usd: None,
             session: None,
@@ -76,6 +87,38 @@ impl Run {
             transcript: VecDeque::new(),
             routine: None,
         }
+    }
+
+    /// The mode the run starts in.
+    pub fn start_in(&mut self, mode: AgentMode) {
+        self.mode = mode;
+        self.reported = mode;
+    }
+
+    pub fn mode(&self) -> AgentMode {
+        self.mode
+    }
+
+    /// Cay sent a switch to the running process; shown at once, confirmed by Claude Code's `system/status`.
+    pub fn switching(&mut self, to: AgentMode, at_ms: i64) {
+        self.mode = to;
+        self.next_mode = None;
+        self.updated_at_ms = at_ms;
+    }
+
+    /// Chosen between messages: the next follow-up starts in it.
+    pub fn choose_next(&mut self, to: AgentMode, at_ms: i64) {
+        self.next_mode = (to != self.mode).then_some(to);
+        self.updated_at_ms = at_ms;
+    }
+
+    /// The mode a new process (a follow-up) starts in; a mode chosen meanwhile becomes the run's.
+    pub fn take_mode(&mut self) -> AgentMode {
+        if let Some(next) = self.next_mode.take() {
+            self.mode = next;
+            self.reported = next;
+        }
+        self.mode
     }
 
     pub fn is_live(&self) -> bool {
@@ -122,6 +165,19 @@ impl Run {
                 if self.status == AgentStatus::Starting {
                     self.status = AgentStatus::Working;
                 }
+            }
+            StreamEvent::Mode(mode) => {
+                self.mode = mode;
+                self.reported = mode;
+            }
+            StreamEvent::ControlError(why) => {
+                self.mode = self.reported;
+                applied.entries.push(self.push(
+                    at_ms,
+                    AgentEvent::Error {
+                        message: format!("The mode didn't change: {why}"),
+                    },
+                ));
             }
             StreamEvent::Text(text) => {
                 applied
@@ -266,6 +322,8 @@ impl Run {
             reason: self.reason,
             step: self.is_live().then(|| self.step.clone()).flatten(),
             todos: self.is_live().then_some(self.todos).flatten(),
+            mode: self.mode,
+            next_mode: self.next_mode,
             turns: self.turns,
             cost_usd: self.cost_usd,
             model: self.model.clone(),
@@ -338,6 +396,35 @@ mod tests {
                 vec!["Reached maximum number of turns (2)".into()]
             },
         })
+    }
+
+    #[test]
+    fn modes_follow_claude_codes_reports() {
+        let mut r = run();
+        r.start_in(AgentMode::Auto);
+        r.send("go", 1);
+        r.apply(init(), 2);
+        r.apply(StreamEvent::Mode(AgentMode::Auto), 2);
+        r.switching(AgentMode::AcceptEdits, 3);
+        assert_eq!(r.ipc(vec![]).mode, AgentMode::AcceptEdits, "shown at once");
+        let applied = r.apply(StreamEvent::ControlError("no".into()), 4);
+        assert_eq!(
+            r.ipc(vec![]).mode,
+            AgentMode::Auto,
+            "back to what Claude Code reported"
+        );
+        assert_eq!(applied.entries.len(), 1);
+        r.apply(StreamEvent::Mode(AgentMode::Plan), 5);
+        assert_eq!(r.mode(), AgentMode::Plan);
+        r.apply(result("success", 1, 0.01), 6);
+        // Between messages: kept for the next one.
+        r.choose_next(AgentMode::Default, 7);
+        assert_eq!(r.ipc(vec![]).next_mode, Some(AgentMode::Default));
+        assert_eq!(r.ipc(vec![]).mode, AgentMode::Plan);
+        assert_eq!(r.take_mode(), AgentMode::Default);
+        assert_eq!(r.ipc(vec![]).next_mode, None);
+        r.choose_next(AgentMode::Default, 8);
+        assert_eq!(r.ipc(vec![]).next_mode, None, "already that mode");
     }
 
     #[test]

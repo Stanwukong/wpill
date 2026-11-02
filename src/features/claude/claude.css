@@ -122,9 +122,10 @@
   background: var(--agent);
 }
 
+/* It gives way last: a step or a mode tag (2.8e) shrinks before the name goes below a few letters. */
 .claude-row__project {
   flex: 1;
-  min-width: 0;
+  min-width: 6ch;
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 500;

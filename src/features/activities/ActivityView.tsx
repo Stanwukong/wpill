@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { ActivityPayload, PowerActivity } from "../../lib/types";
+import type { ActivityPayload, AgentRun, PowerActivity } from "../../lib/types";
 import { endLabel } from "../agent/labels";
 import { openRun } from "../agent/useAgentRuns";
 import { focusClaudeSession } from "../claude/useClaudeSessions";
@@ -12,8 +12,11 @@ import { BatteryIcon, CapsLockIcon, HeadphonesIcon, SpeakerIcon, SunIcon } from 
 import { ScreenshotActivity } from "./ScreenshotActivity";
 import "./activities.css";
 
-/** The compact island content for one activity. Timing and hit testing live in Rust. */
-export function ActivityView({ activity }: { activity: ActivityPayload }) {
+/**
+ * The compact island content for one activity. Timing and hit testing live in Rust. `agentRuns` (Island's) lets an
+ * agent card show its run's mode chip (2.8e).
+ */
+export function ActivityView({ activity, agentRuns = [] }: { activity: ActivityPayload; agentRuns?: AgentRun[] }) {
   switch (activity.kind) {
     case "volume": {
       const { level, muted, device } = activity.payload;
@@ -77,11 +80,12 @@ export function ActivityView({ activity }: { activity: ActivityPayload }) {
       );
     }
     case "agentApproval": {
-      const { interaction } = activity.payload;
+      const { interaction, runId } = activity.payload;
+      const run = agentRuns.find((r) => r.runId === runId);
       return interaction ? (
-        <AgentInteraction approval={activity.payload} interaction={interaction} />
+        <AgentInteraction approval={activity.payload} interaction={interaction} run={run} />
       ) : (
-        <AgentApproval approval={activity.payload} />
+        <AgentApproval approval={activity.payload} run={run} />
       );
     }
     case "agentActing":

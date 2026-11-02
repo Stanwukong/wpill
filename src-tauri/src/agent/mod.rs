@@ -30,6 +30,7 @@ pub mod interact;
 mod job;
 mod lifecycle;
 mod mcp;
+mod mode;
 mod pipe;
 mod preview;
 mod routines;
@@ -58,7 +59,7 @@ use crate::desktop::{self, refs::Refs};
 use crate::error::{AppError, AppResult};
 use crate::ipc::{
     events, Activity, AgentActingActivity, AgentActingPhase, AgentEntry, AgentEvent,
-    AgentFinishedActivity, AgentOptions, AgentOutputPayload, AgentRisk, AgentRunRoutine,
+    AgentFinishedActivity, AgentMode, AgentOptions, AgentOutputPayload, AgentRisk, AgentRunRoutine,
     AgentRunsPayload, AgentStarted, AgentStatus, ClaudeInstall, Routine, RoutineLastRun,
     RoutineSkip, RoutineTrigger, RoutineView, RoutinesPayload, SkipReason,
 };
@@ -689,6 +690,13 @@ fn approve(app: &AppHandle, conn: u64, rpc_id: Value, tool: String, input: Value
     after.run(app, &agents);
 }
 
+/// Whether the run's desktop tools follow its mode (Auto) instead of Cay asking itself (2.8e).
+fn follows_claude(inner: &mut Inner, run_id: &str) -> bool {
+    inner
+        .slot(run_id)
+        .is_some_and(|s| mode::desktop_follows_claude(s.run.mode()))
+}
+
 /// One of the desktop tools was called: it runs if its prompt was approved (a grant) or its kind is allowed for
 /// this run; otherwise Cay asks in the island itself first.
 fn look(app: &AppHandle, conn: u64, rpc_id: Value, name: &'static str, args: Value) {
@@ -712,6 +720,16 @@ fn look(app: &AppHandle, conn: u64, rpc_id: Value, name: &'static str, args: Val
                 tool,
                 args,
                 pid,
+            });
+        } else if follows_claude(&mut inner, &run_id) {
+            // Auto (2.8e, D40): Claude Code's classifier let it through, as for any other tool.
+            after.looks.push(LookJob {
+                pipe,
+                rpc_id,
+                run_id,
+                tool,
+                args,
+                pid: target.1,
             });
         } else {
             log::info!("agent look {tool} arrived without an approved prompt; asking in Cay");
@@ -767,6 +785,15 @@ fn act(app: &AppHandle, conn: u64, rpc_id: Value, name: &'static str, args: Valu
                 tool,
                 args,
                 pid,
+            });
+        } else if follows_claude(&mut inner, &run_id) {
+            after.looks.push(LookJob {
+                pipe,
+                rpc_id,
+                run_id,
+                tool,
+                args,
+                pid: target.1,
             });
         } else {
             log::info!("agent action {tool} arrived without an approved prompt; asking in Cay");
@@ -1337,6 +1364,7 @@ fn run_routine(app: &AppHandle, id: &str, trigger: RoutineTrigger) -> AppResult<
         max_turns: Some(r.max_turns),
         max_budget_usd: Some(r.max_budget_usd),
         claude_path: r.claude_path,
+        mode: Some(r.mode),
     };
     let routine = RoutineStart {
         tag: AgentRunRoutine {
@@ -1376,6 +1404,8 @@ fn start_process(
     } } });
     std::fs::write(&config, mcp.to_string()).map_err(|e| AppError::AgentStart(e.to_string()))?;
     slot.launch.resume = slot.run.session.clone().filter(|_| slot.generation > 1);
+    // A mode chosen between messages (2.8e) starts this process.
+    slot.launch.mode = slot.run.take_mode();
 
     let (line_app, exit_app) = (app.clone(), app.clone());
     let (line_id, exit_id) = (run_id.to_string(), run_id.to_string());
@@ -1532,6 +1562,9 @@ pub struct AgentStartRequest {
     max_turns: Option<u32>,
     max_budget_usd: Option<f64>,
     claude_path: Option<String>,
+    /// The permission mode (2.8e); `None` uses `agent.defaultMode` (Auto).
+    #[serde(default)]
+    mode: Option<AgentMode>,
 }
 
 #[tauri::command]
@@ -1696,6 +1729,7 @@ fn start_run(
         user_settings: settings.user_settings,
         name: routine.as_ref().map(|r| r.tag.name.clone()),
         desktop_tools: routine.as_ref().is_none_or(|r| r.desktop_tools),
+        mode: request.mode.unwrap_or(settings.default_mode),
     };
     let mut after = After::default();
     let result = {
@@ -1714,9 +1748,11 @@ fn start_run(
                 "routine": routine.as_ref().map(|r| json!({ "id": r.tag.id, "name": r.tag.name })),
                 "trigger": routine.as_ref().map(|r| r.tag.trigger),
                 "desktopTools": launch.desktop_tools,
+                "mode": launch.mode,
             }),
         );
         let mut run = Run::new(run_id.clone(), request.cwd, model, at);
+        run.start_in(launch.mode);
         run.routine = routine.as_ref().map(|r| r.tag.clone());
         let patient = routine
             .as_ref()
@@ -1813,6 +1849,69 @@ pub async fn agent_send(
     };
     after.run(&app, &agents);
     result
+}
+
+#[tauri::command]
+/// Your choice of permission mode for a run (2.8e): sent to the running session at once (`set_permission_mode`), or
+/// kept for your next message when no process runs. Recorded in the audit.
+pub fn agent_set_mode(
+    app: AppHandle,
+    agents: State<'_, Agents>,
+    run_id: String,
+    mode: AgentMode,
+) -> AppResult<()> {
+    let mut after = After::default();
+    let result = {
+        let mut inner = agents.lock();
+        let slot = inner.slot(&run_id).ok_or(AppError::AgentRunGone)?;
+        let from = slot.run.mode();
+        let writable =
+            slot.run.is_live() && slot.process.as_ref().is_some_and(|p| p.stdin.is_some());
+        let at = now_ms();
+        let applies = if writable {
+            let request_id = format!("mode-{at}");
+            let written = slot
+                .process
+                .as_mut()
+                .map(|p| p.write(&mode::set_request(&request_id, mode)));
+            match written {
+                Some(Ok(())) => {
+                    slot.run.switching(mode, at);
+                    "now"
+                }
+                _ => return Err(AppError::AgentStart("Claude Code stopped reading.".into())),
+            }
+        } else {
+            slot.run.choose_next(mode, at);
+            "nextMessage"
+        };
+        inner.audit(
+            &run_id,
+            "mode",
+            json!({ "from": from, "to": mode, "applies": applies, "by": "user" }),
+        );
+        after.runs_changed = true;
+        Ok(())
+    };
+    after.run(&app, &agents);
+    result
+}
+
+#[tauri::command]
+/// The chip's click (2.8e): the mode after the one shown (or the one waiting for your next message), like Claude
+/// Code's Shift+Tab: Ask → Accept edits → Plan → Auto.
+pub fn agent_cycle_mode(
+    app: AppHandle,
+    agents: State<'_, Agents>,
+    run_id: String,
+) -> AppResult<()> {
+    let current = {
+        let mut inner = agents.lock();
+        let slot = inner.slot(&run_id).ok_or(AppError::AgentRunGone)?;
+        let run = slot.run.ipc(vec![]);
+        run.next_mode.unwrap_or(run.mode)
+    };
+    agent_set_mode(app, agents, run_id, mode::next(current))
 }
 
 #[tauri::command]
@@ -2002,6 +2101,7 @@ pub async fn agent_options(agents: State<'_, Agents>) -> AppResult<AgentOptions>
         max_budget_usd: inner.settings.max_budget_usd,
         hotkey: inner.settings.hotkey.clone(),
         hotkey_error: (!inner.hotkey_errors.is_empty()).then(|| inner.hotkey_errors.join(" ")),
+        mode: inner.settings.default_mode,
     })
 }
 
@@ -2055,10 +2155,23 @@ pub fn debug_command(app: &AppHandle, args: &[String]) {
                     max_turns: args.get(4).and_then(|n| n.parse().ok()),
                     max_budget_usd: None,
                     claude_path: None,
+                    // Tests from outside start in Ask unless a mode is given, so approvals still show.
+                    mode: Some(
+                        args.get(5)
+                            .and_then(|m| mode::parse(m))
+                            .unwrap_or(AgentMode::Default),
+                    ),
                 },
             )
             .await
             .map(|s| s.run_id),
+            "mode" => agent_set_mode(
+                app.clone(),
+                agents,
+                arg(1),
+                mode::parse(&arg(2)).unwrap_or(AgentMode::Default),
+            )
+            .map(|()| "mode set".into()),
             "decide" => agent_decide(
                 app.clone(),
                 agents,

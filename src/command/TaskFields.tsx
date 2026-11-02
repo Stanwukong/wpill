@@ -1,6 +1,7 @@
 import { useEffect, useState, type MutableRefObject } from "react";
 import { commands, errorMessage } from "../lib/ipc";
-import type { AgentOptions } from "../lib/types";
+import type { AgentMode, AgentOptions } from "../lib/types";
+import { MODE_HINT, MODE_LABEL, MODES } from "../features/agent/labels";
 
 // Form pieces shared by the new-task form and the routine editor: the folder list and the run's limits.
 
@@ -96,6 +97,35 @@ export function FolderField({
       <button type="button" className="cmd-btn cmd-btn--quiet task__browse" onClick={() => void browse()}>
         Browse…
       </button>
+    </div>
+  );
+}
+
+/**
+ * Mode (2.8e): Claude Code's permission modes as a segmented choice, with what the chosen one means under it. The
+ * hint keeps two lines' room so switching doesn't move the form. Never Bypass.
+ */
+export function ModeField({ mode, onChange }: { mode: AgentMode; onChange: (mode: AgentMode) => void }) {
+  return (
+    <div className="task__section">
+      <span className="task__label" id="task-mode">
+        Mode
+      </span>
+      <div className="seg seg--fit" role="radiogroup" aria-labelledby="task-mode">
+        {MODES.map((m) => (
+          <button
+            key={m}
+            type="button"
+            role="radio"
+            aria-checked={mode === m}
+            className="seg__item"
+            onClick={() => onChange(m)}
+          >
+            {MODE_LABEL[m]}
+          </button>
+        ))}
+      </div>
+      <p className="task__mode-hint">{MODE_HINT[mode]}</p>
     </div>
   );
 }

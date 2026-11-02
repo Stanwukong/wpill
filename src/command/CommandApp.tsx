@@ -40,10 +40,11 @@ function routineDraft(r: RoutineView): RoutineDraft {
     ifMissed: r.ifMissed,
     waitForMe: r.waitForMe,
     desktopTools: r.desktopTools,
+    mode: r.mode,
   };
 }
 
-/** A new routine: what the task knew, then the defaults (weekdays at 09:00, a budget, desktop tools off). */
+/** A new routine: what the task knew, then the defaults (weekdays at 09:00, a budget, desktop tools off, the default mode). */
 function newDraft(seed: RoutineSeed, options: AgentOptions): RoutineDraft {
   const prompt = seed.prompt ?? "";
   return {
@@ -60,6 +61,7 @@ function newDraft(seed: RoutineSeed, options: AgentOptions): RoutineDraft {
     ifMissed: seed.ifMissed ?? "once",
     waitForMe: seed.waitForMe ?? true,
     desktopTools: seed.desktopTools ?? false,
+    mode: seed.mode ?? options.mode,
   };
 }
 

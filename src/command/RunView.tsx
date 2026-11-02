@@ -4,6 +4,7 @@ import type { AgentApprovalActivity, AgentEntry, AgentEvent, AgentRun, Interacti
 import { ClockGlyph, RiskGlyph, StopGlyph } from "../features/agent/AgentGlyphs";
 import { endLabel, RISK_LABEL, runLabel } from "../features/agent/labels";
 import { changePreview, PreviewBlock } from "../features/agent/PreviewBlock";
+import { ModeChip } from "../features/agent/ModeChip";
 import { decide, isLive, stopRun } from "../features/agent/useAgentRuns";
 import { StepLabel } from "../features/claude/StepLabel";
 import { PlanView, QuestionForm } from "./InteractionViews";
@@ -17,7 +18,7 @@ type Decision = Extract<AgentEvent, { kind: "decision" }>;
 const STICK_PX = 24;
 
 /**
- * One run: its header (project, folder, status, Stop), the transcript, approvals waiting on it, and the follow-up
+ * One run: its header (project, folder, status, mode chip, Stop), the transcript, approvals waiting on it, and the follow-up
  * box (queued into the running turn, or resumes the run once it has ended).
  */
 export function RunView({
@@ -74,6 +75,7 @@ export function RunView({
             </span>
           )
         )}
+        {run && <ModeChip run={run} />}
         {run && !live && !run.routine && (
           <button
             className="cmd-btn cmd-btn--quiet run__stop"

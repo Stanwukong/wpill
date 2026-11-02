@@ -50,6 +50,9 @@ pub struct Envelope {
     /// `PreToolUse` of `TodoWrite`: its progress.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub todos: Option<TodoCount>,
+    /// The session's permission mode as the hook reports it (2.8e), shown read-only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permission_mode: Option<String>,
     /// Nearest parent first.
     #[serde(default)]
     pub chain: Vec<Proc>,
@@ -66,6 +69,8 @@ struct HookInput {
     notification_type: Option<String>,
     #[serde(default)]
     source: Option<String>,
+    #[serde(default)]
+    permission_mode: Option<String>,
     #[serde(default)]
     tool_name: Option<String>,
     #[serde(default)]
@@ -129,6 +134,8 @@ pub struct Message {
     /// For `ToolStart`.
     pub step: Option<String>,
     pub todos: Option<TodoCount>,
+    /// `default`, `acceptEdits`, `plan`, `auto`, … when the hook said.
+    pub mode: Option<String>,
 }
 
 /// Forwarder side: the envelope for a hook's stdin, or `None` if it isn't one we track.
@@ -151,6 +158,7 @@ pub fn envelope(stdin: &[u8], at_ms: i64, chain: Vec<Proc>) -> Option<Envelope> 
         source: input.source,
         step,
         todos,
+        permission_mode: input.permission_mode,
         chain,
     };
     check(&envelope).map(|_| envelope)
@@ -171,6 +179,7 @@ pub fn decode(bytes: &[u8]) -> Option<Message> {
         chain: envelope.chain,
         step: envelope.step,
         todos: envelope.todos,
+        mode: envelope.permission_mode,
     })
 }
 
@@ -200,7 +209,11 @@ fn check(e: &Envelope) -> Option<Event> {
     let todos_ok = e
         .todos
         .is_none_or(|t| t.total <= MAX_TODOS && t.done <= t.total);
-    if !step_ok || !todos_ok {
+    let mode_ok = e
+        .permission_mode
+        .as_deref()
+        .is_none_or(|m| m.len() <= 32 && m.chars().all(|c| c.is_ascii_alphanumeric()));
+    if !step_ok || !todos_ok || !mode_ok {
         return None;
     }
     event_of(
@@ -307,6 +320,15 @@ mod tests {
         assert!(!wire.contains("secret"));
         let m = decode(wire.as_bytes()).unwrap();
         assert_eq!(m.step.as_deref(), Some("Edit · src/main.rs"));
+        assert_eq!(m.mode, None);
+        let with_mode = stdin.replace(
+            "\"PreToolUse\"",
+            "\"PreToolUse\",\"permission_mode\":\"acceptEdits\"",
+        );
+        assert_eq!(
+            round_trip(&with_mode).unwrap().mode.as_deref(),
+            Some("acceptEdits")
+        );
         assert_eq!(m.todos, None);
         let todo = r#"{"session_id":"s","cwd":"C:\\p","hook_event_name":"PreToolUse","tool_name":"TodoWrite",
             "tool_input":{"todos":[{"content":"a","status":"completed"},{"content":"b","status":"pending"}]}}"#;

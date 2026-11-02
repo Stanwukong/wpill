@@ -635,6 +635,23 @@ sits in a fixed 180 px box so the island grows once when work starts, not on eve
 session transcript (`transcript_path`) for the latest tool (file I/O and parsing a format that isn't public), showing
 only `PostToolUse` (the step would always lag one tool behind).
 
+### D40: Agent runs use Claude Code's permission modes, Auto by default (Phase 2.8e; reverses D34's rule and D29)
+*What:* the author asked for automation that flows like Claude Code itself rather than asking about every step. Runs
+start in **Auto** (Claude Code's classifier approves routine actions and blocks risky ones) and can be switched to Ask
+(`default`), Accept edits or Plan, per task, per routine (Auto for new ones) and mid-run from a chip, cycled like
+Shift+Tab. Questions and plans still come to the island in every mode. *Supersedes:* D34's "Cay's runs never weaken
+permissions; every prompt goes to the island" and D29's "routines stay at Ask". *What stays:* `bypassPermissions` and
+`dontAsk` are never offered or passed; whatever Claude Code asks about still goes to the island, and only a click
+decides; Cay never changes a terminal session's mode or writes the user's settings; the audit records every mode
+change. *Desktop tools follow the mode* (the author's call): in Auto, Cay's own second check before a look or an action
+is skipped, so they're judged by Claude Code's classifier like any tool; the screen glow and the your-input-aborts guard
+stay, and in the other modes they ask as before. *How switching works (spiked, 2.1.314):* a stream-json
+`control_request` `set_permission_mode` gets a `control_response` and a `system/status` with the new
+`permissionMode`; between messages the choice is kept and passed as `--permission-mode` with the next follow-up. The
+chip shows what Claude Code reports, so it can't drift from the real mode. *Alternatives:* the earlier proposal (Ask
+default, per-run `ask` rules keeping `rm`/`mv`/`cp` asking under Accept edits; the author preferred Claude Code's own
+semantics); offering Bypass (Claude Code itself hides it); a fixed per-run mode (no mid-run switch).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -823,6 +840,7 @@ needs the same DPI awareness as the app it measures, or it reports a consistent 
 | 2026-11-01 | Stage 2.8b built: diffs and whole commands on approval cards, built in Rust (D37); the whole preview and session requests in the command window (motion-designer). Manual checklist pending. |
 | 2026-11-01 | Stage 2.8c built: questions and plans from sessions and agent runs, answered in the island and the command window, never with a bare allow (D38); spiked first with Claude Code 2.1.314. Manual checklist pending. |
 | 2026-11-02 | Stage 2.8d built: the live step line and to-do progress in the pill and panel, from a background `PreToolUse` hook and stream-json (D39). Stage 2.8e spiked: a running stream-json run accepts `set_permission_mode`, and per-run ask rules keep filesystem shell commands asking under Accept edits. Manual checklist pending. |
+| 2026-11-02 | Stage 2.8e built: the author reversed "every step asks" (D40). Runs use Claude Code's own modes, Auto by default, switched mid-run from a chip (`set_permission_mode`) or for the next message; routines get a mode; desktop tools follow Auto. Manual checklist pending. |
 
 ## 7. Results & metrics
 

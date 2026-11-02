@@ -50,3 +50,8 @@ export function openRun(runId: string) {
 export function stopRun(runId: string) {
   commands.agentStop(runId).catch((err: unknown) => console.debug("agent stop", err));
 }
+
+/** The mode chip's click (2.8e): Rust picks the next mode and switches the run now or from your next message. */
+export function cycleMode(runId: string) {
+  return commands.agentCycleMode(runId);
+}

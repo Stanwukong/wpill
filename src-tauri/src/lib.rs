@@ -97,6 +97,8 @@ pub fn run() {
             agent::command_take_focus,
             agent::agent_approval_preview,
             agent::agent_answer,
+            agent::agent_set_mode,
+            agent::agent_cycle_mode,
             agent::agent_plan,
             agent::command_window_hide,
             agent::routines_list,

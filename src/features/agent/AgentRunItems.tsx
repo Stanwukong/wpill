@@ -4,12 +4,13 @@ import { StepLabel } from "../claude/StepLabel";
 import { WorkingIndicator } from "../claude/WorkingGlyphs";
 import { ClockGlyph, RunDot, StopGlyph } from "./AgentGlyphs";
 import { ago, runLabel } from "./labels";
+import { ModeChip } from "./ModeChip";
 import { decide, isLive, openRun, stopRun } from "./useAgentRuns";
 import "./agent.css";
 
 /**
  * Agent runs as rows of the panel's Claude Code list (`<li>`s; `ClaudeSection` owns the list). A row opens the
- * command window on its run; Stop ends a live run. Pending approvals sit under their run: the panel is where they
+ * command window on its run; its mode chip cycles the permission mode (2.8e); Stop ends a live run. Pending approvals sit under their run: the panel is where they
  * are answered while the island is expanded.
  */
 export function AgentRunItems({ runs }: { runs: AgentRun[] }) {
@@ -47,6 +48,7 @@ function AgentRunItem({ run }: { run: AgentRun }) {
           ) : (
             <span className="agent-row__status">{runLabel(run)}</span>
           )}
+          <ModeChip run={run} />
           {live ? (
             <button
               className="agent-row__stop"

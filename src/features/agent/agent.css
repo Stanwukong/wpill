@@ -65,6 +65,85 @@
   color: var(--agent);
 }
 
+/*
+ * A run's permission mode (2.8e, ModeChip): the badge's size, quieter. Ask is a plain hairline; Auto (the default,
+ * Claude Code deciding) a light amber tint; Accept edits a soft fill; Plan a brighter hairline. A mode that applies
+ * from the next message is dashed (not in effect yet). A terminal session's tag is the same chip, static.
+ * Only 120 ms color changes; nothing loops.
+ */
+.mode-chip {
+  --chip-fg: var(--island-muted);
+  --chip-bg: transparent;
+  --chip-bg-hover: rgba(255, 255, 255, 0.07);
+  --chip-line: var(--island-border);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--chip-bg);
+  box-shadow: inset 0 0 0 1px var(--chip-line);
+  font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: var(--chip-fg);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+.mode-chip[data-mode="auto"] {
+  --chip-fg: var(--agent);
+  --chip-bg: rgba(var(--agent-rgb), 0.12);
+  --chip-bg-hover: rgba(var(--agent-rgb), 0.2);
+  --chip-line: transparent;
+}
+
+.mode-chip[data-mode="acceptEdits"] {
+  --chip-fg: rgba(245, 245, 247, 0.86);
+  --chip-bg: rgba(255, 255, 255, 0.1);
+  --chip-bg-hover: rgba(255, 255, 255, 0.15);
+  --chip-line: transparent;
+}
+
+.mode-chip[data-mode="plan"] {
+  --chip-fg: rgba(245, 245, 247, 0.86);
+  --chip-line: rgba(255, 255, 255, 0.3);
+}
+
+/* Terminal-only: nothing asks in this session. */
+.mode-chip[data-mode="bypassPermissions"] {
+  --chip-fg: var(--danger);
+  --chip-line: rgba(255, 107, 107, 0.3);
+}
+
+.mode-chip[data-next="true"] {
+  background: transparent;
+  box-shadow: none;
+  outline: 1px dashed color-mix(in srgb, var(--chip-fg) 60%, transparent);
+  outline-offset: -1px;
+}
+
+.mode-chip:hover:not(:disabled):not([data-static]) {
+  background: var(--chip-bg-hover);
+}
+
+.mode-chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.mode-chip[data-static] {
+  cursor: default;
+}
+
 /* Buttons: Allow is the one filled thing (amber, dark ink); Deny and the rest stay quiet. */
 .agent-btn {
   flex: none;
