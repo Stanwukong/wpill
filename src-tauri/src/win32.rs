@@ -3,7 +3,9 @@
 use std::ffi::c_void;
 
 use windows::core::{HSTRING, PWSTR};
-use windows::Win32::Foundation::{CloseHandle, LocalFree, HANDLE, HLOCAL, HWND};
+use windows::Win32::Foundation::{
+    CloseHandle, LocalFree, FILETIME, HANDLE, HLOCAL, HWND, SYSTEMTIME,
+};
 use windows::Win32::Security::Authorization::{
     ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
 };
@@ -12,6 +14,9 @@ use windows::Win32::Security::{
     TOKEN_USER,
 };
 use windows::Win32::System::Threading::{CreateEventW, GetCurrentProcess, OpenProcessToken};
+use windows::Win32::System::Time::{
+    FileTimeToSystemTime, SystemTimeToFileTime, SystemTimeToTzSpecificLocalTime,
+};
 use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, GetWindowThreadProcessId};
 
 /// A kernel handle closed on drop. Events are safe to signal from any thread.
@@ -123,4 +128,32 @@ pub fn window_pid(hwnd: HWND) -> u32 {
     // SAFETY: pid outlives the call; an invalid hwnd leaves it at 0.
     unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
     pid
+}
+
+/// 100 ns intervals between 1601-01-01 and 1970-01-01, in ms.
+const EPOCH_DIFF_MS: i64 = 11_644_473_600_000;
+
+/// Minutes Windows' current time zone (with its DST rules) is ahead of UTC at `utc_ms`; 0 if it can't say.
+pub fn local_offset_min(utc_ms: i64) -> i64 {
+    let ticks = (utc_ms + EPOCH_DIFF_MS) * 10_000;
+    let utc = FILETIME {
+        dwLowDateTime: ticks as u32,
+        dwHighDateTime: (ticks >> 32) as u32,
+    };
+    let (mut st, mut local_st, mut local) = (
+        SYSTEMTIME::default(),
+        SYSTEMTIME::default(),
+        FILETIME::default(),
+    );
+    // SAFETY: plain conversions between out-structs we own; `None` is the current time zone.
+    let ok = unsafe {
+        FileTimeToSystemTime(&utc, &mut st).is_ok()
+            && SystemTimeToTzSpecificLocalTime(None, &st, &mut local_st).is_ok()
+            && SystemTimeToFileTime(&local_st, &mut local).is_ok()
+    };
+    if !ok {
+        return 0;
+    }
+    let local = (i64::from(local.dwHighDateTime) << 32) | i64::from(local.dwLowDateTime);
+    (local - ticks) / 10_000 / 60_000
 }

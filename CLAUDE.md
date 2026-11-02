@@ -45,11 +45,16 @@ pnpm typecheck              # tsc --noEmit
 .\src-tauri\target\debug\cay.exe agent-test act type_text '{"hwnd":123,"text":"hi"}'   # an action without Claude or approvals (no refs; real input: ask first)
 .\src-tauri\target\debug\cay.exe agent-test session-decide <requestId> allow|deny   # a terminal session's held permission request (2.8a; id in the log)
 .\src-tauri\target\debug\cay.exe agent-test routine list|save '<draftJson>'|run <id>|due <id>|delete <id>|pause on|off   # JSON args: from Git Bash (C12)
+.\src-tauri\target\debug\cay.exe google-test state|refresh|connect|disconnect   # Phase 6: the Google watcher's state and counts in the log
+# Google client (never commit it): set before `pnpm tauri dev` / `pnpm tauri build`, or use google.clientId in settings.json
+$env:CAY_GOOGLE_CLIENT_ID='…apps.googleusercontent.com'; $env:CAY_GOOGLE_CLIENT_SECRET='…'
+cd src-tauri; cargo test -- --ignored winhttp   # live: reaches Google over WinHTTP without an account
 ```
 
 The first `cargo build` compiles ~370 crates (several minutes); later rebuilds of the
 `cay` crate take 1–2 minutes in debug. `target\debug` grows by GBs over many rebuilds (it hit ~20 GB and filled
-the drive once); `cargo clean --profile dev` when space runs low.
+the drive once, and again in 6a, C14); `cargo clean --profile dev` when space runs low, or delete
+`target\debug\incremental` and any `topbar*` files in `target\debug\deps` (pre-rename leftovers cargo never reuses).
 
 ## Layout
 
@@ -89,6 +94,12 @@ the drive once); `cargo clean --profile dev` when space runs low.
   Routines (2.7e): `routines.rs` (`routines.json` store, validation, the Windows time zone) and `schedule.rs` (pure:
   due times, DST, missed/overlap verdicts); the `agent-routines` thread and `start_run` (shared with `agent_start`) are
   in `mod.rs`.
+  `google/` (Phase 6, D42): `mod.rs` = managed `Google`, the `google-watcher` thread (through `activity::Watcher`),
+  sign-in on a `google-auth` thread, tray Connect/Disconnect, commands, the cache; `auth.rs` (PKCE, loopback listener,
+  token exchange, refresh, revoke), `http.rs` (WinHTTP client), `vault.rs` (Credential Manager), `calendar.rs`,
+  `tasks.rs`, `network.rs` (connectivity hint), `settings.rs` (`google` block); pure and unit-tested with synthetic
+  fixtures (`google/fixtures/`): `logic.rs` (Google's JSON → events and tasks, phases, boundaries, dates, backoff).
+  `win32::local_offset_min` is Windows' time-zone offset (shared with routines).
   `window/command.rs` creates the focusable `command` window (`command.html` → `src/command/`).
   `desktop/` (Phase 2.7c looks, 2.7d actions): `mod.rs` = `run(Look)` on a per-look MTA thread and `act(…)` on a
   per-action one (one action at a time), `windows.rs` (Alt+Tab list from `apps/`, target checks: gone, ours, cloaked,
@@ -305,6 +316,16 @@ the drive once); `cargo clean --profile dev` when space runs low.
   checked by the `agent-routines` thread (at least once a minute; never a JS timer). `routines.json` is Cay's file:
   test with `agent-test routine …`, and test due times with `routine due <id>` or a time two minutes ahead, never by
   changing the clock.
+- **Google (Phase 6) has secrets and network code; keep them narrow.** The refresh token lives only in Credential
+  Manager (`Cay/google`); the access token only in the watcher's memory; never log a token, an event title or a
+  description (the debug command logs counts and times). The OAuth client comes from `CAY_GOOGLE_CLIENT_ID` /
+  `CAY_GOOGLE_CLIENT_SECRET` at build time (`option_env!`, `build.rs` reruns on change) or `google.clientId`; never commit
+  one. HTTP goes through `google/http.rs` (WinHTTP, Windows' TLS and proxy): don't add reqwest/ureq/rustls. Sign-in is
+  the system browser and a one-shot `127.0.0.1` listener that checks `state`; never a webview (Google refuses them).
+  Links stay in Rust (https only, meeting hosts checked in `logic.rs`) and open by id. Tests use the fixtures, never a
+  live account; ask before anything that signs in, registers with Google or sends a request as the author. Calendar
+  sync tokens can't be combined with `timeMin`/`timeMax`/`orderBy`: keep the windowed query. Task `due` is a date
+  (midnight UTC), compared with the local date.
 - **Windows PowerShell 5.1 can't list GSMTC sessions** (`GetSessions()` comes back empty). Check media state with the
   `cay_lib=debug` log instead.
 

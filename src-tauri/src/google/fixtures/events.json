@@ -1,0 +1,100 @@
+{
+  "kind": "calendar#events",
+  "summary": "Work",
+  "items": [
+    {
+      "id": "ended1",
+      "status": "confirmed",
+      "summary": "Breakfast",
+      "start": { "dateTime": "2026-11-02T07:00:00Z" },
+      "end": { "dateTime": "2026-11-02T08:00:00Z" },
+      "eventType": "default"
+    },
+    {
+      "id": "standup1_20261102T084500Z",
+      "status": "confirmed",
+      "htmlLink": "https://www.google.com/calendar/event?eid=c3RhbmR1cDE",
+      "summary": "Standup",
+      "start": { "dateTime": "2026-11-02T09:45:00+01:00", "timeZone": "Europe/London" },
+      "end": { "dateTime": "2026-11-02T10:15:00+01:00" },
+      "hangoutLink": "https://meet.google.com/abc-defg-hij",
+      "attendees": [
+        { "email": "me@example.com", "self": true, "responseStatus": "accepted" },
+        { "email": "ada@example.com", "responseStatus": "needsAction" }
+      ],
+      "eventType": "default"
+    },
+    {
+      "id": "allday1",
+      "status": "confirmed",
+      "summary": "Conference",
+      "start": { "date": "2026-11-02" },
+      "end": { "date": "2026-11-03" }
+    },
+    {
+      "id": "declined1",
+      "status": "confirmed",
+      "summary": "Optional sync",
+      "start": { "dateTime": "2026-11-02T09:30:00Z" },
+      "end": { "dateTime": "2026-11-02T10:00:00Z" },
+      "attendees": [{ "email": "me@example.com", "self": true, "responseStatus": "declined" }]
+    },
+    {
+      "id": "review1",
+      "status": "confirmed",
+      "summary": "  Design review ",
+      "start": { "dateTime": "2026-11-02T10:00:00Z" },
+      "end": { "dateTime": "2026-11-02T11:00:00Z" },
+      "conferenceData": {
+        "entryPoints": [
+          { "entryPointType": "phone", "uri": "tel:+1-555-0100" },
+          { "entryPointType": "video", "uri": "https://example.zoom.us/j/123" }
+        ]
+      }
+    },
+    {
+      "id": "focus1",
+      "status": "confirmed",
+      "summary": "Focus time",
+      "start": { "dateTime": "2026-11-02T11:00:00Z" },
+      "end": { "dateTime": "2026-11-02T12:00:00Z" },
+      "eventType": "focusTime"
+    },
+    {
+      "id": "lunch1",
+      "status": "confirmed",
+      "summary": "Lunch with Ada",
+      "start": { "dateTime": "2026-11-02T12:00:00Z" },
+      "end": { "dateTime": "2026-11-02T13:00:00Z" },
+      "location": "http://meet.google.com/not-https",
+      "hangoutLink": "https://meet.google.com@evil.example/x"
+    },
+    {
+      "id": "cancelled1",
+      "status": "cancelled",
+      "start": { "dateTime": "2026-11-02T13:00:00Z" },
+      "end": { "dateTime": "2026-11-02T14:00:00Z" }
+    },
+    {
+      "id": "untitled1",
+      "status": "tentative",
+      "start": { "dateTime": "2026-11-02T14:00:00Z" },
+      "end": { "dateTime": "2026-11-02T14:30:00Z" }
+    },
+    {
+      "id": "zoom1",
+      "status": "confirmed",
+      "summary": "Zoom sync",
+      "start": { "dateTime": "2026-11-02T15:00:00Z" },
+      "end": { "dateTime": "2026-11-02T15:30:00Z" },
+      "location": " https://us02web.zoom.us/j/999 "
+    },
+    {
+      "id": "far1",
+      "status": "confirmed",
+      "summary": "Next week",
+      "start": { "dateTime": "2026-11-09T09:00:00Z" },
+      "end": { "dateTime": "2026-11-09T10:00:00Z" }
+    }
+  ]
+}

@@ -22,6 +22,10 @@ pub mod events {
     pub const CLAUDE_ASKS: &str = "claude:asks";
     /// Sent to the `command` window only: which held session request to show when it opens (2.8b).
     pub const COMMAND_FOCUS_ASK: &str = "command:focus-ask";
+    /// Google sign-in state changed (Phase 6a).
+    pub const GOOGLE_STATE: &str = "google:state";
+    /// Upcoming events and due tasks changed, or one changed phase (Phase 6a).
+    pub const CALENDAR_UPCOMING: &str = "calendar:upcoming";
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -799,4 +803,84 @@ pub struct MediaSession {
     pub can_next: bool,
     pub can_prev: bool,
     pub can_seek: bool,
+}
+
+// ---- Phase 6: Google Calendar and Tasks ----
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum GoogleStatus {
+    Disconnected,
+    /// The browser is open on Google's sign-in.
+    Connecting,
+    Connected,
+    /// Google no longer accepts the saved sign-in (revoked, or a password change): Connect again.
+    Reconnect,
+}
+
+/// `google:state` and `google_state`. Never carries a token.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoogleState {
+    pub status: GoogleStatus,
+    /// The account's primary calendar id (its address), once a fetch has seen it.
+    pub account: Option<String>,
+    /// What was granted: Google's consent screen lets you untick a scope.
+    pub calendar: bool,
+    pub tasks: bool,
+    pub last_sync_ms: Option<i64>,
+    /// Why the last refresh or sign-in failed (offline, Google's error); the last data is kept.
+    pub error: Option<String>,
+    /// This build (or settings.json) has a Google client to sign in with.
+    pub configured: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EventPhase {
+    Later,
+    /// Starts within `google.soonMinutes`.
+    Soon,
+    /// In progress.
+    Now,
+}
+
+/// An upcoming event. Its links stay in Rust (`calendar_open` / `calendar_join` take the id).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarEvent {
+    /// Google's event id (one per recurring instance).
+    pub id: String,
+    pub title: String,
+    pub start_ms: i64,
+    pub end_ms: i64,
+    /// The calendar's name.
+    pub calendar: String,
+    /// The calendar's colour in Google (`#rrggbb`).
+    pub color: Option<String>,
+    pub has_join: bool,
+    pub phase: EventPhase,
+}
+
+/// An open task due today or overdue. Tasks have dates, not times.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoogleTask {
+    pub id: String,
+    pub title: String,
+    /// `YYYY-MM-DD`.
+    pub due: String,
+    pub overdue: bool,
+    /// The task list's name.
+    pub list: String,
+}
+
+/// `calendar:upcoming` and `calendar_upcoming`: the next 24 h of events (soonest first) and due tasks.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarUpcoming {
+    pub events: Vec<CalendarEvent>,
+    pub tasks: Vec<GoogleTask>,
+    /// The pill's calendar icon shows: an event soon or in progress, or a task due.
+    pub pending: bool,
 }

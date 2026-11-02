@@ -668,6 +668,39 @@ activity queue. *Windows Terminal tabs:* not built; nothing maps a process to a 
 *Alternatives:* polling claude.ai's usage page (network, sign-in), reading Claude Code's transcripts
 (no limits there), a bundled WAV (a system sound respects the user's sound scheme).
 
+### D42: Google through Cay's own OAuth client, on Windows' own HTTP stack, polled in a 24 h window (Phase 6a)
+*What:* the research D35 asked for, then the design the author agreed to (2026-11-02, all five points). *Sign-in:*
+Google's installed-app flow as its current docs require: PKCE (S256), a loopback redirect on `http://127.0.0.1:<random
+port>` (custom schemes and copy/paste codes are no longer supported), the system browser (embedded webviews fail with
+`disallowed_useragent`). Refresh tokens are always issued to installed apps; `invalid_grant` means Connect again, and
+revoking removes every grant of the project. Google calls desktop apps "public clients [that] cannot keep secrets
+confidential" and makes `client_secret` optional, so the client id and secret are baked in at build time from
+`CAY_GOOGLE_CLIENT_ID` / `CAY_GOOGLE_CLIENT_SECRET` (never in the repo; `settings.json` can name your own client).
+*Verification:* sensitive scopes need a homepage and privacy policy on a verified domain, a demo video and a
+justification per scope; unverified apps show a warning and are capped at 100 users, and *Testing* projects get 7-day
+refresh tokens. So the project goes *In Production* unverified for the author and testers, and verification is done
+before the public release (already the last step). Gmail's restricted scopes need a yearly assessment (CASA), and
+Google's page names no exemption for local-only apps: asked before 6c. *No iCal fallback:* it has no tasks and would
+need a recurrence engine (RRULE, exceptions, time zones), all thrown away once sign-in exists. *No sync tokens:* Google
+refuses `syncToken` with `timeMin`, `timeMax` and `orderBy`; one windowed query per calendar (now − 12 h to now + 24 h,
+`singleEvents`, `eventTypes=default,fromGmail`) every 5 minutes is a few KB and needs no local store. *No new crates
+(dependency decision):* HTTP is WinHTTP through the `windows` crate (Windows' TLS, certificate store and proxy
+settings), PKCE uses BCrypt's SHA-256 and RNG, tokens go to Credential Manager (`CredWriteW`, a generic credential
+`Cay/google`, this user, not roamed), the loopback listener is `std::net`. Only `windows` features were added
+(`Win32_Networking_WinHttp`, `Win32_Security_Credentials`, `Win32_NetworkManagement_IpHelper`, `…_Ndis`,
+`Win32_Networking_WinSock`). reqwest or ureq would have added rustls and ring (about 1 MB) or native-tls on top of a
+1.6 MB installer. *Rust owns time:* `logic.rs` gives each event a phase (later, soon, now) and the watcher wakes at the
+next boundary (soon, start, end, local midnight), so React never runs a timer. It also wakes after a sleep (the wall
+clock jumping more than 2 minutes past the monotonic one, as in D28) and when `NotifyNetworkConnectivityHintChange` says
+the internet is back, and backs off 1 → 30 minutes while Google can't be reached. Unlock isn't watched: polling goes on
+while locked, so the data is fresh anyway, and it saves a message-only window. *Join links:* Meet's `hangoutLink`,
+then a `video` entry point, then a location that is an https link on a known meeting host; never http, never userinfo
+(`https://meet.google.com@evil.example`). Links stay in Rust; React asks by id. *The pill (agreed):* art · wave · step
+line · clock · calendar icon · equaliser, nothing dropped. *6c (agreed):* Calendar and Tasks reads follow Claude
+Code's classifier in Auto; Gmail reads and drafts always ask in Cay, and once a run has read mail, desktop actions and
+drafts ask again. *Alternatives:* the iCal secret address first (above); sync tokens (above); reqwest/ureq (size);
+the claude.ai connectors only (can't feed the pill); Testing status (weekly sign-ins).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -805,6 +838,14 @@ match. *Fix:* the test helpers call `SetProcessDpiAwarenessContext(PER_MONITOR_A
 1020×660 at x=450, and screen captures at 150 % show the pill centred. *Lesson:* at anything but 100 %, a measuring tool
 needs the same DPI awareness as the app it measures, or it reports a consistent but scaled answer that looks like a bug.
 
+### C14: The drive filled up mid-build (again)
+*Symptom:* while building 6a, `cargo test` failed with "no space on device" and the running `pnpm tauri dev` Cay
+vanished (its rebuild died the same way). *Diagnosis:* `target\debug` had grown to 16 GB: 3.8 GB of incremental cache,
+376 MB of stale `cay_lib` test binaries and 2.3 GB of `topbar*` artifacts left from before the rename (D32), with
+1.4 GB free on the drive. *Fix:* deleted `target\debug\incremental`, Cay's own stale artifacts and every `topbar*` file,
+keeping the third-party crates (no full rebuild): 6.4 GB free, and Cay rebuilt in about 20 s. *Lesson:* after a rename,
+the old crate's artifacts are never reused or cleaned by cargo; remove them by hand.
+
 ### Still open
 - **Foreground-lock rules** in practice: the fallback chain is implemented but not yet exercised
   against elevated or minimized targets (manual test 7).
@@ -860,6 +901,7 @@ needs the same DPI awareness as the app it measures, or it reports a consistent 
 | 2026-11-02 | Stage 2.8e signed off by the author. Kick-off prompt for 2.8f (`prompts/phase-2.8f-connect.md`) written so it starts in a new session. |
 | 2026-11-02 | Stage 2.8f built: Connect's three states and an Update dialog, usage limits through a chained status line (D41; the author's HUD unchanged through Cay), an optional "needs you" sound; the Windows Terminal tab spike said no. Manual checklist pending. |
 | 2026-11-02 | Stage 2.8f signed off by the author: **Phase 2.8 complete.** Release v0.2 (4a-5) deferred to the end of all phases at the author's call. Phase 6 (Google Calendar and Gmail) kick-off prompt written. |
+| 2026-11-02 | Phase 6 research and design agreed (D42): Cay's own OAuth client (In Production, unverified until release), no iCal fallback, no sync tokens, WinHTTP and Credential Manager instead of new crates. Stage 6a built: the `google/` module, the `google-watcher` thread, `google:state` / `calendar:upcoming`, tray Connect/Disconnect Google. Checked with fixtures, a live WinHTTP test without an account and a debug Cay (C14: the drive filled mid-build); the manual check waits for the author's Google client. |
 
 ## 7. Results & metrics
 

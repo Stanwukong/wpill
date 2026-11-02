@@ -7,10 +7,6 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use windows::Win32::Foundation::{FILETIME, SYSTEMTIME};
-use windows::Win32::System::Time::{
-    FileTimeToSystemTime, SystemTimeToFileTime, SystemTimeToTzSpecificLocalTime,
-};
 
 use super::audit::random_hex;
 use super::schedule::{self, Zone};
@@ -213,32 +209,9 @@ pub fn validate(
 /// Windows' current time zone, with its DST rules.
 pub struct LocalZone;
 
-/// 100 ns intervals between 1601-01-01 and 1970-01-01.
-const EPOCH_DIFF_MS: i64 = 11_644_473_600_000;
-
 impl Zone for LocalZone {
     fn offset_min(&self, utc_ms: i64) -> i64 {
-        let ticks = (utc_ms + EPOCH_DIFF_MS) * 10_000;
-        let utc = FILETIME {
-            dwLowDateTime: ticks as u32,
-            dwHighDateTime: (ticks >> 32) as u32,
-        };
-        let (mut st, mut local_st, mut local) = (
-            SYSTEMTIME::default(),
-            SYSTEMTIME::default(),
-            FILETIME::default(),
-        );
-        // SAFETY: plain conversions between out-structs we own; `None` is the current time zone.
-        let ok = unsafe {
-            FileTimeToSystemTime(&utc, &mut st).is_ok()
-                && SystemTimeToTzSpecificLocalTime(None, &st, &mut local_st).is_ok()
-                && SystemTimeToFileTime(&local_st, &mut local).is_ok()
-        };
-        if !ok {
-            return 0;
-        }
-        let local = (i64::from(local.dwHighDateTime) << 32) | i64::from(local.dwLowDateTime);
-        (local - ticks) / 10_000 / schedule::MINUTE
+        crate::win32::local_offset_min(utc_ms)
     }
 }
 

@@ -7,6 +7,7 @@ mod desktop;
 mod duplex;
 mod error;
 mod fullscreen;
+mod google;
 mod hover;
 mod ipc;
 mod media;
@@ -45,6 +46,11 @@ pub fn run() {
                 agent::debug_command(_app, &_args[2..]);
                 return;
             }
+            #[cfg(debug_assertions)]
+            if _args.get(1).is_some_and(|a| a == "google-test") {
+                google::debug_command(_app, &_args[2..]);
+                return;
+            }
             log::info!("second launch ignored; Cay is already running");
         }))
         .manage(hover::Island::default())
@@ -54,6 +60,7 @@ pub fn run() {
         .manage(claude::Claude::default())
         .manage(claude::Asks::default())
         .manage(agent::Agents::default())
+        .manage(google::Google::default())
         .setup(|app| {
             let handle = app.handle().clone();
             migrate::from_topbar(&handle);
@@ -64,6 +71,7 @@ pub fn run() {
             activity::spawn(&handle, &app.state::<activity::Activities>());
             claude::spawn(&handle, &app.state::<activity::Activities>());
             agent::spawn(&handle, &app.state::<activity::Activities>());
+            google::spawn(&handle, &app.state::<activity::Activities>());
             tray::create(&handle)?;
             Ok(())
         })
@@ -112,6 +120,12 @@ pub fn run() {
             agent::routine_delete,
             agent::routine_run,
             agent::routines_pause,
+            google::google_state,
+            google::calendar_upcoming,
+            google::google_connect,
+            google::google_disconnect,
+            google::calendar_open,
+            google::calendar_join,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Cay")

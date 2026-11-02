@@ -1,0 +1,9 @@
+{
+  "kind": "calendar#calendarList",
+  "items": [
+    { "id": "me@example.com", "summary": "Work", "backgroundColor": "#16a765", "primary": true, "selected": true },
+    { "id": "family@group.calendar.google.com", "summary": "Family", "summaryOverride": "Family (mine)", "backgroundColor": "#ff7537", "selected": true },
+    { "id": "holidays@group.v.calendar.google.com", "summary": "Holidays", "backgroundColor": "#9a9cff" },
+    { "id": "old@group.calendar.google.com", "summary": "Old", "selected": true, "hidden": true }
+  ]
+}

@@ -16,6 +16,8 @@ import type {
   Routines,
   AppError,
   ApprovalPreview,
+  CalendarUpcoming,
+  GoogleState,
   ClaudeAsks,
   QuestionAnswer,
   ClaudeHooksStatus,
@@ -43,6 +45,8 @@ const EVENTS = {
   commandFocusAsk: "command:focus-ask",
   claudeAsks: "claude:asks",
   routinesChanged: "routines:changed",
+  googleState: "google:state",
+  calendarUpcoming: "calendar:upcoming",
 } as const;
 
 /** Which island shape a reported rect measures. */
@@ -119,6 +123,17 @@ export const commands = {
   /** Run now. Errors `agentInvalid` if it's already running. */
   routineRun: (id: string) => invoke<{ runId: string }>("routine_run", { id }),
   routinesPause: (paused: boolean) => invoke<void>("routines_pause", { paused }),
+  /** Phase 6: the Google sign-in state, for an initial sync. */
+  googleState: () => invoke<GoogleState>("google_state"),
+  calendarUpcoming: () => invoke<CalendarUpcoming>("calendar_upcoming"),
+  /** Opens Google's sign-in in the browser; `google:state` follows. Errors `google` (no client in this build). */
+  googleConnect: () => invoke<void>("google_connect"),
+  /** Revokes at Google and forgets the sign-in; confirm first. */
+  googleDisconnect: () => invoke<void>("google_disconnect"),
+  /** Opens an event or task in the browser. Errors `calendarItemGone`. */
+  calendarOpen: (id: string) => invoke<void>("calendar_open", { id }),
+  /** Opens an event's meeting link (only when `hasJoin`). Errors `calendarItemGone`. */
+  calendarJoin: (id: string) => invoke<void>("calendar_join", { id }),
 };
 
 export const on = {
@@ -151,6 +166,10 @@ export const on = {
     listen<ClaudeAsks>(EVENTS.claudeAsks, (e) => cb(e.payload)),
   routinesChanged: (cb: (payload: Routines) => void): Promise<UnlistenFn> =>
     listen<Routines>(EVENTS.routinesChanged, (e) => cb(e.payload)),
+  googleState: (cb: (payload: GoogleState) => void): Promise<UnlistenFn> =>
+    listen<GoogleState>(EVENTS.googleState, (e) => cb(e.payload)),
+  calendarUpcoming: (cb: (payload: CalendarUpcoming) => void): Promise<UnlistenFn> =>
+    listen<CalendarUpcoming>(EVENTS.calendarUpcoming, (e) => cb(e.payload)),
 };
 
 /** Unsubscribes listeners registered with `on.*` (safe to call before they resolve). */

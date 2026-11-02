@@ -528,7 +528,62 @@ export interface AppError {
     | "agentInvalid"
     | "agentStart"
     | "noCommandWindow"
+    | "google"
+    | "calendarItemGone"
     | "win32"
     | "tauri";
   message: string;
+}
+
+// ---- Phase 6: Google Calendar and Tasks (mirrors ipc.rs) ----
+
+export type GoogleStatus = "disconnected" | "connecting" | "connected" | "reconnect";
+
+/** `google:state`. Never carries a token. */
+export interface GoogleState {
+  status: GoogleStatus;
+  /** The primary calendar's id (its address), once a fetch has seen it. */
+  account: string | null;
+  /** What Google granted (the consent screen lets you untick a scope). */
+  calendar: boolean;
+  tasks: boolean;
+  lastSyncMs: number | null;
+  /** Why the last refresh or sign-in failed; the last data is kept. */
+  error: string | null;
+  /** This build (or settings.json) has a Google client. */
+  configured: boolean;
+}
+
+/** Rust works out the phase and re-sends at each boundary; React never times it. */
+export type EventPhase = "later" | "soon" | "now";
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  startMs: number;
+  endMs: number;
+  /** The calendar's name. */
+  calendar: string;
+  /** The calendar's colour in Google (`#rrggbb`). */
+  color: string | null;
+  hasJoin: boolean;
+  phase: EventPhase;
+}
+
+/** An open task due today or overdue. Tasks have dates, not times. */
+export interface GoogleTask {
+  id: string;
+  title: string;
+  /** `YYYY-MM-DD` */
+  due: string;
+  overdue: boolean;
+  list: string;
+}
+
+/** `calendar:upcoming`: the next 24 h of events, soonest first, and due tasks. */
+export interface CalendarUpcoming {
+  events: CalendarEvent[];
+  tasks: GoogleTask[];
+  /** The pill's calendar icon shows. */
+  pending: boolean;
 }

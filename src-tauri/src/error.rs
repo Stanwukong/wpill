@@ -38,6 +38,10 @@ pub enum AppError {
     AgentStart(String),
     #[error("The command window isn't open.")]
     NoCommandWindow,
+    #[error("{0}")]
+    Google(String),
+    #[error("That event or task is no longer listed.")]
+    CalendarItemGone,
     #[error(transparent)]
     Win32(#[from] windows::core::Error),
     #[error(transparent)]
@@ -63,6 +67,8 @@ impl AppError {
             Self::AgentInvalid(_) => "agentInvalid",
             Self::AgentStart(_) => "agentStart",
             Self::NoCommandWindow => "noCommandWindow",
+            Self::Google(_) => "google",
+            Self::CalendarItemGone => "calendarItemGone",
             Self::Win32(_) => "win32",
             Self::Tauri(_) => "tauri",
         }

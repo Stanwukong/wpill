@@ -1,0 +1,11 @@
+{
+  "kind": "tasks#tasks",
+  "items": [
+    { "id": "t1", "title": "Call the bank", "status": "needsAction", "due": "2026-11-02T00:00:00.000Z" },
+    { "id": "t2", "title": "Send invoice", "status": "needsAction", "due": "2026-10-30T00:00:00.000Z" },
+    { "id": "t3", "title": "Book flights", "status": "needsAction", "due": "2026-11-05T00:00:00.000Z" },
+    { "id": "t4", "title": "Done already", "status": "completed", "due": "2026-11-01T00:00:00.000Z" },
+    { "id": "t5", "title": "Someday", "status": "needsAction" },
+    { "id": "t6", "title": "Removed", "status": "needsAction", "deleted": true, "due": "2026-11-01T00:00:00.000Z" }
+  ]
+}

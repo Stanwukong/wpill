@@ -27,8 +27,11 @@ Cay runs), with all 12 manual checks passed. Phase 2.7 is complete.**
 decided (v0.2 unsigned, D33) (2026-11-01). **4a-5 (release v0.2) and the dock check are deferred to the end of all
 phases** (the author's call, 2026-11-02).
 **Phase 2.8 is complete (2026-11-02): agent UX, stages 2.8a–f (D34, D36–D41), with 2.8a, 2.8e and 2.8f signed off by
-hand.** **Next: [Phase 6 Google Calendar and Gmail](#phase-6-google-calendar-and-gmail-proposed-2026-11-01-not-started)
-(D35)**, research and a design proposal first: kick-off prompt [prompts/phase-6-google.md](prompts/phase-6-google.md).
+hand.** **Now: [Phase 6 Google Calendar and Gmail](#phase-6-google-calendar-and-gmail-started-2026-11-02)
+(D35, D42).** Research and the design were agreed with the author (2026-11-02): Cay's own OAuth client, unverified
+"In Production" for now, no iCal fallback. **6a (the Rust watcher: sign-in, Calendar and Tasks, `google:state` /
+`calendar:upcoming`, tray Connect) is built; its manual check needs the author's Google Cloud client** (steps in the
+Phase 6 section). Kick-off prompt: [prompts/phase-6-google.md](prompts/phase-6-google.md).
 History of 2.8: 2.8a (approve terminal sessions from the
 island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the card, D37), 2.8c (questions and
 plans, D38) and 2.8d (live step line, D39) are built with their manual checks pending, and 2.8e (Claude Code's
@@ -348,6 +351,21 @@ startFailed`.
 | file | Cay `settings.json` → `claude` | `{ statusLine: object \| null, statusShell: "bash" \| "powershell" }`; `activities.sound` | 2.8f. Written by Connect, removed by Disconnect. |
 | pipe reply | `ask::Decision` | `"allow" \| "deny" \| "pass" \| { "answers": {…} } \| "approvePlan" \| { "feedback": "…" }` | The forwarder echoes the original input; a plain allow on a question or plan prints nothing. |
 
+### Phase 6a
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| event / command | `google:state` / `google_state` | `GoogleState { status: "disconnected" \| "connecting" \| "connected" \| "reconnect", account, calendar, tasks, lastSyncMs, error, configured }` | Never a token. `calendar`/`tasks`: what Google granted. `configured`: the build or settings has a client. |
+| event / command | `calendar:upcoming` / `calendar_upcoming` | `{ events: CalendarEvent[], tasks: GoogleTask[], pending }` | Re-sent when a fetch changes it and at each boundary (soon, start, end, midnight). |
+| type | `CalendarEvent` | `{ id, title, startMs, endMs, calendar, color, hasJoin, phase: "later" \| "soon" \| "now" }` | Next 24 h (and in progress), soonest first, ≤30. Links stay in Rust. |
+| type | `GoogleTask` | `{ id, title, due: "YYYY-MM-DD", overdue, list }` | Open tasks due today or earlier, overdue first, ≤30. |
+| command | `google_connect` / `google_disconnect` | `() → void` | Sign-in in the browser (`google-auth` thread); Disconnect revokes and forgets (async). Error `google`. |
+| command | `calendar_open` / `calendar_join` | `(id) → void` | Opens the event or task, or its meeting link, in the browser. Error `calendarItemGone`. |
+| file | `settings.json` → `google` | `{ calendars, tasks, refreshMinutes, soonMinutes, leadMinutes, clientId, clientSecret }` | No token. `calendars: null` = the ones shown in Google Calendar. |
+| file | `google\cache.json` | `{ account, scopes, lastSyncMs, upcoming }` | Titles, times, links of the last fetch; deleted on Disconnect. |
+| credential | `Cay/google` (generic) | `{ refreshToken, scopes }` | Windows Credential Manager, this user, not roamed. |
+| debug | `cay.exe google-test state \| refresh \| connect \| disconnect` | | Debug builds only; logs the state and counts (never titles). |
+
 ### Reserved for later phases (names fixed now so they slot in)
 
 | Phase | Kind | Name |
@@ -406,7 +424,7 @@ meaning; new phases slot in between.
 | 5 | **2.7 Local automation agent** | Type an instruction; Cay runs a headless Claude Code session, shows progress in the island, asks for approvals there, and gives Claude desktop tools through its own MCP server | Added 2026-10-30 (D21). Builds directly on 2.6's pipe, sessions and activities. Staged so each stage is useful on its own. |
 | 6 | **4a Release readiness** (4a-1 to 4a-4 done; **4a-5 release and the dock check deferred to the end**, 2026-11-02) | Multi-monitor + per-monitor DPI, code signing, v0.2 release | Docking/undocking breaks placement today; unsigned installers trigger SmartScreen. |
 | 7 | **2.8 Agent UX** (complete 2026-11-02) | Approve terminal sessions from the island, see what you approve, questions and plans, a live step line, permission modes, trustworthy Connect | Proposed 2026-11-01 after a competitor survey (D34). Approving terminal sessions is the core of every rival; Cay only focuses the window. |
-| 8 | **6 Google Calendar and Gmail** (next; prompt [phase-6-google.md](prompts/phase-6-google.md)) | Upcoming events and tasks in the pill and panel; Gmail and Calendar tools for agent runs | Proposed 2026-11-01 (D35). Replaces the "calendar peek" spike. |
+| 8 | **6 Google Calendar and Gmail** (started 2026-11-02; prompt [phase-6-google.md](prompts/phase-6-google.md)) | Upcoming events and tasks in the pill and panel; Gmail and Calendar tools for agent runs | Proposed 2026-11-01 (D35). Replaces the "calendar peek" spike. |
 | 9 | **2.9 Other agents and open models** (proposed) | Codex / OpenCode sessions in the island; agent runs through ACP (Goose + Ollama first) beside the native Claude Code path | Proposed 2026-11-01 after a competitor survey. Every rival watches several CLIs; none runs agents. Keeps Cay's lead (runs, routines, desktop tools) while closing the coverage gap. |
 | 10 | **3 Memory-heavy apps** | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
 | 11 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
@@ -1257,8 +1275,8 @@ without giving up that lead. Not scheduled until 4a-5 ships.
 - One ACP backend or per-agent native paths for the big ones (Codex `exec --json`)? ACP first; revisit if a gap shows.
 - How to name the "agent" UI (`ClaudeSection`, `ClaudeActivity`, `--font-claude`) once it isn't only Claude.
 
-### Phase 6: Google Calendar and Gmail (proposed 2026-11-01, not started)
-Kick-off prompt: [prompts/phase-6-google.md](prompts/phase-6-google.md) (research and a design proposal before code).
+### Phase 6: Google Calendar and Gmail (started 2026-11-02)
+Kick-off prompt: [prompts/phase-6-google.md](prompts/phase-6-google.md). Design agreed 2026-11-02 (D42).
 Upcoming events and tasks in the island, and Gmail and Calendar for agent runs, without the user creating a Google
 Cloud project (D35). Replaces the "calendar peek" spike.
 
@@ -1270,20 +1288,70 @@ Cloud project (D35). Replaces the "calendar peek" spike.
   Gmail (`gmail.readonly`, `gmail.compose` for drafts) only in 6c and only when you turn it on. Never `gmail.send`,
   never `mail.google.com`
 - Data goes from Google to this PC only: no Cay server, nothing stored but a small cache under `%APPDATA%`
-- Google's side: Calendar and Tasks scopes are *sensitive*: verification (privacy policy, homepage, demo video).
-  Gmail read/compose are *restricted*: verification plus a yearly security assessment (CASA), which sources say
-  applies when data passes through a server; Cay has none, so confirm with Google before 6c. Until verified the
-  consent screen warns "unverified app", users are capped at 100 and (in Testing) refresh tokens last 7 days
-- Before verification, a fallback for calendar only: paste the calendar's "secret address in iCal format" (read-only,
-  no tasks, no sign-in)
+- Google's side: Calendar and Tasks scopes are *sensitive*: verification (homepage and privacy policy on a verified
+  domain, a demo video of the whole flow, a justification per scope). Gmail read/compose are *restricted*:
+  verification plus a yearly security assessment (CASA); Google's page names no exemption for local-only apps, so ask
+  Google before 6c. Unverified, the consent screen warns and users are capped at 100; in *Testing* refresh tokens
+  expire after 7 days, so the project is set to *In Production* (unverified) until verification, which is only
+  needed before the public release
+- ~~iCal fallback~~: dropped (D42). It needs no sign-in, but has no tasks and would need a recurrence engine
+  (RRULE, exceptions, time zones) thrown away once sign-in exists
+- No sync tokens: Google refuses `syncToken` with `timeMin`/`timeMax`/`orderBy`; a 24 h windowed query every 5 min is
+  simpler and cheap (D42)
 
-**6a Calendar and Tasks watcher** (Rust)
-- [ ] `src-tauri/src/google/`: `auth.rs` (OAuth, refresh, Credential Manager), `calendar.rs` (events in the next 24 h
-      across selected calendars, incremental with sync tokens), `tasks.rs` (open tasks due today or overdue), `logic.rs`
-      (pure, unit-tested: what's "upcoming", all-day and declined events skipped, time zones, DST)
-- [ ] One `google-watcher` thread through the `activity::Watcher` harness: refresh every 5 min and on wake, network
-      change and unlock; backs off when offline. Never a JS timer (rule 1)
-- [ ] IPC: `google:state` (connected, next items) and `calendar:upcoming`; DTOs camelCase in `ipc.rs` / `types.ts`
+**Registering Cay's Google client (the author, once; not done from Claude sessions)**
+1. console.cloud.google.com → new project "Cay". APIs & Services → Library: enable **Google Calendar API** and
+   **Google Tasks API**.
+2. Google Auth Platform → Branding: app name "Cay", support email; Audience: **External**, then **Publish app** (In
+   production; unverified is fine for ≤100 users and avoids the 7-day token expiry of Testing).
+3. Data Access → add the scopes `calendar.events.readonly`, `calendar.calendarlist.readonly`, `tasks.readonly`.
+4. Clients → Create client → **Desktop app** "Cay desktop". Copy the client id and secret; never commit them.
+5. Dev builds: put them in Cay's `settings.json` (`google.clientId`, `google.clientSecret`), or set
+   `CAY_GOOGLE_CLIENT_ID` / `CAY_GOOGLE_CLIENT_SECRET` in the shell before `pnpm tauri dev` / `pnpm tauri build`
+   (baked in at build time; `build.rs` rebuilds when they change). Forks use their own client.
+
+**6a Calendar and Tasks watcher** (Rust; built 2026-11-02, D42)
+- [x] `src-tauri/src/google/`: `auth.rs` (PKCE S256 via BCrypt, a one-shot `127.0.0.1` listener on a random port that
+      checks `state`, the system browser, token exchange, refresh, revoke), `http.rs` (WinHTTP: Windows' TLS and proxy,
+      no new crate), `vault.rs` (Credential Manager), `calendar.rs` (the calendar list; events from now − 12 h to
+      now + 24 h, `singleEvents`, `eventTypes=default,fromGmail`, per calendar shown in Google Calendar or listed in
+      `google.calendars`), `tasks.rs` (open tasks due today or earlier, every list), `logic.rs` (pure: all-day,
+      declined, cancelled and focus/out-of-office events skipped, Join links from Meet, conference data or a meeting
+      host in the location, https only and no userinfo; duplicates across calendars once; phases; local-day maths;
+      next boundary; backoff), `network.rs`, `settings.rs`
+- [x] `google-watcher` thread through `activity::Watcher`: every 5 min (`google.refreshMinutes`), at each boundary,
+      after a sleep (wall clock jumps > 2 min), when the network comes back (`NotifyNetworkConnectivityHintChange`);
+      backs off 1, 2, 5, 10, 20, 30 min while Google can't be reached; `invalid_grant` → `reconnect`. A 401 refreshes
+      the access token once. Tasks failing doesn't hide events. Unlock isn't watched: polling continues while locked
+- [x] IPC (table above): `google:state`, `calendar:upcoming`, six commands; DTOs in `ipc.rs` / `types.ts`
+- [x] Tray "Connect Google…" (a message box lists the three read-only scopes in plain words and warns about Google's
+      unverified screen) → "Cancel Google sign-in" while the browser is open → "Disconnect Google…" (revoke, delete
+      the credential and the cache) or "Reconnect Google…" after a revoke
+- [x] Checked: Rust 211 tests (new: fixtures for events, tasks, calendars; RFC 3339 and dates; PKCE against RFC 7636's
+      vector; the auth URL; callbacks; token replies; settings), clippy, fmt, typecheck; an ignored live test reached
+      Google over WinHTTP (public discovery document, and a 401 for a made-up token, no account); a debug Cay started
+      the watcher (`Disconnected, client missing`), answered `google-test state` and stopped it on quit
+- [ ] Manual check (below): needs the client from "Registering Cay's Google client"
+
+**Manual check (Phase 6a)** (`pnpm tauri dev` with `$env:RUST_LOG='info,cay_lib=debug'` and the client in
+`settings.json`; `.\src-tauri\target\debug\cay.exe google-test state` prints the state and counts in the log)
+1. **Connect:** tray → "Connect Google…": the box lists the three read-only scopes; OK opens Google's sign-in in your
+   default browser. Past the unverified warning, allow all three. The tab says "Cay is connected to Google"; the tray
+   now reads "Disconnect Google…"; the log shows `google: connected` and `calendar:upcoming: n events, m tasks`.
+2. **Credential:** Control Panel → Credential Manager → Windows Credentials lists `Cay/google`; `settings.json` and
+   `google\cache.json` hold no token (search them for `1//` and `ya29`).
+3. **What's listed:** `google-test state` lists today's timed events (not all-day, not declined) and the counts match
+   Google Calendar for the next 24 h; tasks due today and overdue are counted.
+4. **Pending:** add a test event 10 min ahead in Google Calendar, then `google-test refresh`: `pending true`, it's
+   `Soon`, and turns `Now` at its start without a refresh.
+5. **Offline:** turn Wi-Fi off: the next refresh logs a failure and a backoff; turn it on: it refreshes within seconds.
+6. **Sleep:** sleep the PC a few minutes and wake: the log says the clock jumped and refreshes.
+7. **Untick a scope:** Disconnect, Connect again and untick Tasks: events still come, `tasks: false`, no task requests.
+8. **Revoke from Google:** myaccount.google.com → Security → third-party access → remove Cay; `google-test refresh`:
+   the tray reads "Reconnect Google…", nothing listed.
+9. **Cancel:** Connect, then close the browser tab and choose "Cancel Google sign-in": the tray goes back to "Connect".
+10. **Disconnect:** revokes (log `token revoked`), `Cay/google` is gone from Credential Manager, `cache.json` deleted.
+11. **Quit / restart:** quit while connected and start again: the cached events show at once (log), then a refresh.
 
 **6b In the island** (motion-designer)
 - [ ] **Pill:** the Google Calendar icon (Google's own, unaltered: allowed for an integration without asking, per
@@ -1307,10 +1375,12 @@ Cloud project (D35). Replaces the "calendar peek" spike.
 - [ ] Later: Google's official Workspace MCP servers (`gmailmcp.googleapis.com`, `calendarmcp.googleapis.com`) are
       in developer preview and need your own Cloud project; revisit once they're generally available
 
-**Open questions**
-- What sits in the pill when the calendar icon, media art and the agent wave all want it?
-- Tasks in the pill: overdue only, or due today too? (Proposed: both, the icon only; details in the panel)
-- Register Cay's own Google OAuth client and go through verification, or ship 6a–b with the iCal fallback first?
+**Decided (2026-11-02, D42)**
+- The pill: album art · wave · step line · clock · **calendar icon** · equaliser; nothing is dropped (≈330 px at most).
+- Tasks: due today and overdue both show the icon; details in the panel.
+- Cay's own OAuth client first; verification paperwork before the public release; no iCal fallback.
+- 6c: in Auto, Calendar and Tasks reads follow Claude Code's classifier; Gmail reads and drafts always ask in Cay, and
+  after a run has read mail every desktop action and draft asks again.
 
 ### Phase 3: memory-heavy apps (behind a settings toggle)
 `sysinfo` refresh every ~2 s while expanded only. Group by process name, sum memory, sort.
@@ -1332,13 +1402,16 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
 ### Spikes (prototype before committing)
 - **Notifications mirror:** `UserNotificationListener` needs user consent and is unreliable for some apps.
   Decide go/no-go after a prototype.
-- ~~**Calendar peek**~~: moved to [Phase 6](#phase-6-google-calendar-and-gmail-proposed-2026-11-01-not-started).
+- ~~**Calendar peek**~~: moved to [Phase 6](#phase-6-google-calendar-and-gmail-started-2026-11-02).
 - **Live window previews:** `DwmRegisterThumbnail` drawn into our HWND at rects reported by React
   (the original Phase 4 item).
 
 ## Known limitations
 - The island lives on the primary monitor only (it follows the primary monitor when that changes); choosing another
   monitor is Phase 4b. Display changes apply within 250 ms.
+- Google (6a): Cay isn't verified by Google yet, so sign-in shows Google's "unverified app" screen and at most 100
+  accounts can connect. All-day events and events beyond 24 h aren't listed. Up to 20 calendars and 20 task lists.
+  Unlock doesn't trigger a refresh (polling continues while locked). Time zones are Windows' current one.
 - Single instance is keyed on the bundle identifier, so a dev build and the installed release build
   can't run at the same time. Quit one from the tray first.
 - Icons are cached per HICON/exe path. An app that changes its window icon at runtime may show a stale icon.
