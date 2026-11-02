@@ -240,7 +240,7 @@ export function RoutineEditor({
       <textarea
         ref={promptRef}
         className="task__prompt routine__prompt"
-        placeholder="What should Claude do each time?"
+        placeholder="What should Cay do each time?"
         value={prompt}
         spellCheck={false}
         onChange={(e) => setPrompt(e.target.value)}

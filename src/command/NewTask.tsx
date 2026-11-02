@@ -85,7 +85,7 @@ export function NewTask({
       <textarea
         ref={promptRef}
         className="task__prompt"
-        placeholder="What should Claude do?"
+        placeholder="What should Cay do?"
         value={prompt}
         autoFocus
         spellCheck={false}
