@@ -27,10 +27,11 @@ Cay runs), with all 12 manual checks passed. Phase 2.7 is complete.**
 decided (v0.2 unsigned, D33) (2026-11-01). **4a-5 (release v0.2) and the dock check are set aside** at the author's
 call (2026-11-01) to start 2.8; they resume after it.
 **Now: [Phase 2.8 agent UX](#phase-28-agent-ux-started-2026-11-01) (D34).** 2.8a (approve terminal sessions from the
-island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the card, D37) , 2.8c (questions and
-plans, D38) , 2.8d (live step line, D39) and 2.8e (Claude Code's permission modes, Auto by default, D40) are
-built, manual checks pending. **Next: 2.8f**, kick-off prompt
-[prompts/phase-2.8-agent-ux.md](prompts/phase-2.8-agent-ux.md).
+island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the card, D37), 2.8c (questions and
+plans, D38) and 2.8d (live step line, D39) are built with their manual checks pending, and 2.8e (Claude Code's
+permission modes, Auto by default, D40) is signed off (2026-11-02). **Next: 2.8f** (Connect you can trust, usage
+limits, sound, Windows Terminal tab spike), in a new session: kick-off prompt
+[prompts/phase-2.8f-connect.md](prompts/phase-2.8f-connect.md).
 Proposed, not started: [6 Google Calendar and Gmail](#phase-6-google-calendar-and-gmail-proposed-2026-11-01-not-started)
 (D35) and [2.9 other agents and open models](#phase-29-other-agents-and-open-models-proposed-2026-11-01-not-started).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
@@ -988,7 +989,8 @@ the desktop glow. It trails on the category's core: deciding from the island for
 Not in scope: keyboard approval (decided 2026-11-01), mascots, sound packs, widget shelves. All UI work goes through
 the motion-designer agent.
 
-Kick-off prompt for 2.8b–f: [prompts/phase-2.8-agent-ux.md](prompts/phase-2.8-agent-ux.md).
+Kick-off prompt for 2.8b–f: [prompts/phase-2.8-agent-ux.md](prompts/phase-2.8-agent-ux.md); for 2.8f alone (written
+2026-11-02 after 2.8e): [prompts/phase-2.8f-connect.md](prompts/phase-2.8f-connect.md).
 
 **2.8a Approve terminal sessions from the island** (signed off 2026-11-01, D36)
 - [x] `PermissionRequest` hook (sync, timeout 75 s): `cay.exe hook` sends the tool and its input (`claude/ask.rs`, long
@@ -1138,9 +1140,9 @@ restart open sessions)
       The run guidance now tells Claude to ask with `AskUserQuestion` when it needs you
 - [x] `agent-test start … <mode>` (default `default`, so tests still see approvals) and `agent-test mode <runId> <mode>`
 - [x] Checked: Rust 185 tests, clippy, typecheck; UI renders (motion-designer)
-- [ ] Manual check (below)
+- [x] Manual check (below): passed, signed off by the author (2026-11-02)
 
-**Manual check (Phase 2.8e)**
+**Manual check (Phase 2.8e, passed 2026-11-02)**
 1. **Default Auto:** start a task that edits a file and runs a command: no approval cards; the chip reads Auto.
 2. **Ask:** pick Ask for a task: approvals come to the island as before.
 3. **Switch mid-run:** while a long task runs in Auto, click the chip until it reads Ask: the next risky step asks.
@@ -1151,7 +1153,8 @@ restart open sessions)
 8. **Routine:** a new routine's editor starts at Auto; an old routine shows Ask.
 9. **Terminal session:** Shift+Tab a terminal session to Accept edits: its panel row shows "Accept edits".
 
-**2.8f Connect you can trust, and small things**
+**2.8f Connect you can trust, and small things** (next, in a new session:
+[prompts/phase-2.8f-connect.md](prompts/phase-2.8f-connect.md))
 - [ ] Connect shows the exact `settings.json` change first, keeps a dated backup, Disconnect removes only Cay's entries
 - [ ] Usage limits (5 h / 7 d) from Claude Code's status line, no network call; in the panel's Claude section
 - [ ] An optional soft sound for "needs you" (off by default; Phase 4b switch)

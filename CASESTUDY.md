@@ -841,6 +841,7 @@ needs the same DPI awareness as the app it measures, or it reports a consistent 
 | 2026-11-01 | Stage 2.8c built: questions and plans from sessions and agent runs, answered in the island and the command window, never with a bare allow (D38); spiked first with Claude Code 2.1.314. Manual checklist pending. |
 | 2026-11-02 | Stage 2.8d built: the live step line and to-do progress in the pill and panel, from a background `PreToolUse` hook and stream-json (D39). Stage 2.8e spiked: a running stream-json run accepts `set_permission_mode`, and per-run ask rules keep filesystem shell commands asking under Accept edits. Manual checklist pending. |
 | 2026-11-02 | Stage 2.8e built: the author reversed "every step asks" (D40). Runs use Claude Code's own modes, Auto by default, switched mid-run from a chip (`set_permission_mode`) or for the next message; routines get a mode; desktop tools follow Auto. Manual checklist pending. |
+| 2026-11-02 | Stage 2.8e signed off by the author. Kick-off prompt for 2.8f (`prompts/phase-2.8f-connect.md`) written so it starts in a new session. |
 
 ## 7. Results & metrics
 
