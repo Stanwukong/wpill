@@ -31,7 +31,9 @@ hand.** **Now: [Phase 6 Google Calendar and Gmail](#phase-6-google-calendar-and-
 (D35, D42).** Research and the design were agreed with the author (2026-11-02): Cay's own OAuth client, unverified
 "In Production" for now, no iCal fallback. **6a (the Rust watcher: sign-in, Calendar and Tasks, `google:state` /
 `calendar:upcoming`, tray Connect) is signed off (2026-11-02). Now: 6b (the island).** The Cloud project runs in
-Testing with the author as a test user until a home page and privacy policy exist (Google won't publish without them). Kick-off prompt: [prompts/phase-6-google.md](prompts/phase-6-google.md).
+Testing with the author as a test user until a home page and privacy policy exist (Google won't publish without them).
+**6b (the calendar icon in the pill, "starting soon" with Join, the panel's Calendar section) is built; manual check
+pending.** The pill uses Google's own Calendar icon once the author adds it at `src/assets/google-calendar.svg`. Kick-off prompt: [prompts/phase-6-google.md](prompts/phase-6-google.md).
 History of 2.8: 2.8a (approve terminal sessions from the
 island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the card, D37), 2.8c (questions and
 plans, D38) and 2.8d (live step line, D39) are built with their manual checks pending, and 2.8e (Claude Code's
@@ -365,6 +367,8 @@ startFailed`.
 | file | `google\cache.json` | `{ account, scopes, lastSyncMs, upcoming }` | Titles, times, links of the last fetch; deleted on Disconnect. |
 | credential | `Cay/google` (generic) | `{ refreshToken, scopes }` | Windows Credential Manager, this user, not roamed. |
 | debug | `cay.exe google-test state \| refresh \| connect \| disconnect` | | Debug builds only; logs the state and counts (never titles). |
+| activity | `calendarSoon` | `{ eventId, title, startsAtMs, minutes, hasJoin, color }` | 6b. A notice (8 s, held while hovered, interactive) once per event and start time, `google.leadMinutes` before it; key `calendar:<eventId>`. `minutes` is Rust's (0 = now). Join / open retract it. |
+| switch | `activities.calendar` | `boolean` (true) | 6b. "Starting soon" on or off. |
 
 ### Reserved for later phases (names fixed now so they slot in)
 
@@ -1357,15 +1361,40 @@ Cloud project (D35). Replaces the "calendar peek" spike.
 10. **Disconnect:** revokes (log `token revoked`), `Cay/google` is gone from Credential Manager, `cache.json` deleted.
 11. **Quit / restart:** quit while connected and start again: the cached events show at once (log), then a refresh.
 
-**6b In the island** (motion-designer)
-- [ ] **Pill:** the Google Calendar icon (Google's own, unaltered: allowed for an integration without asking, per
-      Google's API brand guidance; never recoloured or merged into Cay's mark) beside the clock while something is
-      pending: an event starting within 15 min or in progress, or a task due today or overdue. Gone when nothing is
-- [ ] **Activity:** at the lead time, "Standup · in 5 min" with a Join button when the event has a Meet or other link
-      (opens the browser); queued with the others in `activity::queue`
-- [ ] **Panel:** a Calendar section: the next events (time, title, calendar colour dot) and today's tasks; a click
-      opens the event or task in the browser. Read-only in 6b
-- [ ] Shares the pill with media and the agent wave: decide the order (open question)
+**6b In the island** (built 2026-11-02, D43; motion-designer)
+- [x] **Pill:** the calendar mark right of the clock while `pending` (an event within 15 min or in progress, or a task
+      due today or overdue): art · wave · step line · clock · **mark** · equaliser. 16 px. `CalendarMark` shows Google's
+      own icon from `src/assets/google-calendar.{svg,png}` (the author's download, unaltered: no tint, filter or
+      recolouring) and Cay's own line calendar until that file exists (`import.meta.glob`, so the build never breaks)
+- [x] **Activity `calendarSoon`:** mark · calendar colour dot · title · "in 5 min" / "now" · **Join** (only with a
+      meeting link). The row opens the event; Join opens the link; both close the card. Rust offers it once per event
+      and start time at `google.leadMinutes` (the watcher wakes at that boundary too); switch `activities.calendar`
+- [x] **Panel:** a Calendar section between the media card and Claude Code: up to 4 events (local time, colour dot,
+      title, Now / Soon or a weekday for tomorrow, Join) and 3 tasks (Overdue / Today), "+n more"; a row opens the
+      item. It shrinks to one row and scrolls when the panel is short
+- [x] Checked: Rust 212 tests (announcements once inside the lead time, the lead boundary), clippy, typecheck,
+      `pnpm build`; headless-Edge renders of the pill, activity and panel at 100/120/150 %, plain and tinted
+      (motion-designer). The full pill is 375 px (351 px before the mark: the 180 px step line), not the ≈330 estimated
+- [ ] Manual check (below)
+
+**Manual check (Phase 6b)** (`pnpm tauri dev`, connected; add test events in Google Calendar, then
+`cay.exe google-test refresh` so you don't wait for the 5-minute poll)
+1. **Icon:** with nothing pending the pill is unchanged. Add an event 10 min ahead (or a task due today): the mark
+   appears right of the clock; it goes when the event ends and nothing else is pending.
+2. **Google's icon:** put Google's Calendar icon at `src/assets/google-calendar.svg`; after Vite reloads, the pill and
+   activity show it in full colour, also on an album-tinted island.
+3. **Starting soon:** an event 7 min ahead with a Meet link: at 5 min before, "title · in 5 min · Join" shows once,
+   for about 8 s (longer while hovered). It doesn't come back on the next refresh.
+4. **Join:** hover it and click Join: the meeting opens in your browser and the card goes. Another event: click the
+   title instead: the event opens in Google Calendar.
+5. **No link:** an event without a meeting link shows no Join.
+6. **Panel:** expand: the Calendar section lists the next events with times and colour dots, Now / Soon tags, tomorrow's
+   events with a weekday, and today's / overdue tasks; clicking a row opens it.
+7. **Panel open at the lead time:** keep the panel open across an event's lead time: nothing covers it; the card shows
+   after the panel closes if it isn't stale.
+8. **Switch:** `"calendar": false` under `activities`, restart: no "starting soon"; the icon and panel stay.
+9. **Disconnect:** the icon and section disappear.
+10. **Text size 120 / 150 %:** the activity fits; the panel keeps at least one calendar row and scrolls.
 
 **6c Gmail and Calendar for agent runs**
 - [ ] Tools in Cay's own MCP server (`cay.exe mcp`), so every backend gets them (2.9): `calendar_list_events`,
@@ -1380,7 +1409,8 @@ Cloud project (D35). Replaces the "calendar peek" spike.
       in developer preview and need your own Cloud project; revisit once they're generally available
 
 **Decided (2026-11-02, D42)**
-- The pill: album art · wave · step line · clock · **calendar icon** · equaliser; nothing is dropped (≈330 px at most).
+- The pill: album art · wave · step line · clock · **calendar icon** · equaliser; nothing is dropped (375 px with
+  everything, measured in 6b).
 - Tasks: due today and overdue both show the icon; details in the panel.
 - Cay's own OAuth client first; verification paperwork before the public release; no iCal fallback.
 - 6c: in Auto, Calendar and Tasks reads follow Claude Code's classifier; Gmail reads and drafts always ask in Cay, and

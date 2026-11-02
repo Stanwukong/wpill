@@ -21,6 +21,8 @@ pub struct Switches {
     pub screenshot: bool,
     /// Claude Code sessions (activities and the panel section).
     pub claude: bool,
+    /// "Starting soon" for calendar events (Phase 6b).
+    pub calendar: bool,
     /// A soft sound when something needs you (a session's question or prompt, an approval, a plan; 2.8f). Off by
     /// default.
     pub sound: bool,
@@ -36,6 +38,7 @@ impl Default for Switches {
             caps_lock: true,
             screenshot: true,
             claude: true,
+            calendar: true,
             sound: false,
         }
     }
@@ -56,6 +59,7 @@ impl Switches {
             | Activity::AgentFinished(_) => self.claude,
             // A run waits on its approval, so it can't be switched off (it would only time out).
             Activity::AgentApproval(_) | Activity::AgentActing(_) => true,
+            Activity::CalendarSoon(_) => self.calendar,
         }
     }
 }

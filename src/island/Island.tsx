@@ -5,6 +5,9 @@ import { questionNeedsRoom } from "../features/activities/InteractionCards";
 import { AgentRunItems } from "../features/agent/AgentRunItems";
 import { isLive, recentRuns, useAgentRuns } from "../features/agent/useAgentRuns";
 import { AppsList } from "../features/apps/AppsList";
+import { CalendarMark } from "../features/calendar/CalendarMark";
+import { CalendarSection } from "../features/calendar/CalendarSection";
+import { useCalendar } from "../features/calendar/useCalendar";
 import { latestStep, StepLabel } from "../features/claude/StepLabel";
 import { WorkingIndicator } from "../features/claude/WorkingGlyphs";
 import { ClaudeSection } from "../features/claude/ClaudeSection";
@@ -47,6 +50,9 @@ export function Island() {
   const media = useMedia();
   const { sessions: claudeSessions, limits: claudeLimits } = useClaudeSessions();
   const agentRuns = useAgentRuns();
+  const calendar = useCalendar();
+  const calendarListed =
+    calendar.connected && (calendar.upcoming.events.length > 0 || calendar.upcoming.tasks.length > 0);
   const workingSessions = claudeSessions.filter((s) => s.status === "working");
   const liveRuns = agentRuns.filter((r) => isLive(r.status));
   const claudeWorking = workingSessions.length > 0 || liveRuns.length > 0;
@@ -112,6 +118,7 @@ export function Island() {
                 <Clock variant="panel" />
               </header>
               <MediaCard media={media} />
+              {calendarListed && <CalendarSection upcoming={calendar.upcoming} />}
               <ClaudeSection
                 sessions={claudeSessions}
                 limits={claudeLimits}
@@ -133,6 +140,7 @@ export function Island() {
               {claudeWorking && <WorkingIndicator />}
               {pillStep?.step && <StepLabel className="pill-step" text={pillStep.step} todos={pillStep.todos} />}
               <Clock variant="pill" />
+              {calendar.connected && calendar.upcoming.pending && <CalendarMark className="pill-calendar" />}
               {nowPlaying && <Equalizer />}
             </motion.div>
           )}
@@ -152,5 +160,6 @@ function activityKey(activity: ActivityPayload): string {
   // Per run, so waiting → acting (same activity) updates in place.
   if (activity.kind === "agentActing") return `activity-agent-acting-${activity.payload.runId}`;
   if (activity.kind === "agentFinished") return `activity-agent-finished-${activity.payload.runId}`;
+  if (activity.kind === "calendarSoon") return `activity-calendar-${activity.payload.eventId}`;
   return `activity-${activity.kind}`;
 }

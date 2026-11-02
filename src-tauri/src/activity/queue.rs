@@ -76,6 +76,8 @@ fn rules(activity: &Activity) -> Rules {
             ..notice(ACTING_PRIORITY, Duration::ZERO, Duration::ZERO)
         },
         Activity::AgentFinished(_) => notice(2, ms(5000), ms(120_000)),
+        // Long enough to reach Join; stale once the lead time is mostly gone.
+        Activity::CalendarSoon(_) => notice(2, ms(8000), ms(120_000)),
     }
 }
 
@@ -96,6 +98,7 @@ fn key(activity: &Activity) -> String {
         Activity::AgentApproval(a) => approval_key(a.request_id),
         Activity::AgentActing(_) => ACTING_KEY.into(),
         Activity::AgentFinished(f) => format!("agent:{}", f.run_id),
+        Activity::CalendarSoon(c) => calendar_key(&c.event_id),
     }
 }
 
@@ -113,6 +116,10 @@ pub fn claude_approval_key(request_id: u32) -> String {
 }
 
 /// The key a Claude Code session's activities share, for `Signal::Retract`.
+pub fn calendar_key(event_id: &str) -> String {
+    format!("calendar:{event_id}")
+}
+
 pub fn claude_key(session_id: u32) -> String {
     format!("claude:{session_id}")
 }
@@ -127,6 +134,7 @@ pub fn interactive(activity: &Activity) -> bool {
             | Activity::ClaudeApproval(_)
             | Activity::AgentApproval(_)
             | Activity::AgentFinished(_)
+            | Activity::CalendarSoon(_)
     )
 }
 

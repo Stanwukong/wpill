@@ -701,6 +701,20 @@ Code's classifier in Auto; Gmail reads and drafts always ask in Cay, and once a 
 drafts ask again. *Alternatives:* the iCal secret address first (above); sync tokens (above); reqwest/ureq (size);
 the claude.ai connectors only (can't feed the pill); Testing status (weekly sign-ins).
 
+### D43: "Starting soon" is a timed notice timed by Rust, and Join is neutral white (Phase 6b)
+*What:* the island's three calendar surfaces. *Activity:* `calendarSoon` is an ordinary D14 notice (priority 2, 8 s,
+stale after 2 min, interactive while hovered), offered once per event and start time when the watcher reaches the
+event's lead time; `next_boundary` now takes every offset it should wake at (soon, lead), so there's no polling and no
+React timer. The minutes are Rust's ("in 5 min"), fixed at offer time; a moved event is announced again. Join and the
+row's click retract the card through `Signal::Retract`, the same channel sessions use. *Icon:* the author chose
+Google's own Calendar icon (D35), which only Google's brand resources provide and which may not be altered, so
+`CalendarMark` loads it from `src/assets/` by glob and falls back to a plain line calendar of Cay's own: the repo never
+carries a look-alike, and the build doesn't depend on a file the author adds by hand. *Join:* neutral soft white, not
+`--accent`: on the plain island that token is the charging green, and amber is the agent's (D30). *Pill width:* 375 px
+with everything at once; the mark adds 24 px to the 180 px step line's 351 px, still within the narrowest viewport (453
+CSS px at 150 %). *Alternatives:* a sticky notice until the event starts (a calendar reminder isn't a question waiting on
+you, D19); a second notice at the start (noise if you've already joined); recounting minutes in React (needs a clock).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -903,6 +917,7 @@ the old crate's artifacts are never reused or cleaned by cargo; remove them by h
 | 2026-11-02 | Stage 2.8f signed off by the author: **Phase 2.8 complete.** Release v0.2 (4a-5) deferred to the end of all phases at the author's call. Phase 6 (Google Calendar and Gmail) kick-off prompt written. |
 | 2026-11-02 | Phase 6 research and design agreed (D42): Cay's own OAuth client (In Production, unverified until release), no iCal fallback, no sync tokens, WinHTTP and Credential Manager instead of new crates. Stage 6a built: the `google/` module, the `google-watcher` thread, `google:state` / `calendar:upcoming`, tray Connect/Disconnect Google. Checked with fixtures, a live WinHTTP test without an account and a debug Cay (C14: the drive filled mid-build); the manual check waits for the author's Google client. |
 | 2026-11-02 | Stage 6a signed off by the author. Google wouldn't publish the External project without a home page and privacy policy, so it runs in Testing with the author as a test user (7-day sign-ins) until those exist before release. |
+| 2026-11-02 | Stage 6b built (D43): the calendar mark in the pill (Google's icon once the author adds it), "starting soon" with Join, the panel's Calendar section (motion-designer, renders at 100/120/150 %). Manual checklist pending. |
 
 ## 7. Results & metrics
 

@@ -1,0 +1,235 @@
+/*
+ * Google Calendar and Tasks (Phase 6b). Chrome, not Claude content: Segoe throughout. The calendar's own colour only
+ * appears as a 6 px dot; Join is neutral soft white (it never follows the album art: on the plain island the default
+ * --accent is the charging green). No motion of its own: the pill and the island morph with the layout spring.
+ */
+:root {
+  --calendar-join: rgba(245, 245, 247, 0.92);
+  --calendar-join-ink: #0f0f0f;
+}
+
+/* Google's icon is shown as-is (no filter, no tint); only Cay's stand-in glyph takes a colour. */
+.calendar-mark {
+  flex: none;
+  display: block;
+}
+
+.calendar-mark--fallback {
+  color: rgba(245, 245, 247, 0.85);
+}
+
+/* Pill: right of the clock, the pill art's weight (16 px against its 20 px tile). */
+.pill-calendar {
+  margin-left: -2px;
+}
+
+.calendar-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--island-muted);
+}
+
+/* Join: the activity's is filled (the row's one action), the panel's quiet (many rows). */
+.calendar-join {
+  flex: none;
+  height: 22px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    opacity 120ms ease;
+}
+
+.calendar-join:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.calendar-join--primary {
+  height: 26px;
+  padding: 0 12px;
+  font-size: 12px;
+  background: var(--calendar-join);
+  color: var(--calendar-join-ink);
+}
+
+.calendar-join--primary:hover {
+  background: #fff;
+}
+
+.calendar-join:active {
+  opacity: 0.8;
+}
+
+/* Activity: mark · dot · title · when · Join. The title gives way; "in 15 min" and Join keep their width. */
+.calendar-activity {
+  gap: 10px;
+  padding-right: 9px;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.calendar-activity:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.calendar-activity__mark {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  margin-right: 2px;
+}
+
+.calendar-activity .calendar-dot {
+  margin-right: -3px;
+}
+
+.calendar-activity__title {
+  font-size: 13.5px;
+}
+
+.calendar-activity__when {
+  flex: none;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--island-muted);
+}
+
+/* Without Join the row ends on its text: keep the activity's own right padding. */
+.calendar-activity:not(:has(.calendar-join)) {
+  padding-right: 16px;
+}
+
+.calendar-activity__error {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 38%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+/* Panel section: ClaudeSection's density (30 px rows, 12 px uppercase heading). When the panel runs out of height
+   (large Text size) the list shrinks and scrolls, down to one row: the min-height is the heading + a row + "+n more",
+   so the section never spills over the apps (no overflow clip: it would cut the rows' -6 px hover bleed). */
+.calendar {
+  flex: 0 1 auto;
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 14px;
+}
+
+.calendar__heading {
+  flex: none;
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--island-muted);
+}
+
+.calendar__list {
+  list-style: none;
+  margin: 0 -6px;
+  padding: 0;
+  min-height: 30px;
+  max-height: 210px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.calendar-row {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px 0 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.calendar-row:hover {
+  background: var(--tile-hover);
+}
+
+.calendar-row:active:not(:has(.calendar-join:active)) {
+  background: var(--tile-active);
+}
+
+/* Times right-aligned in tabular figures so "9:30" and "10:00" line up; tasks put their day here, muted. */
+.calendar-row__when {
+  flex: none;
+  min-width: 52px;
+  text-align: right;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-row--task .calendar-row__when {
+  font-size: 11px;
+  color: var(--island-muted);
+}
+
+.calendar-row__mark {
+  flex: none;
+  width: 8px;
+  display: grid;
+  place-items: center;
+}
+
+/* A task: an empty ring where events have their colour dot. */
+.calendar-ring {
+  width: 6px;
+  height: 6px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 1.2px solid var(--island-muted);
+}
+
+.calendar-row__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-row__tag {
+  flex: none;
+  padding-right: 4px;
+  font-size: 11px;
+  color: var(--island-muted);
+}
+
+.calendar-row[data-phase="now"] .calendar-row__tag {
+  color: var(--island-fg);
+  font-weight: 600;
+}
+
+.calendar__more {
+  flex: none;
+  margin: 4px 0 0 82px; /* under the titles */
+  font-size: 11px;
+  color: var(--island-muted);
+}
+
+.calendar__error {
+  flex: none;
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--danger);
+}

@@ -320,20 +320,47 @@ pub fn pending(upcoming: &Upcoming) -> bool {
             .any(|e| e.item.phase != EventPhase::Later)
 }
 
-/// The next moment the answer to `at` changes: an event becoming soon, starting or ending, or local midnight.
+/// The next moment something changes: an event reaching one of the `ahead` offsets before its start (soon, the
+/// "starting soon" lead), starting or ending, or local midnight.
 pub fn next_boundary(
     upcoming: &Upcoming,
     now: i64,
-    soon_ms: i64,
+    ahead: &[i64],
     offset_min: impl Fn(i64) -> i64,
 ) -> i64 {
     let midnight = next_local_midnight(now, offset_min);
     upcoming
         .events
         .iter()
-        .flat_map(|e| [e.item.start_ms - soon_ms, e.item.start_ms, e.item.end_ms])
+        .flat_map(|e| {
+            ahead
+                .iter()
+                .map(|a| e.item.start_ms - a)
+                .chain([e.item.start_ms, e.item.end_ms])
+        })
         .filter(|&t| t > now)
         .fold(midnight, i64::min)
+}
+
+/// Events to announce now: inside the lead time before their start, not started, not announced yet (keyed by id and
+/// start, so a moved event is announced again).
+pub fn to_announce<'a>(
+    upcoming: &'a Upcoming,
+    now: i64,
+    lead_ms: i64,
+    announced: &std::collections::HashSet<(String, i64)>,
+) -> Vec<&'a Event> {
+    upcoming
+        .events
+        .iter()
+        .filter(|e| e.item.start_ms - lead_ms <= now && now < e.item.start_ms)
+        .filter(|e| !announced.contains(&(e.item.id.clone(), e.item.start_ms)))
+        .collect()
+}
+
+/// Whole minutes from `now` to `start`, rounded up ("in 5 min" at 4:30 left), 0 once it's started.
+pub fn minutes_until(start: i64, now: i64) -> u32 {
+    ((start - now).max(0) + MINUTE_MS - 1).div_euclid(MINUTE_MS) as u32
 }
 
 /// After `failures` refreshes in a row went wrong (offline, Google down): 1, 2, 5, 10, 20, then 30 minutes.
@@ -671,7 +698,10 @@ mod tests {
         assert_eq!(now.events[1].item.phase, EventPhase::Later);
         assert!(pending(&now));
         // Next change: the design review (10:00) becomes soon at 09:45... but Standup ends at 09:15 first.
-        assert_eq!(next_boundary(&now, NOW, soon, |_| 0), NOW + 15 * MINUTE_MS);
+        assert_eq!(
+            next_boundary(&now, NOW, &[soon], |_| 0),
+            NOW + 15 * MINUTE_MS
+        );
         // After the standup ends, nothing is pending until 09:45.
         let later = at(&upcoming, NOW + 20 * MINUTE_MS, soon, local_day(NOW, |_| 0));
         assert!(!pending(&later));
@@ -685,11 +715,11 @@ mod tests {
         let empty = Upcoming::default();
         // UTC+1: local midnight is 23:00 UTC.
         assert_eq!(
-            format_rfc3339(next_boundary(&empty, NOW, 0, |_| 60)),
+            format_rfc3339(next_boundary(&empty, NOW, &[0], |_| 60)),
             "2026-11-02T23:00:00Z"
         );
         assert_eq!(
-            format_rfc3339(next_boundary(&empty, NOW, 0, |_| -300)),
+            format_rfc3339(next_boundary(&empty, NOW, &[0], |_| -300)),
             "2026-11-03T05:00:00Z"
         );
     }
@@ -722,6 +752,50 @@ mod tests {
         );
         assert!(tomorrow.tasks.iter().all(|t| t.item.overdue));
         assert!(pending(&tomorrow));
+    }
+
+    #[test]
+    fn announcements_come_once_inside_the_lead_time() {
+        let upcoming = Upcoming {
+            events: merge(fixture_events()),
+            tasks: vec![],
+        };
+        let lead = 5 * MINUTE_MS;
+        let mut announced = std::collections::HashSet::new();
+        // 09:00: the standup has started, the 10:00 review is an hour away.
+        assert!(to_announce(&upcoming, NOW, lead, &announced).is_empty());
+        // 09:56: the review is 4 min away.
+        let at = NOW + 56 * MINUTE_MS;
+        let due = to_announce(&upcoming, at, lead, &announced);
+        assert_eq!(due.len(), 1);
+        assert_eq!(due[0].item.title, "Design review");
+        assert_eq!(minutes_until(due[0].item.start_ms, at), 4);
+        assert_eq!(minutes_until(due[0].item.start_ms, at + 30_000), 4);
+        assert_eq!(
+            minutes_until(due[0].item.start_ms, due[0].item.start_ms + 1),
+            0
+        );
+        announced.insert((due[0].item.id.clone(), due[0].item.start_ms));
+        assert!(to_announce(&upcoming, at + MINUTE_MS, lead, &announced).is_empty());
+        // The lead boundary is a wake-up time: 09:55 for the review once the standup has ended.
+        assert_eq!(
+            next_boundary(
+                &upcoming,
+                NOW + 20 * MINUTE_MS,
+                &[15 * MINUTE_MS, lead],
+                |_| 0
+            ),
+            NOW + 45 * MINUTE_MS
+        );
+        assert_eq!(
+            next_boundary(
+                &upcoming,
+                NOW + 46 * MINUTE_MS,
+                &[15 * MINUTE_MS, lead],
+                |_| 0
+            ),
+            NOW + 55 * MINUTE_MS
+        );
     }
 
     #[test]

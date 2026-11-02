@@ -199,6 +199,18 @@ export interface AgentFinishedActivity {
   reason: AgentEndReason | null;
 }
 
+/** Phase 6b: an event starts soon. Shown once, at the lead time; interactive (Join, open). */
+export interface CalendarSoonActivity {
+  eventId: string;
+  title: string;
+  startsAtMs: number;
+  /** Whole minutes left when offered ("in 5 min"); 0 = starting now. Rust's number: don't recount it. */
+  minutes: number;
+  hasJoin: boolean;
+  /** The calendar's colour in Google. */
+  color: string | null;
+}
+
 export type Activity =
   | { kind: "volume"; payload: VolumeActivity }
   | { kind: "brightness"; payload: BrightnessActivity }
@@ -211,7 +223,8 @@ export type Activity =
   | { kind: "claudeApproval"; payload: ClaudeApprovalActivity }
   | { kind: "agentApproval"; payload: AgentApprovalActivity }
   | { kind: "agentActing"; payload: AgentActingActivity }
-  | { kind: "agentFinished"; payload: AgentFinishedActivity };
+  | { kind: "agentFinished"; payload: AgentFinishedActivity }
+  | { kind: "calendarSoon"; payload: CalendarSoonActivity };
 
 /** `activity:show`. The same `id` again means the activity was updated in place (e.g. another volume step). */
 export type ActivityPayload = Activity & {

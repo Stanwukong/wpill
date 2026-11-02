@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { ActivityPayload, AgentRun, PowerActivity } from "../../lib/types";
 import { endLabel } from "../agent/labels";
+import { CalendarSoon } from "../calendar/CalendarSoon";
 import { openRun } from "../agent/useAgentRuns";
 import { focusClaudeSession } from "../claude/useClaudeSessions";
 import { AgentActing } from "./AgentActing";
@@ -102,6 +103,8 @@ export function ActivityView({ activity, agentRuns = [] }: { activity: ActivityP
         />
       );
     }
+    case "calendarSoon":
+      return <CalendarSoon soon={activity.payload} />;
   }
 }
 

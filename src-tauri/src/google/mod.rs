@@ -31,9 +31,11 @@ use windows::Win32::UI::WindowsAndMessaging::{
     MB_SETFOREGROUND, MB_TOPMOST, MESSAGEBOX_STYLE,
 };
 
-use crate::activity::{Activities, Watcher};
+use crate::activity::{self, Activities, Signal, Watcher};
 use crate::error::{AppError, AppResult};
-use crate::ipc::{events, CalendarUpcoming, GoogleState, GoogleStatus};
+use crate::ipc::{
+    events, Activity, CalendarSoonActivity, CalendarUpcoming, GoogleState, GoogleStatus,
+};
 use auth::{AuthError, ClientConfig, Tokens};
 use http::{Client, FetchError};
 use logic::{Upcoming, MINUTE_MS};
@@ -77,6 +79,8 @@ struct Inner {
     cancel: Arc<AtomicBool>,
     signing_in: bool,
     cache: Option<PathBuf>,
+    /// The activity channel, for "starting soon" and withdrawing it after Join.
+    activities: Option<Sender<Signal>>,
 }
 
 /// Tauri-managed state shared by the watcher, the sign-in thread, the tray and commands.
@@ -98,6 +102,7 @@ impl Default for Google {
             cancel: Arc::new(AtomicBool::new(false)),
             signing_in: false,
             cache: None,
+            activities: None,
         }))
     }
 }
@@ -105,6 +110,13 @@ impl Default for Google {
 impl Google {
     fn lock(&self) -> MutexGuard<'_, Inner> {
         self.0.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Withdraws an event's "starting soon" (you joined or opened it).
+    fn retract(&self, event_id: &str) {
+        if let Some(tx) = &self.lock().activities {
+            let _ = tx.send(Signal::Retract(activity::calendar_key(event_id)));
+        }
     }
 
     fn wake(&self, wake: Wake) {
@@ -193,6 +205,7 @@ pub fn spawn(app: &AppHandle, activities: &Activities) {
         inner.client = client;
         inner.wake = Some(tx.clone());
         inner.cache = cache;
+        inner.activities = Some(activities.sender());
     }
     let body_app = app.clone();
     let network = tx.clone();
@@ -231,17 +244,19 @@ fn run(app: &AppHandle, rx: Receiver<Wake>) {
     let mut failures = 0u32;
     let mut next_fetch = now_ms();
     let mut last_fetch = 0i64;
+    let mut announced = std::collections::HashSet::new();
     publish(app, now_ms());
     loop {
         let now = now_ms();
-        let (soon, refresh) = {
+        let (soon, lead, refresh) = {
             let inner = google.lock();
             (
                 i64::from(inner.settings.soon_minutes) * MINUTE_MS,
+                i64::from(inner.settings.lead_minutes) * MINUTE_MS,
                 i64::from(inner.settings.refresh_minutes) * MINUTE_MS,
             )
         };
-        let boundary = logic::next_boundary(&google.lock().fetched, now, soon, offset);
+        let boundary = logic::next_boundary(&google.lock().fetched, now, &[soon, lead], offset);
         let until = next_fetch.min(boundary) - now;
         let wait = Duration::from_millis(until.clamp(0, MAX_SLEEP.as_millis() as i64) as u64);
         let (before_wall, before) = (now, Instant::now());
@@ -308,6 +323,7 @@ fn run(app: &AppHandle, rx: Receiver<Wake>) {
             next_fetch = now;
         }
         publish(app, now);
+        announce(app, now, lead, &mut announced);
     }
     log::info!("google watcher stopped");
 }
@@ -480,6 +496,39 @@ fn publish(app: &AppHandle, now: i64) {
         }
     }
     *last = Some((state, upcoming));
+}
+
+/// Offers "starting soon" for each event inside its lead time, once per event and start time.
+fn announce(
+    app: &AppHandle,
+    now: i64,
+    lead: i64,
+    announced: &mut std::collections::HashSet<(String, i64)>,
+) {
+    // Forget events that started over an hour ago, so the set stays small.
+    announced.retain(|(_, start)| *start > now - 60 * MINUTE_MS);
+    let google = app.state::<Google>();
+    let inner = google.lock();
+    let Some(tx) = inner.activities.as_ref() else {
+        return;
+    };
+    for e in logic::to_announce(&inner.shown, now, lead, announced) {
+        announced.insert((e.item.id.clone(), e.item.start_ms));
+        log::debug!(
+            "google: starting soon, in {} min",
+            logic::minutes_until(e.item.start_ms, now)
+        );
+        let _ = tx.send(Signal::Offer(Activity::CalendarSoon(
+            CalendarSoonActivity {
+                event_id: e.item.id.clone(),
+                title: e.item.title.clone(),
+                starts_at_ms: e.item.start_ms,
+                minutes: logic::minutes_until(e.item.start_ms, now),
+                has_join: e.item.has_join,
+                color: e.item.color.clone(),
+            },
+        )));
+    }
 }
 
 fn set_status(app: &AppHandle, status: GoogleStatus, error: Option<String>) {
@@ -757,7 +806,9 @@ pub fn calendar_open(google: State<'_, Google>, id: String) -> AppResult<()> {
                 })
             })
     };
-    open(link.ok_or(AppError::CalendarItemGone)?)
+    open(link.ok_or(AppError::CalendarItemGone)?)?;
+    google.retract(&id);
+    Ok(())
 }
 
 /// Opens an event's Meet (or other meeting) link.
@@ -770,7 +821,9 @@ pub fn calendar_join(google: State<'_, Google>, id: String) -> AppResult<()> {
         .iter()
         .find(|e| e.item.id == id)
         .and_then(|e| e.join.clone());
-    open(link.ok_or(AppError::CalendarItemGone)?)
+    open(link.ok_or(AppError::CalendarItemGone)?)?;
+    google.retract(&id);
+    Ok(())
 }
 
 fn open(link: String) -> AppResult<()> {

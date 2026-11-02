@@ -84,6 +84,23 @@ pub enum Activity {
     AgentApproval(AgentApprovalActivity),
     AgentActing(AgentActingActivity),
     AgentFinished(AgentFinishedActivity),
+    /// An event starts soon (Phase 6b): shown once, at `google.leadMinutes` before it.
+    CalendarSoon(CalendarSoonActivity),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarSoonActivity {
+    /// The event's id for `calendar_open` / `calendar_join`.
+    pub event_id: String,
+    pub title: String,
+    pub starts_at_ms: i64,
+    /// Whole minutes until it starts when offered ("in 5 min"); 0 = starting now. Rust works it out so React needs
+    /// no clock.
+    pub minutes: u32,
+    pub has_join: bool,
+    /// The calendar's colour in Google (`#rrggbb`).
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
