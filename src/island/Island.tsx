@@ -1,6 +1,7 @@
 import { useRef, type CSSProperties } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ActivityView } from "../features/activities/ActivityView";
+import { questionNeedsRoom } from "../features/activities/InteractionCards";
 import { AgentRunItems } from "../features/agent/AgentRunItems";
 import { isLive, recentRuns, useAgentRuns } from "../features/agent/useAgentRuns";
 import { AppsList } from "../features/apps/AppsList";
@@ -34,9 +35,12 @@ export function Island() {
           activity?.kind === "agentApproval"
         ? "needsInput"
         : undefined;
-  // An approval with a diff or command (2.8b) needs a wider card; the layout spring morphs to it like any shape change.
+  // An approval with a diff or command (2.8b), or a question with long options (2.8c), needs a wider card; the layout
+  // spring morphs to it like any shape change.
   const wide =
-    (activity?.kind === "agentApproval" || activity?.kind === "claudeApproval") && activity.payload.preview !== null;
+    (activity?.kind === "agentApproval" || activity?.kind === "claudeApproval") &&
+    (activity.payload.preview !== null ||
+      (activity.payload.interaction !== null && questionNeedsRoom(activity.payload.interaction)));
   const ref = useRef<HTMLDivElement>(null);
   usePanelSizeReporter(ref, mode === "pill" ? null : mode);
   const media = useMedia();

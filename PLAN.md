@@ -27,8 +27,8 @@ Cay runs), with all 12 manual checks passed. Phase 2.7 is complete.**
 decided (v0.2 unsigned, D33) (2026-11-01). **4a-5 (release v0.2) and the dock check are set aside** at the author's
 call (2026-11-01) to start 2.8; they resume after it.
 **Now: [Phase 2.8 agent UX](#phase-28-agent-ux-started-2026-11-01) (D34).** 2.8a (approve terminal sessions from the
-island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the card, D37) is built, manual check
-pending. **Next: 2.8c–f**, kick-off prompt
+island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the card, D37) and 2.8c (questions and
+plans, D38) are built, manual checks pending. **Next: 2.8d–f**, kick-off prompt
 [prompts/phase-2.8-agent-ux.md](prompts/phase-2.8-agent-ux.md).
 Proposed, not started: [6 Google Calendar and Gmail](#phase-6-google-calendar-and-gmail-proposed-2026-11-01-not-started)
 (D35) and [2.9 other agents and open models](#phase-29-other-agents-and-open-models-proposed-2026-11-01-not-started).
@@ -327,6 +327,11 @@ startFailed`.
 | command | `command_window_show_ask` | `(requestId) → void` | Shows the command window and sends `command:focus-ask` (`requestId`). |
 | command | `command_take_focus` | `() → { kind: "run", runId } \| { kind: "ask", requestId } \| null` | Once, on load: the focus a newly created window missed. |
 | pipe field | `ask::Request.cut` | `string[]` | Top-level input fields the forwarder shortened. |
+| activity field | `agentApproval.interaction`, `claudeApproval.interaction` | `{ kind: "question", questions: { header, question, options: { label, description }[], multiSelect }[], answers } \| { kind: "plan", title, lines } \| null` | 2.8c. Re-sent in place with the answers so far. |
+| type | `ApprovalPreview` (plan) | `{ kind: "plan", markdown, cut }` | From the preview commands only. |
+| command | `agent_answer` / `claude_answer` | `(requestId, answer: { question, labels: string[], other: string \| null })` | One question. Errors `agentInvalid` (not an option), `agentApprovalGone`. |
+| command | `agent_plan` / `claude_plan` | `(requestId, approve, feedback?)` | `approve: false` needs feedback (sent back as the deny message). |
+| pipe reply | `ask::Decision` | `"allow" \| "deny" \| "pass" \| { "answers": {…} } \| "approvePlan" \| { "feedback": "…" }` | The forwarder echoes the original input; a plain allow on a question or plan prints nothing. |
 
 ### Reserved for later phases (names fixed now so they slot in)
 
@@ -1045,11 +1050,43 @@ tray first, it now adds `PermissionRequest`; restart open Claude Code sessions)
 7. **Title:** clicking the session card's project name brings its terminal forward.
 8. **Text size 150 %:** cards still fit; nothing overlaps.
 
-**2.8c Questions and plans**
-- [ ] `AskUserQuestion`: options as buttons on the card; a free-text answer opens the command window
-- [ ] `ExitPlanMode`: the plan rendered (Markdown, Cascadia Mono) in the command window with Approve / Send feedback;
-      the island shows "Plan ready" as an activity
-- [ ] Agent runs: the same, which removes the limitation that Claude can't ask mid-run
+**2.8c Questions and plans** (built 2026-11-01, D38)
+- [x] Spiked with Claude Code 2.1.314 (`-p`, a stand-in prompt tool, `--settings` hooks): `PermissionRequest` fires for
+      `AskUserQuestion` and `ExitPlanMode`; an allow whose `updatedInput` holds the original `questions` plus
+      `answers` reached Claude, and a plan's allow with its input unchanged ended plan mode. The prompt tool takes the
+      same `answers`
+- [x] `AskUserQuestion`: held like a permission request; the island shows the first unanswered question with its
+      options as buttons (multi-select: toggles + Done), `n/m` for several; Rust keeps the answers so far and updates
+      the card in place; "Type an answer…" opens the command window (every question, options and an Other field)
+- [x] `ExitPlanMode`: the island shows "Plan ready" (title, lines); the command window renders the plan (Markdown,
+      Cascadia Mono, an in-house renderer, no HTML) with Approve / Send feedback / Reject. A plan cut at 16 KB is read
+      whole from its `planFilePath` when that file starts with what arrived
+- [x] Never a bare allow: `ask::Decision` gained `Answers`, `ApprovePlan`, `Feedback`; the forwarder builds the hook
+      output from the input as Claude Code sent it and prints nothing for a plain `Allow` on these tools or for answers
+      that don't match the questions. `agent_decide`/`claude_decide` refuse Allow for them; Deny skips or rejects.
+      Never remembered "for this run"
+- [x] Held longer: 600 s for questions and plans (the terminal prompts meanwhile, confirmed by the author), forwarder
+      605 s, hook entry 660 s; permissions keep 55 / 60 s. Connect offers an update: `installed` now checks each
+      entry's timeout and `async`, so 2.8a's 75 s entry is out of date
+- [x] Agent runs: `AskUserQuestion` is no longer disallowed; questions and plans reach the prompt tool and the same
+      cards (`agent_answer`, `agent_plan`); a plan sent back is a deny whose message is your feedback
+- [x] Checked: Rust 177 tests, clippy, typecheck; UI renders (motion-designer). Not driven live: `pnpm tauri dev` was
+      running, so no test requests were sent to it
+- [ ] Manual check (below)
+
+**Manual check (Phase 2.8c)** (`pnpm tauri dev`; **Connect Claude Code again** from the tray: the entry's timeout changed;
+restart open sessions)
+1. **Question:** in a terminal session ask Claude to use AskUserQuestion with three options. The card shows them; click
+   one. Claude continues with that answer; the terminal's own question goes away.
+2. **Several questions:** ask for two questions, one multi-select. The card shows `1/2`, then the second; choose two
+   options and Done. Claude gets "A, B".
+3. **Own words:** "Type an answer…" opens the command window; type an answer in Other and send it.
+4. **Answer in the terminal:** answer a question in the terminal instead: the card goes.
+5. **Plan:** in plan mode (Shift+Tab), ask for a plan. "Plan ready" shows; click it: the plan renders in the command
+   window. Send feedback: Claude revises and asks again. Approve: Claude starts (edits still ask, mode is not widened).
+6. **Long plan wait:** leave a plan card for a few minutes: it stays (until 10 min), and the terminal can still answer.
+7. **Agent run question:** start a run asking Claude to ask you something first. Answer on the card; the run continues.
+8. **Skip:** Skip a question: Claude is told you chose not to answer and carries on.
 
 **2.8d Live step line**
 - [ ] Current tool and target beside the wave ("Edit · hover/logic.rs"), from `PreToolUse` and stream-json; `n/m` from
@@ -1234,8 +1271,8 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
 - Agent (2.7): only steps Claude Code would ask about reach the island; your own allow rules still auto-approve
   (`agent.userSettings: false` sends everything to the island but drops your hooks and plugins for those runs). Your
   own MCP servers aren't loaded in agent runs unless `agent.strictMcpConfig` is false. Budgets are Claude Code's
-  estimate and can be overshot by one response; the turn limit can let one more batch of tools run. Claude can't ask
-  questions mid-run (it asks in its final message; answer with a follow-up). The hotkeys are fixed until Phase 4b
+  estimate and can be overshot by one response; the turn limit can let one more batch of tools run. Questions mid-run
+  (2.8c) wait like approvals and are denied at the run's approval timeout. The hotkeys are fixed until Phase 4b
   (edit `settings.json`). Clicking the panel's "agent" row opens the command window; there's no per-step "Details" yet.
 - Desktop looks (2.7c): Claude Code keeps every image a tool returns in its own session transcript
   (`~/.claude/projects/<folder>/<session>.jsonl`), so screenshots persist there outside Cay's control (Cay's audit

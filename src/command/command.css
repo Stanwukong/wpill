@@ -543,7 +543,9 @@ textarea {
 .composer__box,
 .task-field select,
 .task-field input,
-.routine input {
+.routine input,
+.iq__other,
+.iplan__feedback {
   border: 0;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.05);
@@ -556,7 +558,9 @@ textarea {
 .composer__box:focus-within,
 .task-field select:focus,
 .task-field input:focus,
-.routine input:focus {
+.routine input:focus,
+.iq__other:focus,
+.iplan__feedback:focus {
   box-shadow: inset 0 0 0 1px rgba(var(--agent-rgb), 0.6);
 }
 
@@ -1330,9 +1334,16 @@ textarea {
   color: var(--danger);
 }
 
-/* Approvals waiting on this run, above the composer. */
+/*
+ * Approvals waiting on this run, above the composer. A question or plan can be tall: the list takes up to ~3/4 of the
+ * view (the transcript gives way) and scrolls past that, so the composer always stays in view.
+ */
 .run__pending {
-  flex: none;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 72%;
+  overflow-y: auto;
+  scrollbar-width: thin;
   list-style: none;
   margin: 0;
   padding: 8px 14px 0;
@@ -1533,6 +1544,335 @@ textarea {
   margin: 0;
   padding: 14px 18px;
   text-align: left;
+}
+
+/* A run's question or plan (2.8c): the kind on top, then the form across the card. */
+.pending--interaction {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 10px;
+  padding: 9px 12px 10px;
+  white-space: normal;
+}
+
+.pending--interaction .pending__what {
+  flex: none;
+}
+
+/*
+ * Questions (2.8c): one block each (header chip and text in Claude's font, options as radio or checkbox rows with
+ * their descriptions under the label, an "Other" field), answered ones read-only with a quiet check. Options sit two
+ * up when the window is wide enough. Chosen rows take an amber hairline and tint; nothing moves but 120 ms fades.
+ */
+.iq {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.iq__q {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.iq__ask {
+  margin: 0;
+  font-family: var(--font-claude);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgba(245, 245, 247, 0.92);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.iq__header {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px var(--island-border);
+  font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-size: 10.5px;
+  line-height: 16px;
+  vertical-align: 1px;
+  color: var(--island-muted);
+}
+
+.iq__options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: 6px;
+}
+
+.iq__option {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  column-gap: 9px;
+  row-gap: 1px;
+  align-items: baseline;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px var(--island-border);
+  color: var(--island-fg);
+  text-align: left;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease,
+    opacity 120ms ease;
+}
+
+.iq__option:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.iq__option[aria-checked="true"] {
+  background: rgba(var(--agent-rgb), 0.1);
+  box-shadow: inset 0 0 0 1px rgba(var(--agent-rgb), 0.55);
+}
+
+.iq__option:disabled {
+  opacity: 0.55;
+}
+
+/* Radio: a ring that takes an amber dot. Checkbox: a rounded square that fills amber with an ink check. */
+.iq__mark {
+  position: relative;
+  align-self: center;
+  grid-row: 1;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px rgba(245, 245, 247, 0.4);
+  transition:
+    background 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.iq__option[aria-checked="true"] .iq__mark {
+  background: radial-gradient(circle, var(--agent) 0 2.6px, transparent 3.2px);
+  box-shadow: inset 0 0 0 1.5px var(--agent);
+}
+
+.iq__option[data-multi="true"] .iq__mark {
+  border-radius: 3.5px;
+}
+
+.iq__option[data-multi="true"][aria-checked="true"] .iq__mark {
+  background: var(--agent);
+}
+
+.iq__option[data-multi="true"][aria-checked="true"] .iq__mark::after {
+  content: "";
+  position: absolute;
+  left: 4.25px;
+  top: 1.75px;
+  width: 2.5px;
+  height: 5.5px;
+  border: solid var(--agent-ink);
+  border-width: 0 1.6px 1.6px 0;
+  transform: rotate(45deg);
+}
+
+.iq__label {
+  grid-column: 2;
+  font-family: var(--font-claude);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.iq__desc {
+  grid-column: 2;
+  font-family: var(--font-claude);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--island-muted);
+  overflow-wrap: anywhere;
+}
+
+.iq__other {
+  height: 30px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-family: var(--font-claude);
+  font-size: 12px;
+  user-select: text;
+}
+
+.iq__other::placeholder,
+.iplan__feedback::placeholder {
+  color: rgba(245, 245, 247, 0.32);
+}
+
+.iq__q[data-answered="true"] .iq__ask {
+  color: var(--island-muted);
+}
+
+.iq__answer {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-family: var(--font-claude);
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(245, 245, 247, 0.86);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.iq__answer svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  align-self: center;
+  color: var(--island-muted);
+}
+
+/*
+ * A plan (2.8c): the Markdown in a quiet, scrolling well (capped so feedback and the choices stay in view at large
+ * Text size), a muted note if it was cut, the feedback box, then Reject · Send feedback · Approve.
+ */
+.iplan {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.iplan__doc {
+  max-height: min(300px, 46vh);
+  overflow: auto;
+  scrollbar-width: thin;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px var(--island-border);
+  user-select: text;
+}
+
+/* Under a run the list scrolls too: a shorter well keeps the choices close. */
+.pending .iplan__doc {
+  max-height: min(240px, 30vh);
+}
+
+.iplan__empty,
+.iplan__cut {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--island-muted);
+}
+
+.iplan__feedback {
+  min-height: 52px;
+  box-sizing: border-box;
+  resize: none;
+  padding: 8px 10px;
+  font-family: var(--font-claude);
+  font-size: 12.5px;
+  line-height: 1.5;
+  user-select: text;
+  scrollbar-width: thin;
+}
+
+/* Rendered Markdown (Markdown.tsx): Claude's font throughout; headings by size and weight, never color. */
+.md {
+  font-family: var(--font-claude);
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(245, 245, 247, 0.9);
+  overflow-wrap: anywhere;
+}
+
+.md > * {
+  margin: 0;
+}
+
+.md > * + * {
+  margin-top: 8px;
+}
+
+.md > * + .md__h {
+  margin-top: 14px;
+}
+
+.md__h {
+  font-weight: 500;
+  color: var(--island-fg);
+}
+
+.md__h[data-level="1"] {
+  font-size: 14px;
+}
+
+.md__h[data-level="2"] {
+  font-size: 13px;
+}
+
+.md strong {
+  font-weight: 600;
+  color: var(--island-fg);
+}
+
+.md code {
+  padding: 0 3px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  font-family: inherit;
+  font-size: 11.5px;
+}
+
+.md__list {
+  margin: 0;
+  padding-left: 2.6ch;
+}
+
+.md__list li + li,
+.md__list .md__list {
+  margin-top: 2px;
+}
+
+.md__list li::marker {
+  color: var(--island-muted);
+}
+
+.md__code,
+.md__pre {
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px var(--island-border);
+  font-family: inherit;
+  font-size: 11.5px;
+  line-height: 16px;
+  white-space: pre;
+  overflow-x: auto;
+  overflow-wrap: normal;
+  scrollbar-width: thin;
+}
+
+.md__quote {
+  padding-left: 10px;
+  box-shadow: inset 2px 0 0 var(--island-border);
+  color: var(--island-muted);
+}
+
+.md__rule {
+  height: 0;
+  border: 0;
+  border-top: 1px solid var(--island-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iq__option,
+  .iq__mark {
+    transition: none;
+  }
 }
 
 /* Follow-up */

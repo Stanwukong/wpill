@@ -508,6 +508,141 @@
   opacity: 0.8;
 }
 
+/* Which question of several (2.8c): chrome, so Segoe; it never gives way to the tool. */
+.approval__count {
+  flex: none;
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--island-muted);
+}
+
+/*
+ * A question (2.8c): header chip and text (Claude's words, at most three lines), then the options as chips that wrap
+ * into rows, all on the project column. A chip is quiet until chosen; chosen (toggled, or sent) it takes an amber
+ * hairline and tint. Multi-select chips lead with a small box that fills amber. No motion beyond 120 ms hovers.
+ */
+.question {
+  margin-left: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.question__text {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-family: var(--font-claude);
+  font-size: 12px;
+  line-height: 17px;
+  color: rgba(245, 245, 247, 0.92);
+}
+
+.question__header {
+  display: inline-block;
+  margin-right: 7px;
+  padding: 0 5px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px var(--island-border);
+  background: rgba(255, 255, 255, 0.05);
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-size: 10.5px;
+  line-height: 15px;
+  vertical-align: 1px;
+  color: var(--island-muted);
+}
+
+.question__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.question__option {
+  max-width: 100%;
+  min-width: 0;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--island-fg);
+  font-family: var(--font-claude);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease,
+    opacity 120ms ease;
+}
+
+.question__option:hover {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.question__option[data-on="true"] {
+  background: rgba(var(--agent-rgb), 0.16);
+  box-shadow: inset 0 0 0 1px rgba(var(--agent-rgb), 0.55);
+}
+
+.question__option:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Cascadia touches its cell edge: 2 px of slack so the clip doesn't shave the last glyph. */
+.question__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 2px;
+  margin-right: -2px;
+}
+
+.question__box {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1.5px rgba(245, 245, 247, 0.45);
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.question__option[data-on="true"] .question__box {
+  background: var(--agent);
+  box-shadow: inset 0 0 0 1.5px var(--agent);
+}
+
+.activity--question .approval__actions {
+  gap: 14px;
+  min-height: 26px;
+}
+
+/* Plan ready (2.8c): the well's title gives way before the line count and the chevron. */
+.plan-card__lines {
+  flex: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--island-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .question__option,
+  .question__box {
+    transition: none;
+  }
+}
+
 /*
  * Agent acting: mark · project · step, and under it what stops it. Not clickable. The pointer at the end is muted
  * while Cay waits for you to let go and turns amber once it acts (120 ms, in place).

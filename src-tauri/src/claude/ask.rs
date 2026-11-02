@@ -4,10 +4,13 @@
 //! As with `protocol.rs`, any local process of this user can write to the pipe, so every field is bounded and
 //! checked. The tool input is kept (the card shows the command or the file), with long strings cut.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 use super::protocol::{origin_ok, Proc};
+use crate::agent::interact::{self, PLAN_TOOL, QUESTION_TOOL};
 
 pub const VERSION: u32 = 1;
 /// Largest request the forwarder sends and Cay reads.
@@ -25,10 +28,11 @@ const MAX_ITEMS: usize = 64;
 const MAX_DEPTH: usize = 3;
 /// A value nested deeper than `MAX_DEPTH`, serialized; larger ones are dropped.
 const MAX_VALUE: usize = 16 * 1024;
-/// Tools whose answer is more than "allow" (an option, a plan): the terminal asks until 2.8c.
-const PASS_TOOLS: &[&str] = &["AskUserQuestion", "ExitPlanMode"];
 /// What Claude is told when you deny from the island.
 const DENY_MESSAGE: &str = "The user denied this in Cay.";
+const NO_ANSWER_MESSAGE: &str = "The user chose not to answer this in Cay.";
+const PLAN_REJECTED_MESSAGE: &str =
+    "The user rejected this plan in Cay. Ask what they would like changed.";
 
 /// On the wire, forwarder → Cay, one per connection.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -68,13 +72,19 @@ struct HookInput {
 }
 
 /// Cay → forwarder. `Pass`: no decision, so Claude Code's own prompt decides (timeout, Cay's own runs, a tool the
-/// island can't answer, shutdown).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// island can't answer, shutdown). `AskUserQuestion` and `ExitPlanMode` (2.8c) are allowed only with their answer:
+/// `Answers` or `ApprovePlan`; a plain `Allow` for them is no decision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Decision {
     Allow,
     Deny,
     Pass,
+    /// Question text → the chosen label (multi-select labels joined by ", "), or your own words.
+    Answers(BTreeMap<String, String>),
+    ApprovePlan,
+    /// Keep planning: a deny whose message is your feedback.
+    Feedback(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -128,12 +138,35 @@ pub fn decode_reply(bytes: &[u8]) -> Option<Decision> {
     (reply.v == VERSION).then_some(reply.decision)
 }
 
-/// What the forwarder prints for a decision; nothing for `Pass`, which leaves the prompt to Claude Code.
-pub fn hook_output(decision: Decision) -> Option<String> {
-    let decision = match decision {
-        Decision::Allow => json!({ "behavior": "allow" }),
-        Decision::Deny => json!({ "behavior": "deny", "message": DENY_MESSAGE }),
-        Decision::Pass => return None,
+/// What the forwarder prints for a decision on `tool`, whose input as Claude Code sent it is `original`; nothing for
+/// `Pass` or for a decision that doesn't fit the tool, which leaves the prompt to Claude Code. A question's allow
+/// echoes the original questions with your answers; a plan's echoes the original input.
+pub fn hook_output(decision: &Decision, tool: &str, original: &Value) -> Option<String> {
+    let decision = match (tool, decision) {
+        (QUESTION_TOOL, Decision::Answers(answers)) => json!({
+            "behavior": "allow",
+            "updatedInput": interact::answered_input(original, answers)?,
+        }),
+        (QUESTION_TOOL, Decision::Deny) => {
+            json!({ "behavior": "deny", "message": NO_ANSWER_MESSAGE })
+        }
+        (PLAN_TOOL, Decision::ApprovePlan) if original.is_object() => {
+            json!({ "behavior": "allow", "updatedInput": original })
+        }
+        (PLAN_TOOL, Decision::Feedback(text)) => json!({
+            "behavior": "deny",
+            "message": format!(
+                "The user sent this plan back from Cay with feedback:\n\n{}",
+                interact::feedback(text)?
+            ),
+        }),
+        (PLAN_TOOL, Decision::Deny) => {
+            json!({ "behavior": "deny", "message": PLAN_REJECTED_MESSAGE })
+        }
+        (QUESTION_TOOL | PLAN_TOOL, _) => return None,
+        (_, Decision::Allow) => json!({ "behavior": "allow" }),
+        (_, Decision::Deny) => json!({ "behavior": "deny", "message": DENY_MESSAGE }),
+        _ => return None,
     };
     Some(
         json!({
@@ -148,8 +181,7 @@ fn check(r: &Request) -> bool {
         && r.tool_name.len() <= MAX_TOOL
         && r.tool_name
             .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
-        && !PASS_TOOLS.contains(&r.tool_name.as_str());
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.');
     let mode_ok = r
         .permission_mode
         .as_deref()
@@ -276,14 +308,8 @@ mod tests {
         let other =
             r#"{"session_id":"s","cwd":"C:\\p","hook_event_name":"PreToolUse","tool_name":"Bash"}"#;
         assert_eq!(request(other.as_bytes(), AT, vec![]), None);
-        assert_eq!(
-            request(stdin("AskUserQuestion", "{}").as_bytes(), AT, vec![]),
-            None
-        );
-        assert_eq!(
-            request(stdin("ExitPlanMode", "{}").as_bytes(), AT, vec![]),
-            None
-        );
+        assert!(request(stdin("AskUserQuestion", "{}").as_bytes(), AT, vec![]).is_some());
+        assert!(request(stdin("ExitPlanMode", "{}").as_bytes(), AT, vec![]).is_some());
         assert!(request(
             stdin("mcp__github__create_issue", "{}").as_bytes(),
             AT,
@@ -349,10 +375,6 @@ mod tests {
                 ..good.clone()
             },
             Request {
-                tool_name: "ExitPlanMode".into(),
-                ..good.clone()
-            },
-            Request {
                 tool_input: json!("ls"),
                 ..good.clone()
             },
@@ -379,13 +401,71 @@ mod tests {
     }
 
     #[test]
+    fn questions_and_plans_need_their_answer() {
+        let original = json!({ "questions": [{ "question": "Which?", "header": "H", "multiSelect": false,
+            "options": [{ "label": "A", "description": "" }, { "label": "B", "description": "" }] }] });
+        let out = |d: &Decision, tool: &str, input: &Value| {
+            hook_output(d, tool, input).map(|s| serde_json::from_str::<Value>(&s).unwrap())
+        };
+        assert_eq!(
+            out(&Decision::Allow, QUESTION_TOOL, &original),
+            None,
+            "never a bare allow"
+        );
+        let mut answers = BTreeMap::new();
+        answers.insert("Which?".to_string(), "B".to_string());
+        let allow = out(&Decision::Answers(answers), QUESTION_TOOL, &original).unwrap();
+        let decision = &allow["hookSpecificOutput"]["decision"];
+        assert_eq!(decision["behavior"], "allow");
+        assert_eq!(decision["updatedInput"]["questions"], original["questions"]);
+        assert_eq!(decision["updatedInput"]["answers"]["Which?"], "B");
+        assert_eq!(
+            out(
+                &Decision::Answers(BTreeMap::new()),
+                QUESTION_TOOL,
+                &original
+            ),
+            None,
+            "unanswered"
+        );
+        let skip = out(&Decision::Deny, QUESTION_TOOL, &original).unwrap();
+        assert_eq!(skip["hookSpecificOutput"]["decision"]["behavior"], "deny");
+
+        let plan = json!({ "plan": "# P", "planFilePath": "C:\\p.md" });
+        assert_eq!(out(&Decision::Allow, PLAN_TOOL, &plan), None);
+        let approve = out(&Decision::ApprovePlan, PLAN_TOOL, &plan).unwrap();
+        assert_eq!(
+            approve["hookSpecificOutput"]["decision"]["updatedInput"],
+            plan
+        );
+        let back = out(&Decision::Feedback(" add tests ".into()), PLAN_TOOL, &plan).unwrap();
+        let message = back["hookSpecificOutput"]["decision"]["message"]
+            .as_str()
+            .unwrap();
+        assert!(message.ends_with("\n\nadd tests"), "{message}");
+        assert_eq!(
+            out(&Decision::Feedback("  ".into()), PLAN_TOOL, &plan),
+            None
+        );
+        assert_eq!(
+            out(&Decision::ApprovePlan, "Bash", &plan),
+            None,
+            "only for its tool"
+        );
+    }
+
+    #[test]
     fn replies_and_hook_output() {
         let wire = |d| serde_json::to_vec(&Reply::new(d)).unwrap();
         assert_eq!(decode_reply(&wire(Decision::Allow)), Some(Decision::Allow));
+        let plan = Decision::Feedback("more tests".into());
+        assert_eq!(decode_reply(&wire(plan.clone())), Some(plan));
         assert_eq!(decode_reply(br#"{"v":9,"decision":"allow"}"#), None);
         assert_eq!(decode_reply(b"junk"), None);
 
-        let allow: Value = serde_json::from_str(&hook_output(Decision::Allow).unwrap()).unwrap();
+        let allow: Value =
+            serde_json::from_str(&hook_output(&Decision::Allow, "Bash", &json!({})).unwrap())
+                .unwrap();
         assert_eq!(
             allow["hookSpecificOutput"]["hookEventName"],
             "PermissionRequest"
@@ -394,12 +474,14 @@ mod tests {
             allow["hookSpecificOutput"]["decision"],
             json!({ "behavior": "allow" })
         );
-        let deny: Value = serde_json::from_str(&hook_output(Decision::Deny).unwrap()).unwrap();
+        let deny: Value =
+            serde_json::from_str(&hook_output(&Decision::Deny, "Bash", &json!({})).unwrap())
+                .unwrap();
         assert_eq!(deny["hookSpecificOutput"]["decision"]["behavior"], "deny");
         assert_eq!(
             deny["hookSpecificOutput"]["decision"]["message"],
             DENY_MESSAGE
         );
-        assert_eq!(hook_output(Decision::Pass), None);
+        assert_eq!(hook_output(&Decision::Pass, "Bash", &json!({})), None);
     }
 }

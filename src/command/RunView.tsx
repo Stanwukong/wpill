@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { commands, errorMessage } from "../lib/ipc";
-import type { AgentApprovalActivity, AgentEntry, AgentEvent, AgentRun } from "../lib/types";
+import type { AgentApprovalActivity, AgentEntry, AgentEvent, AgentRun, Interaction } from "../lib/types";
 import { ClockGlyph, RiskGlyph, StopGlyph } from "../features/agent/AgentGlyphs";
 import { endLabel, RISK_LABEL, runLabel } from "../features/agent/labels";
-import { PreviewBlock } from "../features/agent/PreviewBlock";
+import { changePreview, PreviewBlock } from "../features/agent/PreviewBlock";
 import { decide, isLive, stopRun } from "../features/agent/useAgentRuns";
+import { PlanView, QuestionForm } from "./InteractionViews";
 import type { RoutineSeed } from "./routineLabels";
 import { useWholePreview } from "./useClaudeAsks";
 import type { Transcript } from "./useTranscripts";
@@ -194,6 +195,12 @@ function decisionText(d: Decision): string {
       return "Denied (timed out)";
     case "runEnded":
       return "Cancelled (run ended)";
+    case "answered":
+      return "Answered by you";
+    case "approved":
+      return "Plan approved by you";
+    case "feedback":
+      return "Sent back with your feedback";
   }
 }
 
@@ -216,8 +223,48 @@ function ToolResult({ isError, text }: { isError: boolean; text: string }) {
 }
 
 function PendingCard({ approval }: { approval: AgentApprovalActivity }) {
+  return approval.interaction ? (
+    <PendingInteraction approval={approval} interaction={approval.interaction} />
+  ) : (
+    <PendingApproval approval={approval} />
+  );
+}
+
+/** A question or a plan (2.8c): what kind, then the form; the question text is the form's, so no summary for it. */
+function PendingInteraction({ approval, interaction }: { approval: AgentApprovalActivity; interaction: Interaction }) {
+  const { requestId } = approval;
+  return (
+    <div className="pending pending--interaction" data-risk={approval.risk}>
+      <span className="pending__what">
+        <span className="pending__tool">{approval.tool}</span>
+        {interaction.kind === "plan" && (
+          <span className="pending__summary" title={interaction.title}>
+            {interaction.title}
+          </span>
+        )}
+      </span>
+      {interaction.kind === "question" ? (
+        <QuestionForm
+          interaction={interaction}
+          onAnswer={(answer) => commands.agentAnswer(requestId, answer)}
+          onSkip={() => decide(requestId, "deny", "once")}
+        />
+      ) : (
+        <PlanView
+          requestId={requestId}
+          fetch={commands.agentApprovalPreview}
+          cutNote="Cut on the way to Cay."
+          onPlan={(approve, feedback) => commands.agentPlan(requestId, approve, feedback)}
+          onReject={() => decide(requestId, "deny", "once")}
+        />
+      )}
+    </div>
+  );
+}
+
+function PendingApproval({ approval }: { approval: AgentApprovalActivity }) {
   const [sent, setSent] = useState(false);
-  const preview = useWholePreview(approval.requestId, approval.preview, commands.agentApprovalPreview);
+  const preview = changePreview(useWholePreview(approval.requestId, approval.preview, commands.agentApprovalPreview));
   const answer = (decision: "allow" | "deny", remember: "once" | "run" = "once") => {
     setSent(true);
     decide(approval.requestId, decision, remember).catch(() => setSent(false));

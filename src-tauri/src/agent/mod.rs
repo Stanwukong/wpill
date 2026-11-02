@@ -26,6 +26,7 @@ mod describe;
 mod folder;
 mod hotkey;
 mod installs;
+pub mod interact;
 mod job;
 mod lifecycle;
 mod mcp;
@@ -103,8 +104,11 @@ pub fn preview_tool(
     input: &Value,
     cwd: &str,
     cut: &[String],
-) -> Option<(crate::ipc::ApprovalPreview, crate::ipc::ApprovalPreview)> {
-    let existing = preview::read_existing(tool, input, cwd);
+) -> Option<(
+    Option<crate::ipc::ApprovalPreview>,
+    crate::ipc::ApprovalPreview,
+)> {
+    let existing = preview::read_existing(tool, input, cwd, cut);
     preview::build(tool, input, cwd, &existing, cut).map(|p| (p.card, p.full))
 }
 
@@ -345,6 +349,8 @@ impl Inner {
                 let rpc_id = p.reply.rpc_id.clone();
                 match p.purpose {
                     Purpose::Prompt => {
+                        // A plan sent back carries your feedback instead (2.8c).
+                        let message = p.message.as_deref().unwrap_or(message);
                         let reply = mcp::decision(rpc_id, allow, p.input.clone(), message);
                         after.replies.push((conn.pipe.clone(), reply));
                     }
@@ -983,7 +989,7 @@ fn ask(
     });
     let slot = inner.slot(a.run_id)?;
     // A bounded read (256 KB) of the file a `Write` would replace, for the card's diff.
-    let existing = preview::read_existing(a.tool, &input, &slot.run.cwd);
+    let existing = preview::read_existing(a.tool, &input, &slot.run.cwd, &[]);
     let request = Request {
         run_id: a.run_id.to_string(),
         project: slot.run.project.clone(),
@@ -1864,12 +1870,105 @@ pub fn agent_decide(
     let mut after = After::default();
     {
         let mut inner = agents.lock();
+        // Questions and plans are answered with `agent_answer` / `agent_plan`, never a bare allow; Deny skips them.
+        if allow
+            && inner
+                .approvals
+                .tool_of(request_id)
+                .is_some_and(interact::is_interactive)
+        {
+            return Err(AppError::AgentInvalid(
+                "Answer this in Cay instead of allowing it.".into(),
+            ));
+        }
         let p = inner
             .approvals
             .decide(request_id, allow, matches!(remember, Remember::Run))
             .ok_or(AppError::AgentApprovalGone)?;
         log::debug!("agent approval {request_id}: allow {allow}");
         inner.settle(vec![p], allow, "user", &mut after);
+    }
+    after.run(&app, &agents);
+    Ok(())
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuestionAnswer {
+    pub question: String,
+    #[serde(default)]
+    pub labels: Vec<String>,
+    #[serde(default)]
+    pub other: Option<String>,
+}
+
+#[tauri::command]
+/// Your answer to one question of a run's waiting `AskUserQuestion` (2.8c). The card shows the answers so far; once
+/// every question has one, Claude gets them (allow with `updatedInput`). Errors `agentInvalid`, `agentApprovalGone`.
+pub fn agent_answer(
+    app: AppHandle,
+    agents: State<'_, Agents>,
+    request_id: u32,
+    answer: QuestionAnswer,
+) -> AppResult<()> {
+    let mut after = After::default();
+    {
+        let mut inner = agents.lock();
+        let answered = inner.approvals.answer(
+            request_id,
+            &answer.question,
+            &answer.labels,
+            answer.other.as_deref(),
+        );
+        match answered {
+            Ok(approvals::Answered::Partial(card)) => {
+                after
+                    .signals
+                    .push(Signal::Offer(Activity::AgentApproval(card)));
+                after.runs_changed = true;
+            }
+            Ok(approvals::Answered::Complete(p)) => {
+                log::debug!("agent question {request_id}: answered");
+                inner.settle(vec![p], true, "answered", &mut after);
+            }
+            Err(approvals::AnswerError::Gone) => return Err(AppError::AgentApprovalGone),
+            Err(approvals::AnswerError::Invalid) => {
+                return Err(AppError::AgentInvalid(
+                    "That isn't one of the answers.".into(),
+                ))
+            }
+        }
+    }
+    after.run(&app, &agents);
+    Ok(())
+}
+
+#[tauri::command]
+/// Approve a run's waiting plan, or send it back with `feedback` (2.8c): a deny whose message is your words.
+pub fn agent_plan(
+    app: AppHandle,
+    agents: State<'_, Agents>,
+    request_id: u32,
+    approve: bool,
+    feedback: Option<String>,
+) -> AppResult<()> {
+    let feedback = if approve {
+        None
+    } else {
+        Some(
+            interact::feedback(feedback.as_deref().unwrap_or(""))
+                .ok_or_else(|| AppError::AgentInvalid("Write what to change first.".into()))?,
+        )
+    };
+    let mut after = After::default();
+    {
+        let mut inner = agents.lock();
+        let p = inner
+            .approvals
+            .plan(request_id, feedback)
+            .ok_or(AppError::AgentApprovalGone)?;
+        let by = if approve { "approved" } else { "feedback" };
+        inner.settle(vec![p], approve, by, &mut after);
     }
     after.run(&app, &agents);
     Ok(())

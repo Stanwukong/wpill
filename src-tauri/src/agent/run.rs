@@ -86,18 +86,16 @@ pub fn args(l: &Launch, mcp_config: &Path) -> Vec<String> {
         a.push("--setting-sources".into());
         a.push("project,local".into());
     }
-    // Nobody can type an answer mid-run; Claude asks in its final message instead.
-    let mut disallowed = vec!["AskUserQuestion".to_string()];
+    // Questions (`AskUserQuestion`) are allowed since 2.8c: they reach the prompt tool and you answer in Cay.
     if !l.desktop_tools {
-        disallowed.extend(
-            tools::NAMES
-                .iter()
-                .chain(actions::NAMES)
-                .map(|n| format!("mcp__{SERVER_NAME}__{n}")),
-        );
+        let disallowed: Vec<String> = tools::NAMES
+            .iter()
+            .chain(actions::NAMES)
+            .map(|n| format!("mcp__{SERVER_NAME}__{n}"))
+            .collect();
+        a.push("--disallowedTools".into());
+        a.push(disallowed.join(","));
     }
-    a.push("--disallowedTools".into());
-    a.push(disallowed.join(","));
     if let Some(name) = l.name.as_deref().filter(|n| !n.trim().is_empty()) {
         a.push("--name".into());
         a.push(name.trim().into());
@@ -247,7 +245,10 @@ mod tests {
         assert!(has_pair(&a, "--max-turns", "25"));
         assert!(has_pair(&a, "--max-budget-usd", "1"));
         assert!(has_pair(&a, "--model", "haiku"));
-        assert!(has_pair(&a, "--disallowedTools", "AskUserQuestion"));
+        assert!(
+            !a.contains(&"--disallowedTools".to_string()),
+            "questions reach the prompt tool"
+        );
         assert!(a.contains(&"--strict-mcp-config".to_string()));
         assert!(!a.contains(&"--setting-sources".to_string()));
         assert!(!a.contains(&"--resume".to_string()));
@@ -288,8 +289,8 @@ mod tests {
         assert!(has_pair(&a, "--name", "Tidy Downloads"));
         let i = a.iter().position(|x| x == "--disallowedTools").unwrap();
         let list: Vec<&str> = a[i + 1].split(',').collect();
-        assert_eq!(list.len(), 1 + tools::NAMES.len() + actions::NAMES.len());
-        assert!(list.contains(&"AskUserQuestion"));
+        assert_eq!(list.len(), tools::NAMES.len() + actions::NAMES.len());
+        assert!(!list.contains(&"AskUserQuestion"));
         assert!(list.contains(&"mcp__cay__screenshot"));
         assert!(list.contains(&"mcp__cay__type_text"));
         // The approval tool is never disallowed.

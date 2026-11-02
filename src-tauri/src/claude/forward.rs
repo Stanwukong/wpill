@@ -30,9 +30,13 @@ const STDIN_TIMEOUT: Duration = Duration::from_millis(1000);
 /// Total time to get past a busy pipe (another forwarder connected).
 const CONNECT_BUDGET: Duration = Duration::from_millis(1000);
 const BUSY_WAIT_MS: u32 = 200;
-/// How long to wait for your answer: a little longer than Cay holds a request (`asks::HOLD`), so its hand-back
-/// arrives first. The hook entry's own timeout is longer still (`hooks::EVENTS`).
-const ANSWER_TIMEOUT_MS: u32 = 60_000;
+/// How long to wait for your answer: a little longer than Cay holds a request (`asks::hold_for`), so its hand-back
+/// arrives first: 60 s for a permission, ~10 minutes for a question or a plan (2.8c). The hook entry's own timeout is
+/// longer still (`hooks::EVENTS`).
+fn answer_timeout_ms(tool: &str) -> u32 {
+    let hold = asks::hold_for(tool).as_millis() as u32;
+    hold + 5_000
+}
 
 pub fn run() {
     let at_ms = SystemTime::now()
@@ -43,7 +47,14 @@ pub fn run() {
     };
     let chain = process::ancestors();
     if let Some(request) = ask::request(&stdin, at_ms, chain.clone()) {
-        if let Some(output) = hold(&request).and_then(ask::hook_output) {
+        // The answer is built from the input as Claude Code sent it, not Cay's trimmed copy.
+        let original = serde_json::from_slice::<serde_json::Value>(&stdin)
+            .ok()
+            .and_then(|v| v.get("tool_input").cloned())
+            .unwrap_or_default();
+        let output =
+            hold(&request).and_then(|d| ask::hook_output(&d, &request.tool_name, &original));
+        if let Some(output) = output {
             let mut stdout = std::io::stdout().lock();
             let _ = stdout.write_all(output.as_bytes());
             let _ = stdout.flush();
@@ -72,7 +83,7 @@ fn hold(request: &ask::Request) -> Option<ask::Decision> {
     }
     let pipe = duplex::Pipe::open(&asks::name()?).ok()?;
     pipe.write(&bytes).ok()?;
-    match pipe.read(&[], ANSWER_TIMEOUT_MS).ok()? {
+    match pipe.read(&[], answer_timeout_ms(&request.tool_name)).ok()? {
         duplex::Read::Message(reply) => ask::decode_reply(&reply),
         _ => None,
     }

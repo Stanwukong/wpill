@@ -7,7 +7,7 @@
 //! your click allows or denies; everything else replies `Pass`, so Claude Code's own prompt decides. Requests from
 //! Cay's own agent runs pass at once (`agent/` answers those through its prompt tool).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -19,6 +19,7 @@ use windows::Win32::System::Threading::SetEvent;
 use super::ask::{self, Decision, Reply};
 use super::{process, sessions, Claude};
 use crate::activity::{claude_approval_key, Signal, Watcher};
+use crate::agent::interact;
 use crate::duplex::{Pipe, Read};
 use crate::error::{AppError, AppResult};
 use crate::ipc::{
@@ -27,9 +28,21 @@ use crate::ipc::{
 };
 use crate::win32::{self, Handle};
 
-/// How long a request waits in the island before the terminal asks instead. Below the forwarder's own wait
-/// (`forward::ANSWER_TIMEOUT_MS`) so the hand-back always reaches it. Never ends in an allow or a deny.
+/// How long a permission request waits in the island before it's handed back. Below the forwarder's own wait
+/// (`forward::answer_timeout_ms`) so the hand-back always reaches it. Never ends in an allow or a deny.
 pub const HOLD: Duration = Duration::from_secs(55);
+/// A question or a plan (2.8c) waits longer: reading takes time, and the terminal asks meanwhile, so holding it
+/// doesn't block you there.
+pub const HOLD_INTERACTIVE: Duration = Duration::from_secs(600);
+
+/// How long a request for `tool` is held.
+pub fn hold_for(tool: &str) -> Duration {
+    if crate::agent::interact::is_interactive(tool) {
+        HOLD_INTERACTIVE
+    } else {
+        HOLD
+    }
+}
 /// A connected forwarder gets this long to send its request.
 const READ_TIMEOUT_MS: u32 = 1000;
 /// More requests than this at once go straight to their terminals.
@@ -56,6 +69,11 @@ struct Inner {
 struct Held {
     /// Claude Code's session id.
     session: String,
+    /// The tool and its (trimmed) input, for questions and plans (2.8c).
+    tool: String,
+    input: serde_json::Value,
+    /// A question's answers so far (question text → answer); sent once every question has one.
+    answers: BTreeMap<String, String>,
     /// The card, for the command window's list; set once it's shown.
     card: Option<ClaudeApprovalActivity>,
     /// The command window's copy of the preview (2.8b).
@@ -83,7 +101,7 @@ impl Asks {
         self.0.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    fn hold(&self, session: &str) -> Option<(u32, Arc<Handle>)> {
+    fn hold(&self, request: &ask::Request) -> Option<(u32, Arc<Handle>)> {
         let mut inner = self.lock();
         if inner.held.len() >= MAX_HELD {
             return None;
@@ -94,7 +112,10 @@ impl Asks {
         inner.held.insert(
             id,
             Held {
-                session: session.to_string(),
+                session: request.session_id.clone(),
+                tool: request.tool_name.clone(),
+                input: request.tool_input.clone(),
+                answers: BTreeMap::new(),
                 card: None,
                 full: None,
                 decision: None,
@@ -130,7 +151,8 @@ impl Asks {
         self.lock().held.remove(&id).and_then(|h| h.decision)
     }
 
-    /// Your answer from the card. `false` if the request is no longer held or already answered.
+    /// Your answer from the card. `false` if the request is no longer held or already answered, or if it's a
+    /// question or a plan (they're answered with `answer` / `plan`, never a bare allow; a deny skips them).
     pub fn decide(&self, id: u32, allow: bool) -> bool {
         let decision = if allow {
             Decision::Allow
@@ -140,7 +162,64 @@ impl Asks {
         self.lock()
             .held
             .get_mut(&id)
-            .is_some_and(|h| h.settle(decision))
+            .is_some_and(|h| !(allow && interact::is_interactive(&h.tool)) && h.settle(decision))
+    }
+
+    /// Your answer to one of a held question's questions (2.8c). Once every question has one, the request is
+    /// answered; until then the card comes back with the answers so far.
+    pub fn answer(
+        &self,
+        id: u32,
+        question: &str,
+        labels: &[String],
+        other: Option<&str>,
+    ) -> Result<Option<ClaudeApprovalActivity>, AppError> {
+        let mut inner = self.lock();
+        let held = inner
+            .held
+            .get_mut(&id)
+            .filter(|h| h.decision.is_none() && h.tool == interact::QUESTION_TOOL)
+            .ok_or(AppError::AgentApprovalGone)?;
+        let questions = interact::questions(&held.input).ok_or_else(|| {
+            AppError::AgentInvalid("This question can't be answered here.".into())
+        })?;
+        let (key, value) = interact::answer(&questions, question, labels, other)
+            .ok_or_else(|| AppError::AgentInvalid("That isn't one of the answers.".into()))?;
+        held.answers.insert(key, value);
+        if interact::complete(&questions, &held.answers) {
+            let answers = held.answers.clone();
+            held.settle(Decision::Answers(answers));
+            return Ok(None);
+        }
+        let card = held.card.as_mut().map(|card| {
+            card.interaction =
+                interact::interaction(&held.tool, &held.input, &held.answers).map(Box::new);
+            card.clone()
+        });
+        Ok(card)
+    }
+
+    /// Approve a held plan, or send it back with your feedback (2.8c).
+    pub fn plan(&self, id: u32, approve: bool, feedback: &str) -> Result<(), AppError> {
+        let decision = if approve {
+            Decision::ApprovePlan
+        } else {
+            Decision::Feedback(
+                interact::feedback(feedback)
+                    .ok_or_else(|| AppError::AgentInvalid("Write what to change first.".into()))?,
+            )
+        };
+        let mut inner = self.lock();
+        let held = inner
+            .held
+            .get_mut(&id)
+            .filter(|h| h.tool == interact::PLAN_TOOL)
+            .ok_or(AppError::AgentApprovalGone)?;
+        if held.settle(decision) {
+            Ok(())
+        } else {
+            Err(AppError::AgentApprovalGone)
+        }
     }
 
     /// The session moved on (a new prompt, it stopped or ended): its requests go back to the terminal.
@@ -214,7 +293,7 @@ fn serve(app: &AppHandle, out: &Sender<Signal>, pipe: &Pipe, stop: &Handle) {
         return;
     }
     let asks = app.state::<Asks>();
-    let Some((id, wake)) = asks.hold(&request.session_id) else {
+    let Some((id, wake)) = asks.hold(&request) else {
         reply(pipe, Decision::Pass);
         return;
     };
@@ -236,13 +315,22 @@ fn serve(app: &AppHandle, out: &Sender<Signal>, pipe: &Pipe, stop: &Handle) {
         tool,
         summary,
         risk,
-        preview: previews.as_ref().map(|p| Box::new(p.0.clone())),
+        preview: previews.as_ref().and_then(|p| p.0.clone()).map(Box::new),
+        interaction: interact::interaction(
+            &request.tool_name,
+            &request.tool_input,
+            &BTreeMap::new(),
+        )
+        .map(Box::new),
     };
     asks.show(id, card.clone(), previews.map(|p| p.1));
     emit(app, &asks);
     let _ = out.send(Signal::Offer(Activity::ClaudeApproval(card)));
 
-    let waited = pipe.read(&[wake.0, stop.0], HOLD.as_millis() as u32);
+    let waited = pipe.read(
+        &[wake.0, stop.0],
+        hold_for(&request.tool_name).as_millis() as u32,
+    );
     // An answer that landed as the wait ended still counts.
     let decision = asks.release(id);
     emit(app, &asks);
@@ -284,6 +372,30 @@ fn reply(pipe: &Pipe, decision: Decision) {
     if let Err(e) = pipe.write(&bytes) {
         log::debug!("permission reply not delivered: {e}");
     }
+}
+
+/// `claude_answer`: a question's card shows the answers so far until every question has one.
+pub fn answer(
+    app: &AppHandle,
+    request_id: u32,
+    question: &str,
+    labels: &[String],
+    other: Option<&str>,
+) -> AppResult<()> {
+    let asks = app.state::<Asks>();
+    if let Some(card) = asks.answer(request_id, question, labels, other)? {
+        let _ = app
+            .state::<crate::activity::Activities>()
+            .sender()
+            .send(Signal::Offer(Activity::ClaudeApproval(card)));
+        emit(app, &asks);
+    }
+    Ok(())
+}
+
+/// `claude_plan`.
+pub fn plan(app: &AppHandle, request_id: u32, approve: bool, feedback: &str) -> AppResult<()> {
+    app.state::<Asks>().plan(request_id, approve, feedback)
 }
 
 /// `claude_decide` and `agent-test session-decide`.

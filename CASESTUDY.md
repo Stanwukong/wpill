@@ -603,6 +603,26 @@ diff, not a new file. *Session requests in the command window* (the author's cho
 title now focuses the terminal. *Alternatives:* a diff crate (`similar`; a dependency for ~80 lines), CSS-only wrapping
 (it breaks inside tokens or overflows, and can't be tested), growing the card past D2's window.
 
+### D38: Questions and plans are answered in Cay, but never with a bare allow (Phase 2.8c)
+*What:* `AskUserQuestion` and `ExitPlanMode` are held like permission requests, for terminal sessions (the same
+`PermissionRequest` hook) and agent runs (the prompt tool). The island shows a question's options as buttons and a plan
+as "Plan ready"; the command window has every question with an Other field, and the plan as Markdown with Approve /
+Send feedback / Reject. *Shapes, from a spike rather than guesses* (Claude Code 2.1.314, `-p` with a stand-in prompt
+tool): the hook fires for both tools; an allow carrying `updatedInput` = the original `questions` plus an `answers` map
+(question text → label, multi-select joined by ", ") reached Claude, and a plan's allow with its input unchanged ended
+plan mode. *Never a bare allow:* `ask::Decision` gained `Answers`, `ApprovePlan` and `Feedback`; the forwarder builds the
+output from the input as Claude Code sent it (not Cay's trimmed copy) and prints nothing for a plain allow or for answers
+that don't match the questions, and both decide commands refuse Allow for these tools. Feedback is a deny whose message
+is your words, which keeps Claude planning. *Mode after approval:* Cay sends no `updatedPermissions`, so approving a plan
+never picks Accept edits or auto for you. *Answers kept in Rust:* partial answers live with the held request and the card
+is re-offered in place (same activity key), so React holds no state beyond a multi-select's toggles. *Held 10 minutes:*
+the author confirmed the terminal prompts while the card is up, so a long hold blocks nothing; permissions keep 55 s.
+The entry's timeout went to 660 s, and `installed` now compares timeouts, so Connect offers the update. *Agent runs:*
+`AskUserQuestion` is no longer disallowed, which removes "Claude can't ask mid-run". *Alternatives:* a `PreToolUse` hook
+(documented for these tools, but it would answer before the terminal's own prompt and fires for every call without a
+matcher), answering from the island only (no room for free text or a plan), a Markdown dependency (an in-house renderer
+of React elements is enough and can't inject HTML).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -789,6 +809,7 @@ needs the same DPI awareness as the app it measures, or it reports a consistent 
 | 2026-11-01 | Name kept although `cay.app` / `cay.dev` are taken. Stage 4a-4 decided: v0.2 ships unsigned with a published SHA-256 (D33); signing from v0.3 (Certum Open Source or SignPath). |
 | 2026-11-01 | 4a-5 (v0.2) set aside at the author's call to start Phase 2.8 (D34). Stage 2.8a: terminal sessions' permission requests answered from the island (D36), checked with a real `claude -p` run, then signed off by hand. Kick-off prompt for 2.8b–f written. |
 | 2026-11-01 | Stage 2.8b built: diffs and whole commands on approval cards, built in Rust (D37); the whole preview and session requests in the command window (motion-designer). Manual checklist pending. |
+| 2026-11-01 | Stage 2.8c built: questions and plans from sessions and agent runs, answered in the island and the command window, never with a bare allow (D38); spiked first with Claude Code 2.1.314. Manual checklist pending. |
 
 ## 7. Results & metrics
 

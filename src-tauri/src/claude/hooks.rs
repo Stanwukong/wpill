@@ -20,8 +20,9 @@ pub enum Run {
     Background,
     /// Claude Code waits, briefly.
     Wait,
-    /// Claude Code waits for your answer in the island (2.8a): longer than the forwarder's own bound
-    /// (`forward::ANSWER_TIMEOUT_MS`), so the forwarder always ends first and never shows as a hook error.
+    /// Claude Code waits for your answer in the island (2.8a): longer than the forwarder's own bounds
+    /// (`forward::answer_timeout_ms`, up to ~10 minutes for a question or a plan, 2.8c), so the forwarder always ends
+    /// first and never shows as a hook error. The terminal prompts meanwhile, so a long hold doesn't block it.
     Hold,
 }
 
@@ -29,7 +30,7 @@ impl Run {
     fn timeout_secs(self) -> u64 {
         match self {
             Run::Background | Run::Wait => 5,
-            Run::Hold => 75,
+            Run::Hold => 660,
         }
     }
 }
@@ -103,14 +104,14 @@ fn is_ours(hook: &Value) -> bool {
     runs(hook, MARKER) || runs(hook, OLD_MARKER)
 }
 
-/// Connected: every event we register has an entry that runs Cay. Old TopBar entries don't count, and nor does an
-/// install from before an event was added (2.8a's `PermissionRequest`), so the tray offers Connect to bring it up to
-/// date.
+/// Connected: every event we register has an entry that runs Cay, as this version writes it (timeout, background).
+/// Old TopBar entries don't count, and nor does an install from before an event or a timeout changed (2.8a's
+/// `PermissionRequest`, 2.8c's longer hold), so the tray offers Connect to bring it up to date.
 pub fn installed(settings: &Value) -> bool {
     let Some(events) = settings.get("hooks").and_then(Value::as_object) else {
         return false;
     };
-    EVENTS.iter().all(|(event, _)| {
+    EVENTS.iter().all(|(event, run)| {
         events
             .get(*event)
             .and_then(Value::as_array)
@@ -118,7 +119,12 @@ pub fn installed(settings: &Value) -> bool {
             .flatten()
             .filter_map(|g| g.get("hooks").and_then(Value::as_array))
             .flatten()
-            .any(|h| runs(h, MARKER))
+            .any(|h| {
+                runs(h, MARKER)
+                    && h.get("timeout").and_then(Value::as_u64) == Some(run.timeout_secs())
+                    && h.get("async").and_then(Value::as_bool).unwrap_or(false)
+                        == (*run == Run::Background)
+            })
     })
 }
 
@@ -345,8 +351,11 @@ mod tests {
         let mut settings = with_hooks(json!({}), &cmd(), Shell::Bash).unwrap();
         assert_eq!(
             settings["hooks"]["PermissionRequest"][0]["hooks"][0]["timeout"],
-            75
+            660
         );
+        let mut short = settings.clone();
+        short["hooks"]["PermissionRequest"][0]["hooks"][0]["timeout"] = json!(75);
+        assert!(!installed(&short), "2.8a's 75 s hold is out of date");
         settings["hooks"]
             .as_object_mut()
             .unwrap()

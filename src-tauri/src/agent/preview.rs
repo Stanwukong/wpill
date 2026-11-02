@@ -11,7 +11,8 @@ use std::path::Path;
 use serde_json::Value;
 
 use super::describe;
-use crate::ipc::{ApprovalPreview, CommandPreview, DiffLine, DiffOp, DiffPreview};
+use super::interact::PLAN_TOOL;
+use crate::ipc::{ApprovalPreview, CommandPreview, DiffLine, DiffOp, DiffPreview, PlanPreview};
 
 /// Lines on the card, after which it says "+n more lines". Keeps the card within the island's window (D2).
 pub const CARD_LINES: usize = 6;
@@ -29,7 +30,7 @@ const MAX_CELLS: usize = 1_000_000;
 const MAX_EXISTING: u64 = 256 * 1024;
 const SHELL_TOOLS: &[&str] = &["Bash", "PowerShell"];
 
-/// The file a `Write` would replace, as Cay found it.
+/// The file a `Write` would replace (or, for a cut plan, its plan file), as Cay found it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Existing {
     /// Not a `Write`, or no path.
@@ -43,12 +44,25 @@ pub enum Existing {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Previews {
-    pub card: ApprovalPreview,
+    /// `None` for a plan: the island says "Plan ready" and the command window shows it.
+    pub card: Option<ApprovalPreview>,
     pub full: ApprovalPreview,
 }
 
-/// For a `Write`: the file it would overwrite (bounded read; everything else is `NotRead`).
-pub fn read_existing(tool: &str, input: &Value, cwd: &str) -> Existing {
+/// For a `Write`: the file it would overwrite. For an `ExitPlanMode` whose plan was cut (`cut` names `plan`): its
+/// plan file, if it's Markdown. Bounded reads; everything else is `NotRead`.
+pub fn read_existing(tool: &str, input: &Value, cwd: &str, cut: &[String]) -> Existing {
+    if tool == PLAN_TOOL {
+        let path = input.get("planFilePath").and_then(Value::as_str);
+        return match path {
+            Some(p)
+                if cut.iter().any(|c| c == "plan") && p.to_ascii_lowercase().ends_with(".md") =>
+            {
+                read_bounded(Path::new(p))
+            }
+            _ => Existing::NotRead,
+        };
+    }
     let Some(path) = (tool == "Write")
         .then(|| input.get("file_path").and_then(Value::as_str))
         .flatten()
@@ -56,10 +70,13 @@ pub fn read_existing(tool: &str, input: &Value, cwd: &str) -> Existing {
     else {
         return Existing::NotRead;
     };
-    let path = Path::new(cwd).join(path);
-    match std::fs::metadata(&path) {
+    read_bounded(&Path::new(cwd).join(path))
+}
+
+fn read_bounded(path: &Path) -> Existing {
+    match std::fs::metadata(path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Existing::Missing,
-        Ok(m) if m.is_file() && m.len() <= MAX_EXISTING => std::fs::read_to_string(&path)
+        Ok(m) if m.is_file() && m.len() <= MAX_EXISTING => std::fs::read_to_string(path)
             .map(Existing::Text)
             .unwrap_or(Existing::Unreadable),
         _ => Existing::Unreadable,
@@ -76,6 +93,23 @@ pub fn build(
     cut: &[String],
 ) -> Option<Previews> {
     let was_cut = |field: &str| cut.iter().any(|c| c == field);
+    if tool == PLAN_TOOL {
+        let plan = input.get("plan").and_then(Value::as_str).unwrap_or("");
+        // A cut plan is taken whole from its file only if the file starts with what arrived.
+        let (markdown, cut) = match existing {
+            Existing::Text(file) if was_cut("plan") && file.starts_with(plan) => {
+                (file.clone(), false)
+            }
+            _ => (plan.to_string(), was_cut("plan")),
+        };
+        if markdown.trim().is_empty() {
+            return None;
+        }
+        return Some(Previews {
+            card: None,
+            full: ApprovalPreview::Plan(PlanPreview { markdown, cut }),
+        });
+    }
     if SHELL_TOOLS.contains(&tool) {
         let command = input.get("command").and_then(Value::as_str)?;
         let lines = wrap_command(command, WRAP_COLS);
@@ -91,7 +125,7 @@ pub fn build(
             })
         };
         return Some(Previews {
-            card: command(CARD_LINES),
+            card: Some(command(CARD_LINES)),
             full: command(FULL_LINES),
         });
     }
@@ -174,7 +208,7 @@ pub fn build(
         })
     };
     Some(Previews {
-        card: diff_preview(CONTEXT_CARD, CARD_LINES),
+        card: Some(diff_preview(CONTEXT_CARD, CARD_LINES)),
         full: diff_preview(CONTEXT_FULL, FULL_LINES),
     })
 }
@@ -375,6 +409,7 @@ mod tests {
                 })
                 .collect(),
             ApprovalPreview::Command(c) => c.lines.clone(),
+            ApprovalPreview::Plan(p) => p.markdown.lines().map(str::to_string).collect(),
         }
     }
 
@@ -393,11 +428,11 @@ mod tests {
             "new_string": "fn a() {\n    one();\n    three();\n    four();\n}",
         });
         let p = build("Edit", &input, CWD, &Existing::NotRead, &[]).unwrap();
-        let card = diff_of(&p.card);
+        let card = diff_of(p.card.as_ref().unwrap());
         assert_eq!(card.file, "src/hover/logic.rs");
         assert_eq!((card.added, card.removed), (Some(2), Some(1)));
         assert_eq!(
-            lines(&p.card),
+            lines(p.card.as_ref().unwrap()),
             [
                 "     one();",
                 "-    two();",
@@ -415,7 +450,7 @@ mod tests {
         let new: String = (0..20).map(|i| format!("line {i}\n")).collect();
         let input = json!({ "file_path": "C:\\x\\a.txt", "content": new });
         let p = build("Write", &input, CWD, &Existing::Missing, &[]).unwrap();
-        let card = diff_of(&p.card);
+        let card = diff_of(p.card.as_ref().unwrap());
         assert_eq!(card.lines.len(), CARD_LINES);
         assert_eq!(card.more_lines, 20 - CARD_LINES as u32);
         assert_eq!(card.note.as_deref(), Some("New file"));
@@ -431,11 +466,11 @@ mod tests {
         let input = json!({ "file_path": "C:\\x\\a.txt", "content": new });
         let p = build("Write", &input, CWD, &Existing::Text(old.into()), &[]).unwrap();
         assert_eq!(
-            lines(&p.card),
+            lines(p.card.as_ref().unwrap()),
             [" a", "-b", "+B", " c", "…", " g"],
             "the card has one line of context, a gap between changes"
         );
-        assert_eq!(diff_of(&p.card).more_lines, 2, "-h and +H");
+        assert_eq!(diff_of(p.card.as_ref().unwrap()).more_lines, 2, "-h and +H");
         let full = diff_of(&p.full);
         assert_eq!((full.added, full.removed), (Some(2), Some(2)));
         assert!(lines(&p.full).contains(&"+H".to_string()));
@@ -453,10 +488,14 @@ mod tests {
             &["content".into()],
         )
         .unwrap();
-        let card = diff_of(&p.card);
+        let card = diff_of(p.card.as_ref().unwrap());
         assert!(card.cut);
         assert_eq!((card.added, card.removed), (None, None));
-        assert_eq!(lines(&p.card), ["+x", "+y"], "no false deletions");
+        assert_eq!(
+            lines(p.card.as_ref().unwrap()),
+            ["+x", "+y"],
+            "no false deletions"
+        );
         let edit = json!({ "file_path": "a", "old_string": "a", "new_string": "b" });
         let p = build(
             "Edit",
@@ -466,7 +505,7 @@ mod tests {
             &["new_string".into()],
         )
         .unwrap();
-        assert_eq!(diff_of(&p.card).added, None);
+        assert_eq!(diff_of(p.card.as_ref().unwrap()).added, None);
     }
 
     #[test]
@@ -476,11 +515,17 @@ mod tests {
             { "old_string": "p\nq", "new_string": "p" },
         ]});
         let p = build("MultiEdit", &input, CWD, &Existing::NotRead, &[]).unwrap();
-        assert_eq!(lines(&p.card), ["-x", "+y", "…", " p", "-q"]);
+        assert_eq!(
+            lines(p.card.as_ref().unwrap()),
+            ["-x", "+y", "…", " p", "-q"]
+        );
         let all =
             json!({ "file_path": "a", "old_string": "a", "new_string": "b", "replace_all": true });
         let p = build("Edit", &all, CWD, &Existing::NotRead, &[]).unwrap();
-        assert_eq!(diff_of(&p.card).note.as_deref(), Some("Every occurrence"));
+        assert_eq!(
+            diff_of(p.card.as_ref().unwrap()).note.as_deref(),
+            Some("Every occurrence")
+        );
     }
 
     #[test]
@@ -567,12 +612,49 @@ mod tests {
             &["command".into()],
         )
         .unwrap();
-        let ApprovalPreview::Command(card) = &p.card else {
+        let ApprovalPreview::Command(card) = p.card.as_ref().unwrap() else {
             panic!()
         };
         assert_eq!(card.lines.len(), CARD_LINES);
         assert_eq!(card.more_lines, 4);
         assert!(card.cut);
+    }
+
+    #[test]
+    fn plans_are_whole_and_never_on_the_card() {
+        let input = json!({ "plan": "# Plan\n1. a", "planFilePath": r"C:\p.md" });
+        let p = build(PLAN_TOOL, &input, CWD, &Existing::NotRead, &[]).unwrap();
+        assert_eq!(p.card, None);
+        assert_eq!(
+            p.full,
+            ApprovalPreview::Plan(PlanPreview {
+                markdown: "# Plan\n1. a".into(),
+                cut: false
+            })
+        );
+        let cut = ["plan".to_string()];
+        let whole = Existing::Text("# Plan\n1. a\n2. b".into());
+        let p = build(PLAN_TOOL, &input, CWD, &whole, &cut).unwrap();
+        assert_eq!(
+            p.full,
+            ApprovalPreview::Plan(PlanPreview {
+                markdown: "# Plan\n1. a\n2. b".into(),
+                cut: false
+            }),
+            "taken whole from its file"
+        );
+        let other = Existing::Text("# Another plan".into());
+        let p = build(PLAN_TOOL, &input, CWD, &other, &cut).unwrap();
+        assert!(matches!(
+            p.full,
+            ApprovalPreview::Plan(PlanPreview { cut: true, .. })
+        ));
+        assert_eq!(
+            read_existing(PLAN_TOOL, &input, CWD, &[]),
+            Existing::NotRead,
+            "not cut"
+        );
+        assert!(build(PLAN_TOOL, &json!({}), CWD, &Existing::NotRead, &[]).is_none());
     }
 
     #[test]
@@ -584,25 +666,25 @@ mod tests {
         let cwd = dir.to_string_lossy().to_string();
         let write = |p: &str| json!({ "file_path": p, "content": "new" });
         assert_eq!(
-            read_existing("Write", &write(&file.to_string_lossy()), &cwd),
+            read_existing("Write", &write(&file.to_string_lossy()), &cwd, &[]),
             Existing::Text("old\n".into())
         );
         assert_eq!(
-            read_existing("Write", &write("a.txt"), &cwd),
+            read_existing("Write", &write("a.txt"), &cwd, &[]),
             Existing::Text("old\n".into()),
             "relative to the folder"
         );
         assert_eq!(
-            read_existing("Write", &write("b.txt"), &cwd),
+            read_existing("Write", &write("b.txt"), &cwd, &[]),
             Existing::Missing
         );
         assert_eq!(
-            read_existing("Edit", &write("a.txt"), &cwd),
+            read_existing("Edit", &write("a.txt"), &cwd, &[]),
             Existing::NotRead
         );
         std::fs::write(&file, vec![b'x'; MAX_EXISTING as usize + 1]).unwrap();
         assert_eq!(
-            read_existing("Write", &write("a.txt"), &cwd),
+            read_existing("Write", &write("a.txt"), &cwd, &[]),
             Existing::Unreadable
         );
         std::fs::remove_dir_all(&dir).unwrap();

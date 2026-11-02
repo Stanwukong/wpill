@@ -16,6 +16,7 @@ import type {
   AppError,
   ApprovalPreview,
   ClaudeAsks,
+  QuestionAnswer,
   ClaudeHooksStatus,
   ClaudeSessions,
   CommandFocus,
@@ -72,6 +73,11 @@ export const commands = {
   claudeAsks: () => invoke<ClaudeAsks>("claude_asks"),
   /** A held session request's whole diff or command; `null` once it's answered or handed back. */
   claudeAskPreview: (requestId: number) => invoke<ApprovalPreview | null>("claude_ask_preview", { requestId }),
+  /** One question of a held session question (2.8c). Errors `agentInvalid` (not an option), `agentApprovalGone`. */
+  claudeAnswer: (requestId: number, answer: QuestionAnswer) => invoke<void>("claude_answer", { requestId, answer }),
+  /** Approve a held session plan, or send it back with feedback (required then). */
+  claudePlan: (requestId: number, approve: boolean, feedback?: string) =>
+    invoke<void>("claude_plan", { requestId, approve, feedback: feedback ?? null }),
   claudeHooksStatus: () => invoke<ClaudeHooksStatus>("claude_hooks_status"),
   claudeHooksInstall: () => invoke<void>("claude_hooks_install"),
   claudeHooksRemove: () => invoke<void>("claude_hooks_remove"),
@@ -86,6 +92,11 @@ export const commands = {
   /** A waiting approval's whole diff or command (2.8b); `null` once answered or for tools without one. */
   agentApprovalPreview: (requestId: number) =>
     invoke<ApprovalPreview | null>("agent_approval_preview", { requestId }),
+  /** One question of a run's waiting question (2.8c). */
+  agentAnswer: (requestId: number, answer: QuestionAnswer) => invoke<void>("agent_answer", { requestId, answer }),
+  /** Approve a run's waiting plan, or send it back with feedback (required then). */
+  agentPlan: (requestId: number, approve: boolean, feedback?: string) =>
+    invoke<void>("agent_plan", { requestId, approve, feedback: feedback ?? null }),
   agentOptions: () => invoke<AgentOptions>("agent_options"),
   /** The shell's folder picker; `null` if cancelled. */
   agentPickFolder: () => invoke<string | null>("agent_pick_folder"),

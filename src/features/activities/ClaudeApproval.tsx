@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { commands } from "../../lib/ipc";
 import type { ClaudeApprovalActivity } from "../../lib/types";
+import { changePreview } from "../agent/PreviewBlock";
 import { decideClaude, focusClaudeSession } from "../claude/useClaudeSessions";
 import { ApprovalCard, type ApprovalChoice } from "./AgentApproval";
 
@@ -33,7 +34,7 @@ export function ClaudeApproval({ approval }: { approval: ClaudeApprovalActivity 
       risk={risk}
       desktop={false}
       summary={summary}
-      preview={preview}
+      preview={changePreview(preview)}
       summaryHint="Details"
       onSummary={() =>
         commands.commandWindowShowAsk(requestId).catch((err: unknown) => console.debug("command window", err))

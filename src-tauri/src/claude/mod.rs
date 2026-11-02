@@ -257,6 +257,42 @@ pub fn claude_ask_preview(
     asks.preview(request_id)
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuestionAnswer {
+    pub question: String,
+    /// The chosen option labels (one for a single-select).
+    #[serde(default)]
+    pub labels: Vec<String>,
+    /// Your own words instead of an option.
+    #[serde(default)]
+    pub other: Option<String>,
+}
+
+#[tauri::command]
+/// Your answer to one question of a session's held `AskUserQuestion` (2.8c). Errors `agentInvalid` for an answer
+/// that isn't one of its options, `agentApprovalGone` once it's no longer held.
+pub fn claude_answer(app: AppHandle, request_id: u32, answer: QuestionAnswer) -> AppResult<()> {
+    asks::answer(
+        &app,
+        request_id,
+        &answer.question,
+        &answer.labels,
+        answer.other.as_deref(),
+    )
+}
+
+#[tauri::command]
+/// Approve a session's held plan, or send it back with `feedback` (2.8c).
+pub fn claude_plan(
+    app: AppHandle,
+    request_id: u32,
+    approve: bool,
+    feedback: Option<String>,
+) -> AppResult<()> {
+    asks::plan(&app, request_id, approve, feedback.as_deref().unwrap_or(""))
+}
+
 /// `agent-test session-decide <requestId> allow|deny` (debug builds).
 pub fn decide_for_test(app: &AppHandle, request_id: u32, allow: bool) -> AppResult<()> {
     asks::decide(app, request_id, allow)

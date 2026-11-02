@@ -7,6 +7,7 @@ import { AgentActing } from "./AgentActing";
 import { AgentApproval } from "./AgentApproval";
 import { ClaudeApproval } from "./ClaudeApproval";
 import { ClaudeActivity } from "./ClaudeActivity";
+import { AgentInteraction, ClaudeInteraction } from "./InteractionCards";
 import { BatteryIcon, CapsLockIcon, HeadphonesIcon, SpeakerIcon, SunIcon } from "./icons";
 import { ScreenshotActivity } from "./ScreenshotActivity";
 import "./activities.css";
@@ -66,10 +67,23 @@ export function ActivityView({ activity }: { activity: ActivityPayload }) {
       const { sessionId, project } = activity.payload;
       return <ClaudeActivity project={project} state="needsInput" onOpen={() => focusClaudeSession(sessionId)} />;
     }
-    case "claudeApproval":
-      return <ClaudeApproval approval={activity.payload} />;
-    case "agentApproval":
-      return <AgentApproval approval={activity.payload} />;
+    // A question or a plan (2.8c) has its own card; everything else asks for Allow / Deny.
+    case "claudeApproval": {
+      const { interaction } = activity.payload;
+      return interaction ? (
+        <ClaudeInteraction approval={activity.payload} interaction={interaction} />
+      ) : (
+        <ClaudeApproval approval={activity.payload} />
+      );
+    }
+    case "agentApproval": {
+      const { interaction } = activity.payload;
+      return interaction ? (
+        <AgentInteraction approval={activity.payload} interaction={interaction} />
+      ) : (
+        <AgentApproval approval={activity.payload} />
+      );
+    }
     case "agentActing":
       return <AgentActing acting={activity.payload} />;
     case "agentFinished": {

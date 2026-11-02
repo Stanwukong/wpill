@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 
-use super::{actions, tools};
+use super::{actions, interact, tools};
 use crate::desktop::plan;
 use crate::ipc::AgentRisk;
 
@@ -21,6 +21,8 @@ const READ_TOOLS: &[&str] = &[
     "WebSearch",
     "TodoWrite",
     "NotebookRead",
+    // A question only asks you (2.8c); a plan's approval leads to changes, so it stays a change.
+    interact::QUESTION_TOOL,
 ];
 const EDIT_TOOLS: &[&str] = &["Edit", "MultiEdit", "Write", "NotebookEdit"];
 const SHELL_TOOLS: &[&str] = &["Bash", "PowerShell"];
@@ -226,6 +228,11 @@ pub fn desktop_summary(tool: &str, input: &Value, target: Option<&str>) -> Strin
 /// `mcp__github__create_issue` → `github · create_issue`; built-ins stay as they are. Cay's desktop tools
 /// read as `desktop · screenshot`.
 pub fn display_tool(tool: &str) -> String {
+    match tool {
+        interact::QUESTION_TOOL => return "Question".into(),
+        interact::PLAN_TOOL => return "Plan".into(),
+        _ => {}
+    }
     if let Some(name) = tools::short_name(tool).or_else(|| actions::short_name(tool)) {
         return format!("desktop · {name}");
     }
@@ -250,6 +257,11 @@ pub fn summary(tool: &str, input: &Value, cwd: &str) -> String {
             "WebSearch" => one_line(str_field(input, "query")),
             "Glob" | "Grep" => one_line(str_field(input, "pattern")),
             "Task" | "Agent" => one_line(str_field(input, "description")),
+            interact::QUESTION_TOOL => interact::questions(input)
+                .and_then(|q| q.into_iter().next())
+                .map(|q| one_line(&q.question))
+                .unwrap_or_default(),
+            interact::PLAN_TOOL => interact::plan_title(str_field(input, "plan")),
             _ => String::new(),
         }
     };
@@ -277,6 +289,8 @@ pub fn step_label(tool: &str, input: &Value, cwd: &str) -> String {
         "WebSearch" => "Searching the web".to_string(),
         "Task" | "Agent" => "Delegating".to_string(),
         "TodoWrite" => "Planning".to_string(),
+        interact::QUESTION_TOOL => "Asking you".to_string(),
+        interact::PLAN_TOOL => "Plan ready".to_string(),
         "mcp__cay__list_windows" => "Listing windows".to_string(),
         "mcp__cay__focused_window" => "Checking the front window".to_string(),
         "mcp__cay__screenshot" => "Taking a screenshot".to_string(),
@@ -297,7 +311,8 @@ pub fn step_label(tool: &str, input: &Value, cwd: &str) -> String {
 /// operators (remembering `cd` would also allow `cd x && rm -rf y`). Shell commands are remembered by their
 /// first word (`Bash:git`), edits as one group, fetches per host, everything else per tool.
 pub fn remember_key(tool: &str, input: &Value) -> Option<String> {
-    if risk(tool) == AgentRisk::Input {
+    // An action, an answer or a plan approval is about this one call: never remembered.
+    if risk(tool) == AgentRisk::Input || interact::is_interactive(tool) {
         return None;
     }
     if SHELL_TOOLS.contains(&tool) {
@@ -657,6 +672,14 @@ mod tests {
                 "{name} is never remembered"
             );
         }
+        assert_eq!(key("AskUserQuestion", json!({})), None);
+        assert_eq!(key("ExitPlanMode", json!({ "plan": "x" })), None);
+        assert_eq!(risk("AskUserQuestion"), AgentRisk::Read);
+        assert_eq!(risk("ExitPlanMode"), AgentRisk::Change);
+        let q =
+            json!({ "questions": [{ "question": "Which one?", "options": [{ "label": "A" }] }] });
+        assert_eq!(summary("AskUserQuestion", &q, CWD), "Which one?");
+        assert_eq!(display_tool("ExitPlanMode"), "Plan");
         assert_eq!(remember_scope("Bash:git"), "git");
         assert_eq!(remember_scope("edit"), "edits");
     }

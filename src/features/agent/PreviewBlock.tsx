@@ -2,12 +2,20 @@ import type { ApprovalPreview, DiffLine } from "../../lib/types";
 
 const SIGN: Record<DiffLine["op"], string> = { add: "+", del: "−", ctx: " ", gap: "⋯" };
 
+/** The previews this block draws; a plan (2.8c) is Markdown, drawn by the command window's `PlanView`. */
+export type ChangePreview = Exclude<ApprovalPreview, { kind: "plan" }>;
+
+/** `preview` unless it's a plan (which never sits on a card, but the type allows it). */
+export function changePreview(preview: ApprovalPreview | null): ChangePreview | null {
+  return preview?.kind === "plan" ? null : preview;
+}
+
 /**
  * What an approval would change or run (2.8b), as Rust built it: a diff (header `file · +n −m`, then lines with a sign
  * column) or a shell command already wrapped to 48 columns (shown as-is, never re-wrapped). Spans only, so it can sit
  * inside the island's clickable well; the island and the command window size it (activities.css, command.css).
  */
-export function PreviewBlock({ preview }: { preview: ApprovalPreview }) {
+export function PreviewBlock({ preview }: { preview: ChangePreview }) {
   const foot = [
     preview.moreLines > 0 ? `+${preview.moreLines} more ${preview.moreLines === 1 ? "line" : "lines"}` : null,
     preview.kind === "command" && preview.cut ? "cut" : null,

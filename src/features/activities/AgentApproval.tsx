@@ -1,8 +1,8 @@
 import { useState } from "react";
-import type { AgentApprovalActivity, AgentRisk, ApprovalPreview } from "../../lib/types";
+import type { AgentApprovalActivity, AgentRisk } from "../../lib/types";
 import { ChevronGlyph, RiskGlyph } from "../agent/AgentGlyphs";
 import { RISK_LABEL } from "../agent/labels";
-import { PreviewBlock } from "../agent/PreviewBlock";
+import { changePreview, PreviewBlock, type ChangePreview } from "../agent/PreviewBlock";
 import { decide, openRun } from "../agent/useAgentRuns";
 import { AgentMark } from "../claude/WorkingGlyphs";
 import "../agent/agent.css";
@@ -35,7 +35,7 @@ export function AgentApproval({ approval }: { approval: AgentApprovalActivity })
       risk={risk}
       desktop={desktop}
       summary={summary}
-      preview={approval.preview}
+      preview={changePreview(approval.preview)}
       summaryHint="Details"
       onSummary={() => openRun(runId)}
       rememberAs={rememberAs}
@@ -75,7 +75,7 @@ export function ApprovalCard({
   risk: AgentRisk;
   desktop: boolean;
   summary: string;
-  preview?: ApprovalPreview | null;
+  preview?: ChangePreview | null;
   summaryHint?: string;
   onSummary?: () => void;
   rememberAs?: string | null;
@@ -86,24 +86,15 @@ export function ApprovalCard({
 
   return (
     <div className="activity activity--approval" data-risk={risk}>
-      <div className="approval__head">
-        <AgentMark />
-        <span className="approval__title">
-          {onTitle ? (
-            <button className="activity__title approval__title-btn" title={titleHint} onClick={onTitle}>
-              {title}
-            </button>
-          ) : (
-            <span className="activity__title">{title}</span>
-          )}
-          {origin && <span className="approval__origin">{origin}</span>}
-          <span className="approval__tool">{tool}</span>
-        </span>
-        <span className="agent-risk" data-risk={risk}>
-          <RiskGlyph desktop={desktop} risk={risk} />
-          {RISK_LABEL[risk]}
-        </span>
-      </div>
+      <ApprovalHead
+        title={title}
+        titleHint={titleHint}
+        onTitle={onTitle}
+        origin={origin}
+        tool={tool}
+        risk={risk}
+        desktop={desktop}
+      />
       {preview && onSummary ? (
         <button
           className="approval__summary approval__preview"
@@ -156,6 +147,54 @@ export function ApprovalCard({
           </button>
         </span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The approval head (2.8a), shared with the question and plan cards (2.8c): mark · title (a quiet button with
+ * `onTitle`) · origin · tool, then `count` ("1/2", questions) and the risk badge (omitted without `risk`).
+ */
+export function ApprovalHead({
+  title,
+  titleHint,
+  onTitle,
+  origin,
+  tool,
+  count,
+  risk,
+  desktop = false,
+}: {
+  title: string;
+  titleHint?: string;
+  onTitle?: () => void;
+  origin?: string;
+  tool: string;
+  count?: string;
+  risk?: AgentRisk;
+  desktop?: boolean;
+}) {
+  return (
+    <div className="approval__head">
+      <AgentMark />
+      <span className="approval__title">
+        {onTitle ? (
+          <button className="activity__title approval__title-btn" title={titleHint} onClick={onTitle}>
+            {title}
+          </button>
+        ) : (
+          <span className="activity__title">{title}</span>
+        )}
+        {origin && <span className="approval__origin">{origin}</span>}
+        <span className="approval__tool">{tool}</span>
+        {count && <span className="approval__count">{count}</span>}
+      </span>
+      {risk && (
+        <span className="agent-risk" data-risk={risk}>
+          <RiskGlyph desktop={desktop} risk={risk} />
+          {RISK_LABEL[risk]}
+        </span>
+      )}
     </div>
   );
 }

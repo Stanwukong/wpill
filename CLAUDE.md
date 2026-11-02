@@ -71,7 +71,9 @@ the drive once); `cargo clean --profile dev` when space runs low.
   (settings.json merge) = pure and unit-tested, `focus.rs` = which window to bring forward, `mod.rs` = listener,
   commands and the tray's Connect/Disconnect dialog. It ignores hooks from sessions Cay itself started (`is_self`).
   Permission requests (2.8a): `ask.rs` (pure: the held request, the reply, the hook output) and `asks.rs` (managed
-  `Asks`, the `claude-asks` pipe server, one thread per held request, `claudeApproval` cards).
+  `Asks`, the `claude-asks` pipe server, one thread per held request, `claudeApproval` cards). Questions and plans
+  (2.8c): `agent/interact.rs` (pure: questions, answers, `updatedInput`, plan titles), shared by sessions and runs. They're never allowed bare:
+  only `Answers` / `ApprovePlan` allow them, built from the input as Claude Code sent it.
   `duplex.rs` = the duplex, multi-instance pipe shared by the agent pipe (`agent/pipe.rs` names it) and `claude/asks.rs`.
   `agent/` (Phase 2.7, headless Claude Code runs): `mod.rs` = managed `Agents`, pipe server + connection threads,
   approval flow, commands; `run.rs` = command line + spawn (suspended, `CREATE_NO_WINDOW`, Job Object via `job.rs`);
@@ -223,8 +225,10 @@ the drive once); `cargo clean --profile dev` when space runs low.
 - **The hook forwarder must stay quiet and fast.** `cay.exe hook` runs before Tauri, never panics
   (release is `panic = "abort"`, a non-zero exit shows as a hook error in Claude Code) and bounds every wait. The only
   thing it ever prints is a `PermissionRequest` decision you made in the island (2.8a); with no decision it prints
-  nothing, so Claude Code asks as usual. Keep Cay's hold (`asks::HOLD`, 55 s) < the forwarder's wait (60 s) < the hook
-  entry's timeout (75 s), and never answer a request nobody clicked: timeouts, errors and Cay's own runs reply `pass`. Keep
+  nothing, so Claude Code asks as usual. Keep Cay's hold (`asks::hold_for`: 55 s for permissions, 600 s for questions
+  and plans) < the forwarder's wait (+5 s) < the hook entry's timeout (660 s), and never answer a request nobody
+  clicked: timeouts, errors and Cay's own runs reply `pass`. Questions and plans are never allowed bare: only
+  `Answers` / `ApprovePlan` allow them, built from the original input. Keep
   the hook entry in *shell form* with an explicit `shell`: Claude Code before 2.1.15x ignores the `args` exec form
   and would run a bare `cay.exe`, launching Cay. "Connect Claude Code…" records the exe that clicked it (as with
   autostart), so connect from the installed build.

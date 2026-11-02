@@ -75,6 +75,8 @@ function PendingApproval({ approval }: { approval: AgentApprovalActivity }) {
     setSent(true);
     decide(approval.requestId, decision).catch(() => setSent(false));
   };
+  const question = approval.interaction?.kind === "question";
+  const plan = approval.interaction?.kind === "plan";
   return (
     <div className="agent-pending" data-risk={approval.risk}>
       <span className="agent-pending__tool">{approval.tool}</span>
@@ -82,11 +84,18 @@ function PendingApproval({ approval }: { approval: AgentApprovalActivity }) {
         {approval.summary}
       </span>
       <button className="agent-btn agent-btn--quiet" disabled={sent} onClick={() => answer("deny")}>
-        Deny
+        {plan ? "Reject" : question ? "Skip" : "Deny"}
       </button>
-      <button className="agent-btn agent-btn--allow" disabled={sent} onClick={() => answer("allow")}>
-        Allow
-      </button>
+      {/* A question or plan (2.8c) is never allowed: it's answered or reviewed in the command window. */}
+      {approval.interaction ? (
+        <button className="agent-btn agent-btn--quiet" onClick={() => openRun(approval.runId)}>
+          {plan ? "Review" : "Answer"}
+        </button>
+      ) : (
+        <button className="agent-btn agent-btn--allow" disabled={sent} onClick={() => answer("allow")}>
+          Allow
+        </button>
+      )}
     </div>
   );
 }

@@ -181,6 +181,8 @@ pub struct ClaudeApprovalActivity {
     pub risk: AgentRisk,
     /// The card's diff or wrapped command (2.8b); the whole one comes from `claude_ask_preview`.
     pub preview: Option<Box<ApprovalPreview>>,
+    /// A question or a plan (2.8c), answered with `claude_answer` / `claude_plan` instead of Allow.
+    pub interaction: Option<Box<Interaction>>,
 }
 
 /// `command_take_focus`: what a newly created command window selects (its page missed the focus event).
@@ -264,6 +266,38 @@ pub struct AgentApprovalActivity {
     pub routine_name: Option<String>,
     /// The card's diff or wrapped command (2.8b); the whole one comes from `agent_approval_preview`.
     pub preview: Option<Box<ApprovalPreview>>,
+    /// A question or a plan (2.8c), answered with `agent_answer` / `agent_plan` instead of Allow.
+    pub interaction: Option<Box<Interaction>>,
+}
+
+/// `AskUserQuestion` or `ExitPlanMode` (2.8c): what the card shows instead of Allow / Deny.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Interaction {
+    /// The questions and the answers given so far (question text → label, or labels joined by ", ").
+    Question {
+        questions: Vec<QuestionView>,
+        answers: std::collections::BTreeMap<String, String>,
+    },
+    /// The plan itself comes from the preview commands (`ApprovalPreview::Plan`).
+    Plan { title: String, lines: u32 },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuestionView {
+    /// A short label ("Framework").
+    pub header: String,
+    pub question: String,
+    pub options: Vec<QuestionOption>,
+    pub multi_select: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuestionOption {
+    pub label: String,
+    pub description: String,
 }
 
 /// What an approval shows beyond its one line (2.8b), built by `agent::preview`. The card's copy is capped at a few
@@ -273,6 +307,16 @@ pub struct AgentApprovalActivity {
 pub enum ApprovalPreview {
     Diff(DiffPreview),
     Command(CommandPreview),
+    /// `ExitPlanMode`'s plan (2.8c), whole; never on the card.
+    Plan(PlanPreview),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanPreview {
+    pub markdown: String,
+    /// Shortened on the way and not found whole in its plan file.
+    pub cut: bool,
 }
 
 /// A file edit as changed lines. `added`/`removed` are `None` when the input was cut (2.8a's 16 KB per string), so
@@ -583,7 +627,7 @@ pub enum AgentEvent {
     Decision {
         request_id: u32,
         allow: bool,
-        /// `user`, `remembered`, `timeout` or `runEnded`.
+        /// `user`, `remembered`, `timeout`, `runEnded`, or for questions and plans (2.8c) `answered`, `approved`, `feedback`.
         by: &'static str,
     },
     Result {

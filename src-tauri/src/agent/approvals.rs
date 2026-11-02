@@ -8,13 +8,13 @@
 //! remembered "for this run"; otherwise (a user allow rule skipped the prompt) Cay asks itself, with
 //! `Purpose::Look`, so every look is approved in the island whatever Claude Code decided.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
 use super::preview::{self, Existing};
-use super::{actions, describe};
+use super::{actions, describe, interact};
 use crate::ipc::{AgentApprovalActivity, AgentRisk, ApprovalPreview};
 
 /// Grants kept per run at most (approved prompts whose call never came).
@@ -61,8 +61,12 @@ pub struct Request {
 #[derive(Debug, Clone)]
 pub struct Pending {
     pub activity: AgentApprovalActivity,
-    /// Sent back as `updatedInput` when allowed (unchanged).
+    /// Sent back as `updatedInput` when allowed: unchanged, or a question's input with your answers (2.8c).
     pub input: Value,
+    /// Sent instead of the usual deny message: your feedback on a plan (2.8c).
+    pub message: Option<String>,
+    /// A question's answers so far.
+    answers: BTreeMap<String, String>,
     pub reply: ReplyTo,
     pub purpose: Purpose,
     pub tool: String,
@@ -86,6 +90,23 @@ pub enum Asked {
         target_pid: Option<u32>,
     },
     Waiting(Pending),
+}
+
+#[derive(Debug)]
+// Short-lived and moved once, like `Asked`.
+#[allow(clippy::large_enum_variant)]
+pub enum Answered {
+    /// Questions remain: the card with the answers so far.
+    Partial(AgentApprovalActivity),
+    /// Every question has an answer: reply allow with `input`.
+    Complete(Pending),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AnswerError {
+    Gone,
+    /// Not one of the question's options (or empty, or too long).
+    Invalid,
 }
 
 #[derive(Debug, Clone)]
@@ -151,8 +172,12 @@ impl Approvals {
                 desktop,
                 detail: actions::detail(&req.tool, &req.input),
                 routine_name: req.routine_name,
-                preview: previews.as_ref().map(|p| Box::new(p.card.clone())),
+                preview: previews.as_ref().and_then(|p| p.card.clone()).map(Box::new),
+                interaction: interact::interaction(&req.tool, &req.input, &BTreeMap::new())
+                    .map(Box::new),
             },
+            message: None,
+            answers: BTreeMap::new(),
             input: req.input,
             reply: req.reply,
             purpose: req.purpose,
@@ -188,6 +213,53 @@ impl Approvals {
             let (run, tool, input) = (p.activity.run_id.clone(), p.tool.clone(), p.input.clone());
             self.add_grant(&run, &tool, &input, p.target_pid);
         }
+        Some(p)
+    }
+
+    /// The tool a waiting request asks about.
+    pub fn tool_of(&self, request_id: u32) -> Option<&str> {
+        self.pending
+            .iter()
+            .find(|p| p.activity.request_id == request_id)
+            .map(|p| p.tool.as_str())
+    }
+
+    /// Your answer to one question of a waiting `AskUserQuestion` (2.8c): the updated card while questions remain,
+    /// else the request, removed, with your answers in its `input`.
+    pub fn answer(
+        &mut self,
+        request_id: u32,
+        question: &str,
+        labels: &[String],
+        other: Option<&str>,
+    ) -> Result<Answered, AnswerError> {
+        let i = self
+            .pending
+            .iter()
+            .position(|p| p.activity.request_id == request_id && p.tool == interact::QUESTION_TOOL)
+            .ok_or(AnswerError::Gone)?;
+        let p = &mut self.pending[i];
+        let questions = interact::questions(&p.input).ok_or(AnswerError::Invalid)?;
+        let (key, value) =
+            interact::answer(&questions, question, labels, other).ok_or(AnswerError::Invalid)?;
+        p.answers.insert(key, value);
+        if let Some(input) = interact::answered_input(&p.input, &p.answers) {
+            let mut p = self.pending.remove(i);
+            p.input = input;
+            return Ok(Answered::Complete(p));
+        }
+        p.activity.interaction = interact::interaction(&p.tool, &p.input, &p.answers).map(Box::new);
+        Ok(Answered::Partial(p.activity.clone()))
+    }
+
+    /// Approve a waiting plan (input unchanged), or send it back with `feedback` (2.8c). `None` if it's gone.
+    pub fn plan(&mut self, request_id: u32, feedback: Option<String>) -> Option<Pending> {
+        let i = self
+            .pending
+            .iter()
+            .position(|p| p.activity.request_id == request_id && p.tool == interact::PLAN_TOOL)?;
+        let mut p = self.pending.remove(i);
+        p.message = feedback;
         Some(p)
     }
 
@@ -284,6 +356,7 @@ impl Approvals {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ipc::Interaction;
     use serde_json::json;
 
     const TIMEOUT: Duration = Duration::from_secs(600);
@@ -314,6 +387,72 @@ mod tests {
             Asked::Waiting(p) => p,
             Asked::Remembered { .. } => panic!("expected to wait"),
         }
+    }
+
+    #[test]
+    fn questions_are_answered_one_by_one() {
+        let mut a = Approvals::default();
+        let now = Instant::now();
+        let input = json!({ "questions": [
+            { "question": "Which?", "header": "H", "options": [{ "label": "A" }, { "label": "B" }] },
+            { "question": "Extras?", "header": "E", "multiSelect": true,
+              "options": [{ "label": "X" }, { "label": "Y" }] },
+        ]});
+        let p = waiting(a.ask(req("r1", "AskUserQuestion", input, 1), now, TIMEOUT));
+        let id = p.activity.request_id;
+        assert_eq!(p.activity.remember_as, None);
+        assert!(matches!(
+            p.activity.interaction.as_deref(),
+            Some(Interaction::Question { questions, answers }) if questions.len() == 2 && answers.is_empty()
+        ));
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            a.answer(id, "Which?", &s(&["C"]), None).unwrap_err(),
+            AnswerError::Invalid
+        );
+        let Ok(Answered::Partial(card)) = a.answer(id, "Which?", &s(&["B"]), None) else {
+            panic!("one question left")
+        };
+        let Some(Interaction::Question { answers, .. }) = card.interaction.as_deref() else {
+            panic!()
+        };
+        assert_eq!(answers["Which?"], "B");
+        let Ok(Answered::Complete(done)) = a.answer(id, "Extras?", &s(&["Y", "X"]), None) else {
+            panic!("all answered")
+        };
+        assert_eq!(done.input["answers"]["Extras?"], "X, Y");
+        assert_eq!(done.input["questions"][0]["question"], "Which?");
+        assert!(!a.has_pending("r1"));
+        assert_eq!(
+            a.answer(id, "Which?", &s(&["A"]), None).unwrap_err(),
+            AnswerError::Gone
+        );
+    }
+
+    #[test]
+    fn plans_are_approved_or_sent_back() {
+        let mut a = Approvals::default();
+        let now = Instant::now();
+        let plan = json!({ "plan": "# Tidy up\n1. a" });
+        let p = waiting(a.ask(req("r1", "ExitPlanMode", plan.clone(), 1), now, TIMEOUT));
+        assert_eq!(a.tool_of(p.activity.request_id), Some("ExitPlanMode"));
+        assert!(p.activity.preview.is_none(), "the island says Plan ready");
+        assert!(matches!(
+            a.preview(p.activity.request_id),
+            Some(ApprovalPreview::Plan(_))
+        ));
+        let back = a
+            .plan(p.activity.request_id, Some("add tests".into()))
+            .unwrap();
+        assert_eq!(back.message.as_deref(), Some("add tests"));
+        assert_eq!(back.input, plan);
+        assert!(a.plan(p.activity.request_id, None).is_none());
+        let q = waiting(a.ask(
+            req("r1", "Bash", json!({ "command": "ls" }), 1),
+            now,
+            TIMEOUT,
+        ));
+        assert!(a.plan(q.activity.request_id, None).is_none(), "only plans");
     }
 
     #[test]

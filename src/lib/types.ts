@@ -76,6 +76,32 @@ export interface ClaudeApprovalActivity {
   risk: AgentRisk;
   /** The card's diff or wrapped command (2.8b); the whole one comes from `claudeAskPreview`. */
   preview: ApprovalPreview | null;
+  /** A question or a plan (2.8c): answered with `claudeAnswer` / `claudePlan`, never Allow. Deny skips it. */
+  interaction: Interaction | null;
+}
+
+/**
+ * `AskUserQuestion` or `ExitPlanMode` (2.8c). A question carries the answers given so far (question text → label,
+ * or labels joined by ", "); Rust updates the card in place after each. A plan's text comes from the preview
+ * commands (`kind: "plan"`); the island only says "Plan ready".
+ */
+export type Interaction =
+  | { kind: "question"; questions: QuestionView[]; answers: Record<string, string> }
+  | { kind: "plan"; title: string; lines: number };
+
+export interface QuestionView {
+  /** A short label ("Framework"). */
+  header: string;
+  question: string;
+  options: { label: string; description: string }[];
+  multiSelect: boolean;
+}
+
+/** One question's answer: option labels (one for a single-select), or your own words in `other`. */
+export interface QuestionAnswer {
+  question: string;
+  labels: string[];
+  other: string | null;
 }
 
 /** `claude:asks` / `claude_asks`: the session requests the island holds, oldest first (command window). */
@@ -87,7 +113,11 @@ export interface ClaudeAsks {
  * What an approval shows beyond its one line (2.8b), built in Rust. The card's copy holds at most a few lines
  * (`moreLines` counts the rest); the command window fetches the whole one.
  */
-export type ApprovalPreview = ({ kind: "diff" } & DiffPreview) | ({ kind: "command" } & CommandPreview);
+export type ApprovalPreview =
+  | ({ kind: "diff" } & DiffPreview)
+  | ({ kind: "command" } & CommandPreview)
+  /** A plan (2.8c), whole, from the preview commands only. `cut`: shortened and not found whole in its file. */
+  | { kind: "plan"; markdown: string; cut: boolean };
 
 export interface DiffPreview {
   /** Relative to the folder when inside it. */
@@ -143,6 +173,8 @@ export interface AgentApprovalActivity {
   routineName: string | null;
   /** The card's diff or wrapped command (2.8b); the whole one comes from `agentApprovalPreview`. */
   preview: ApprovalPreview | null;
+  /** A question or a plan (2.8c): answered with `agentAnswer` / `agentPlan`, never Allow. Deny skips it. */
+  interaction: Interaction | null;
 }
 
 /**
@@ -383,7 +415,7 @@ export type AgentEvent =
   | { kind: "tool"; id: string; name: string; label: string }
   | { kind: "toolResult"; id: string; isError: boolean; text: string }
   | { kind: "approval"; requestId: number; tool: string; summary: string; risk: AgentRisk }
-  | { kind: "decision"; requestId: number; allow: boolean; by: "user" | "remembered" | "timeout" | "runEnded" }
+  | { kind: "decision"; requestId: number; allow: boolean; by: "user" | "remembered" | "timeout" | "runEnded" | "answered" | "approved" | "feedback" }
   | { kind: "result"; status: AgentStatus; reason: AgentEndReason; turns: number; costUsd: number | null }
   | { kind: "error"; message: string };
 
