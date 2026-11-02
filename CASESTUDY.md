@@ -902,6 +902,7 @@ the old crate's artifacts are never reused or cleaned by cargo; remove them by h
 | 2026-11-02 | Stage 2.8f built: Connect's three states and an Update dialog, usage limits through a chained status line (D41; the author's HUD unchanged through Cay), an optional "needs you" sound; the Windows Terminal tab spike said no. Manual checklist pending. |
 | 2026-11-02 | Stage 2.8f signed off by the author: **Phase 2.8 complete.** Release v0.2 (4a-5) deferred to the end of all phases at the author's call. Phase 6 (Google Calendar and Gmail) kick-off prompt written. |
 | 2026-11-02 | Phase 6 research and design agreed (D42): Cay's own OAuth client (In Production, unverified until release), no iCal fallback, no sync tokens, WinHTTP and Credential Manager instead of new crates. Stage 6a built: the `google/` module, the `google-watcher` thread, `google:state` / `calendar:upcoming`, tray Connect/Disconnect Google. Checked with fixtures, a live WinHTTP test without an account and a debug Cay (C14: the drive filled mid-build); the manual check waits for the author's Google client. |
+| 2026-11-02 | Stage 6a signed off by the author. Google wouldn't publish the External project without a home page and privacy policy, so it runs in Testing with the author as a test user (7-day sign-ins) until those exist before release. |
 
 ## 7. Results & metrics
 

@@ -30,8 +30,8 @@ phases** (the author's call, 2026-11-02).
 hand.** **Now: [Phase 6 Google Calendar and Gmail](#phase-6-google-calendar-and-gmail-started-2026-11-02)
 (D35, D42).** Research and the design were agreed with the author (2026-11-02): Cay's own OAuth client, unverified
 "In Production" for now, no iCal fallback. **6a (the Rust watcher: sign-in, Calendar and Tasks, `google:state` /
-`calendar:upcoming`, tray Connect) is built; its manual check needs the author's Google Cloud client** (steps in the
-Phase 6 section). Kick-off prompt: [prompts/phase-6-google.md](prompts/phase-6-google.md).
+`calendar:upcoming`, tray Connect) is signed off (2026-11-02). Now: 6b (the island).** The Cloud project runs in
+Testing with the author as a test user until a home page and privacy policy exist (Google won't publish without them). Kick-off prompt: [prompts/phase-6-google.md](prompts/phase-6-google.md).
 History of 2.8: 2.8a (approve terminal sessions from the
 island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the card, D37), 2.8c (questions and
 plans, D38) and 2.8d (live step line, D39) are built with their manual checks pending, and 2.8e (Claude Code's
@@ -991,6 +991,7 @@ Kick-off prompt: [prompts/phase-4a-release-readiness.md](prompts/phase-4a-releas
 - [ ] Signing from v0.3: Certum Open Source (own name) or SignPath (free); wire `bundle.windows.signCommand`, never
       commit a secret, check `cay.exe` and the installer with `signtool verify /pa`
 - [ ] Rerun the manual checklist; publish v0.2 installer
+- [ ] Before release: a home page and privacy policy (e.g. GitHub Pages) so the Google project can be published (Phase 6)
 
 **Manual check (Phase 4a-2)** (`pnpm tauri dev` with `$env:RUST_LOG='info,cay_lib=debug'`; each step logs
 `monitor changed: …`)
@@ -1302,8 +1303,9 @@ Cloud project (D35). Replaces the "calendar peek" spike.
 **Registering Cay's Google client (the author, once; not done from Claude sessions)**
 1. console.cloud.google.com → new project "Cay". APIs & Services → Library: enable **Google Calendar API** and
    **Google Tasks API**.
-2. Google Auth Platform → Branding: app name "Cay", support email; Audience: **External**, then **Publish app** (In
-   production; unverified is fine for ≤100 users and avoids the 7-day token expiry of Testing).
+2. Google Auth Platform → Branding: app name "Cay", support email; Audience: **External**. **Publish app** (In
+   production; unverified is fine for ≤100 users and avoids Testing's 7-day token expiry) needs a home page and a privacy
+   policy link on an authorized domain first; until then add yourself under Audience → Test users.
 3. Data Access → add the scopes `calendar.events.readonly`, `calendar.calendarlist.readonly`, `tasks.readonly`.
 4. Clients → Create client → **Desktop app** "Cay desktop". Copy the client id and secret; never commit them.
 5. Dev builds: put them in Cay's `settings.json` (`google.clientId`, `google.clientSecret`), or set
@@ -1331,9 +1333,11 @@ Cloud project (D35). Replaces the "calendar peek" spike.
       vector; the auth URL; callbacks; token replies; settings), clippy, fmt, typecheck; an ignored live test reached
       Google over WinHTTP (public discovery document, and a 401 for a made-up token, no account); a debug Cay started
       the watcher (`Disconnected, client missing`), answered `google-test state` and stopped it on quit
-- [ ] Manual check (below): needs the client from "Registering Cay's Google client"
+- [x] Manual check (below): passed, signed off by the author (2026-11-02). Project `cay-island` in Testing with the
+      author as a test user: Google refuses to publish an External app with these scopes until the Branding page has a
+      home page and privacy policy on an authorized domain, so sign-ins expire after 7 days for now
 
-**Manual check (Phase 6a)** (`pnpm tauri dev` with `$env:RUST_LOG='info,cay_lib=debug'` and the client in
+**Manual check (Phase 6a, passed 2026-11-02)** (`pnpm tauri dev` with `$env:RUST_LOG='info,cay_lib=debug'` and the client in
 `settings.json`; `.\src-tauri\target\debug\cay.exe google-test state` prints the state and counts in the log)
 1. **Connect:** tray → "Connect Google…": the box lists the three read-only scopes; OK opens Google's sign-in in your
    default browser. Past the unverified warning, allow all three. The tab says "Cay is connected to Google"; the tray
