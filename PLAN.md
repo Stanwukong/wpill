@@ -24,16 +24,18 @@ and never for the run, stopped by any input of yours, with all 12 manual checks 
 Cay runs), with all 12 manual checks passed. Phase 2.7 is complete.**
 [Phase 4a](#phase-4a-release-readiness) (release readiness): 4a-1 (own visual identity: the amber wave, D30), 4a-2
 (display changes followed live, D31; dock check pending) and 4a-3 (renamed **Cay**, README, MIT, D32) are done and 4a-4
-decided (v0.2 unsigned, D33) (2026-11-01). **4a-5 (release v0.2) and the dock check are set aside** at the author's
-call (2026-11-01) to start 2.8; they resume after it.
-**Now: [Phase 2.8 agent UX](#phase-28-agent-ux-started-2026-11-01) (D34).** 2.8a (approve terminal sessions from the
+decided (v0.2 unsigned, D33) (2026-11-01). **4a-5 (release v0.2) and the dock check are deferred to the end of all
+phases** (the author's call, 2026-11-02).
+**Phase 2.8 is complete (2026-11-02): agent UX, stages 2.8a–f (D34, D36–D41), with 2.8a, 2.8e and 2.8f signed off by
+hand.** **Next: [Phase 6 Google Calendar and Gmail](#phase-6-google-calendar-and-gmail-proposed-2026-11-01-not-started)
+(D35)**, research and a design proposal first: kick-off prompt [prompts/phase-6-google.md](prompts/phase-6-google.md).
+History of 2.8: 2.8a (approve terminal sessions from the
 island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the card, D37), 2.8c (questions and
 plans, D38) and 2.8d (live step line, D39) are built with their manual checks pending, and 2.8e (Claude Code's
 permission modes, Auto by default, D40) is signed off (2026-11-02). 2.8f (Connect's three states, usage limits
-through a chained status line, the optional sound, D41) is built, manual check pending; when it's signed off, Phase
-2.8 is complete and **4a-5 (release v0.2) is next** ([prompts/phase-4a-release-readiness.md](prompts/phase-4a-release-readiness.md)).
-Proposed, not started: [6 Google Calendar and Gmail](#phase-6-google-calendar-and-gmail-proposed-2026-11-01-not-started)
-(D35) and [2.9 other agents and open models](#phase-29-other-agents-and-open-models-proposed-2026-11-01-not-started).
+through a chained status line, the optional sound, D41) is signed off (2026-11-02).
+Then, per the roadmap: [2.9 other agents and open models](#phase-29-other-agents-and-open-models-proposed-2026-11-01-not-started),
+3, 5, the spikes, and last 4a-5 (release).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -402,13 +404,14 @@ meaning; new phases slot in between.
 | 3 | **2.5 Live Activities** | Island auto-expands for system events | The defining Dynamic Island behavior; reuses Phase 2's pill plumbing. |
 | 4 | **2.6 Claude Code activity** | Island shows when a local Claude Code session finishes or needs a decision | Added 2026-10-30 (D17). Small once 2.5's activity queue exists; high daily value while working with Claude Code. |
 | 5 | **2.7 Local automation agent** | Type an instruction; Cay runs a headless Claude Code session, shows progress in the island, asks for approvals there, and gives Claude desktop tools through its own MCP server | Added 2026-10-30 (D21). Builds directly on 2.6's pipe, sessions and activities. Staged so each stage is useful on its own. |
-| 6 | **4a Release readiness** | Multi-monitor + per-monitor DPI, code signing, v0.2 release | Docking/undocking breaks placement today; unsigned installers trigger SmartScreen. |
-| 7 | **2.8 Agent UX** (started 2026-11-01, ahead of 4a-5) | Approve terminal sessions from the island, see what you approve, questions and plans, a live step line, permission modes, trustworthy Connect | Proposed 2026-11-01 after a competitor survey (D34). Approving terminal sessions is the core of every rival; Cay only focuses the window. |
-| 8 | **6 Google Calendar and Gmail** (proposed) | Upcoming events and tasks in the pill and panel; Gmail and Calendar tools for agent runs | Proposed 2026-11-01 (D35). Replaces the "calendar peek" spike. |
+| 6 | **4a Release readiness** (4a-1 to 4a-4 done; **4a-5 release and the dock check deferred to the end**, 2026-11-02) | Multi-monitor + per-monitor DPI, code signing, v0.2 release | Docking/undocking breaks placement today; unsigned installers trigger SmartScreen. |
+| 7 | **2.8 Agent UX** (complete 2026-11-02) | Approve terminal sessions from the island, see what you approve, questions and plans, a live step line, permission modes, trustworthy Connect | Proposed 2026-11-01 after a competitor survey (D34). Approving terminal sessions is the core of every rival; Cay only focuses the window. |
+| 8 | **6 Google Calendar and Gmail** (next; prompt [phase-6-google.md](prompts/phase-6-google.md)) | Upcoming events and tasks in the pill and panel; Gmail and Calendar tools for agent runs | Proposed 2026-11-01 (D35). Replaces the "calendar peek" spike. |
 | 9 | **2.9 Other agents and open models** (proposed) | Codex / OpenCode sessions in the island; agent runs through ACP (Goose + Ollama first) beside the native Claude Code path | Proposed 2026-11-01 after a competitor survey. Every rival watches several CLIs; none runs agents. Keeps Cay's lead (runs, routines, desktop tools) while closing the coverage gap. |
 | 10 | **3 Memory-heavy apps** | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
 | 11 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
 | 12 | **Spikes** | Notifications mirror, live window previews (calendar peek moved to Phase 6) | Uncertain feasibility or needs sign-in; prototype before committing. |
+| 13 | **4a-5 Release v0.2** (deferred here 2026-11-02) | Full manual pass of every phase, the dock check, publish the installer with its SHA-256 | The author's call: release once every phase is in. |
 
 ### Phase 1.5: shell basics (complete 2026-10-30)
 - [x] Tray icon (`tauri` `tray-icon` feature, `src-tauri/src/tray.rs`). The menu (left or right click) shows a
@@ -986,7 +989,7 @@ Kick-off prompt: [prompts/phase-4a-release-readiness.md](prompts/phase-4a-releas
 7. **Text size:** change Settings → Accessibility → Text size while the panel is open: after a moment, leaving and
    re-entering the panel still matches its edges.
 
-### Phase 2.8: agent UX (started 2026-11-01)
+### Phase 2.8: agent UX (complete 2026-11-02)
 From the competitor survey (D34): Nook (Windows), Vibe Island, Open Island, Agent Notch, Vibe Notch, FavTray, Crest.
 Cay leads on feel (never activated, spring motion, a general island), risk badges, narrow "for this run" grants and
 the desktop glow. It trails on the category's core: deciding from the island for sessions you run in a terminal.
@@ -1183,9 +1186,9 @@ restart open sessions)
       needs an index and acts on the most recent window. Not probed live (no terminal open; opening one would take the
       author's focus). Stays a known limitation
 - [x] Checked: Rust 193 tests, clippy, typecheck, `pnpm build`; the status line from outside (above)
-- [ ] Manual check (below)
+- [x] Manual check (below): passed, signed off by the author (2026-11-02). **Phase 2.8 is complete.**
 
-**Manual check (Phase 2.8f)** (`pnpm tauri dev`; it changes `~/.claude/settings.json` only when you click OK)
+**Manual check (Phase 2.8f, passed 2026-11-02)** (`pnpm tauri dev`; it changes `~/.claude/settings.json` only when you click OK)
 1. **Update:** the tray reads "Update Claude Code connection…" (your install is from before 2.8f). Click it: the dialog
    shows every hook entry and the `statusLine` change, naming your HUD command; Update → "up to date".
 2. **Status line:** in a Claude Code session your HUD looks exactly as before. After Claude's first reply the panel's
@@ -1255,6 +1258,7 @@ without giving up that lead. Not scheduled until 4a-5 ships.
 - How to name the "agent" UI (`ClaudeSection`, `ClaudeActivity`, `--font-claude`) once it isn't only Claude.
 
 ### Phase 6: Google Calendar and Gmail (proposed 2026-11-01, not started)
+Kick-off prompt: [prompts/phase-6-google.md](prompts/phase-6-google.md) (research and a design proposal before code).
 Upcoming events and tasks in the island, and Gmail and Calendar for agent runs, without the user creating a Google
 Cloud project (D35). Replaces the "calendar peek" spike.
 
@@ -1396,9 +1400,7 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
   planned from v0.3.
 
 ## Open questions
-- After [2.8 agent UX](#phase-28-agent-ux-started-2026-11-01) (started ahead of v0.2): release v0.2 (4a-5), then
-  [6 Google](#phase-6-google-calendar-and-gmail-proposed-2026-11-01-not-started), then
-  [2.9 other agents](#phase-29-other-agents-and-open-models-proposed-2026-11-01-not-started), all before Phase 3?
+- ~~Release v0.2 before Phase 6?~~ Decided 2026-11-02: no, 4a-5 waits until every phase is in.
 - Signing from v0.3: Certum Open Source certificate (own name, ~€69) or SignPath Foundation (free, their name)?
 - Rename the GitHub repo from `wpill` to `cay`? (GitHub redirects the old URL; the README and configs link `wpill`.)
 

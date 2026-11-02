@@ -859,6 +859,7 @@ needs the same DPI awareness as the app it measures, or it reports a consistent 
 | 2026-11-02 | Stage 2.8e built: the author reversed "every step asks" (D40). Runs use Claude Code's own modes, Auto by default, switched mid-run from a chip (`set_permission_mode`) or for the next message; routines get a mode; desktop tools follow Auto. Manual checklist pending. |
 | 2026-11-02 | Stage 2.8e signed off by the author. Kick-off prompt for 2.8f (`prompts/phase-2.8f-connect.md`) written so it starts in a new session. |
 | 2026-11-02 | Stage 2.8f built: Connect's three states and an Update dialog, usage limits through a chained status line (D41; the author's HUD unchanged through Cay), an optional "needs you" sound; the Windows Terminal tab spike said no. Manual checklist pending. |
+| 2026-11-02 | Stage 2.8f signed off by the author: **Phase 2.8 complete.** Release v0.2 (4a-5) deferred to the end of all phases at the author's call. Phase 6 (Google Calendar and Gmail) kick-off prompt written. |
 
 ## 7. Results & metrics
 
