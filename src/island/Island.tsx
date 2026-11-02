@@ -45,7 +45,7 @@ export function Island() {
   const ref = useRef<HTMLDivElement>(null);
   usePanelSizeReporter(ref, mode === "pill" ? null : mode);
   const media = useMedia();
-  const claudeSessions = useClaudeSessions();
+  const { sessions: claudeSessions, limits: claudeLimits } = useClaudeSessions();
   const agentRuns = useAgentRuns();
   const workingSessions = claudeSessions.filter((s) => s.status === "working");
   const liveRuns = agentRuns.filter((r) => isLive(r.status));
@@ -114,6 +114,7 @@ export function Island() {
               <MediaCard media={media} />
               <ClaudeSection
                 sessions={claudeSessions}
+                limits={claudeLimits}
                 agent={panelRuns.length > 0 ? <AgentRunItems runs={panelRuns} /> : null}
               />
               <AppsList />

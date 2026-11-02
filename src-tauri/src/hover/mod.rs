@@ -269,6 +269,7 @@ fn flush(app: &AppHandle, island: &Island, activities: &Activities, out: &mut Ve
                     log::debug!("activity:show {:?}", payload.activity);
                 }
                 activities.set_current(Some(payload.clone()));
+                activities.shown(&payload);
                 emit(app, events::ACTIVITY_SHOW, payload);
             }
             Output::Hide(id) => {

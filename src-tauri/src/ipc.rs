@@ -220,6 +220,8 @@ pub enum ClaudeStatus {
 pub struct ClaudeSessionsPayload {
     /// Most recently updated first.
     pub sessions: Vec<ClaudeSession>,
+    /// The newest usage limits from any session's status line (2.8f).
+    pub limits: Option<UsageLimits>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -255,6 +257,28 @@ pub enum AgentMode {
 
 fn ask_mode() -> AgentMode {
     AgentMode::Default
+}
+
+/// Claude usage limits (2.8f, D41), from Claude Code's status line input: the newest reading of any session.
+/// A window is missing when Claude Code didn't report it (not a Pro/Max/Ultra plan, or before the first response).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageLimits {
+    pub five_hour: Option<LimitWindow>,
+    pub seven_day: Option<LimitWindow>,
+    /// When the status line read it (Unix ms).
+    pub at_ms: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LimitWindow {
+    /// 0–100 (Claude Code's `used_percentage`).
+    pub used_percent: f64,
+    pub resets_at_ms: i64,
+    /// Set by Rust once `resets_at_ms` has passed without a newer reading.
+    #[serde(default)]
+    pub stale: bool,
 }
 
 /// `TodoWrite`'s progress (2.8d): items completed and in all.
@@ -730,6 +754,8 @@ pub struct AgentOptions {
 #[serde(rename_all = "camelCase")]
 pub struct ClaudeHooksStatus {
     pub installed: bool,
+    /// Connected by an earlier version (or TopBar): Connect updates it (2.8f).
+    pub out_of_date: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

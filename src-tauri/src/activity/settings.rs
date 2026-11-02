@@ -21,6 +21,9 @@ pub struct Switches {
     pub screenshot: bool,
     /// Claude Code sessions (activities and the panel section).
     pub claude: bool,
+    /// A soft sound when something needs you (a session's question or prompt, an approval, a plan; 2.8f). Off by
+    /// default.
+    pub sound: bool,
 }
 
 impl Default for Switches {
@@ -33,6 +36,7 @@ impl Default for Switches {
             caps_lock: true,
             screenshot: true,
             claude: true,
+            sound: false,
         }
     }
 }

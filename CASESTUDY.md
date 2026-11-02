@@ -652,6 +652,22 @@ chip shows what Claude Code reports, so it can't drift from the real mode. *Alte
 default, per-run `ask` rules keeping `rm`/`mv`/`cp` asking under Accept edits; the author preferred Claude Code's own
 semantics); offering Bypass (Claude Code itself hides it); a fixed per-run mode (no mid-run switch).
 
+### D41: Connect has three states, and the status line is chained, not replaced (Phase 2.8f)
+*What:* Connect reads a settings file as connected, out of date or not connected, so an install from an earlier version
+says "Update Claude Code connection…" (with Update or Disconnect) instead of looking disconnected. Usage limits come
+from Claude Code's status line input (`rate_limits`, no network call): Connect points `statusLine.command` at `cay.exe
+statusline`, keeps the user's own `statusLine` in Cay's `settings.json`, and `cay.exe statusline` forwards only the
+limits, then runs the user's command with the same input and prints its output unchanged. Disconnect puts their status
+line back in place. *Why chain:* the author already has a HUD status line; replacing it silently was ruled out, and
+"only if you have none" would have left this author without limits (the author's choice of three proposals). *Why keep
+the original in Cay's file:* the user's `settings.json` stays readable (no encoded command in it) and Disconnect can
+restore the exact object. *Same shell as Claude Code:* Git Bash when found, else PowerShell, per the statusline docs, so
+quoting behaves the same (checked: identical output through Cay). *Sound:* Windows' own notification sound, off by
+default, played when the island first shows something that needs you, so fullscreen and duplicates are handled by the
+activity queue. *Windows Terminal tabs:* not built; nothing maps a process to a tab, and titles are Claude Code's own.
+*Alternatives:* polling claude.ai's usage page (network, sign-in), reading Claude Code's transcripts
+(no limits there), a bundled WAV (a system sound respects the user's sound scheme).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -842,6 +858,7 @@ needs the same DPI awareness as the app it measures, or it reports a consistent 
 | 2026-11-02 | Stage 2.8d built: the live step line and to-do progress in the pill and panel, from a background `PreToolUse` hook and stream-json (D39). Stage 2.8e spiked: a running stream-json run accepts `set_permission_mode`, and per-run ask rules keep filesystem shell commands asking under Accept edits. Manual checklist pending. |
 | 2026-11-02 | Stage 2.8e built: the author reversed "every step asks" (D40). Runs use Claude Code's own modes, Auto by default, switched mid-run from a chip (`set_permission_mode`) or for the next message; routines get a mode; desktop tools follow Auto. Manual checklist pending. |
 | 2026-11-02 | Stage 2.8e signed off by the author. Kick-off prompt for 2.8f (`prompts/phase-2.8f-connect.md`) written so it starts in a new session. |
+| 2026-11-02 | Stage 2.8f built: Connect's three states and an Update dialog, usage limits through a chained status line (D41; the author's HUD unchanged through Cay), an optional "needs you" sound; the Windows Terminal tab spike said no. Manual checklist pending. |
 
 ## 7. Results & metrics
 

@@ -59,8 +59,22 @@
   margin-bottom: 14px;
 }
 
+/*
+ * The heading and, right-aligned on its baseline, the usage limits (2.8f). Where they don't both fit (large Text
+ * size, long 12 h times) the limits wrap to a slim line of their own, flush left (space-between starts a lone item).
+ */
+.claude__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin-bottom: 6px;
+}
+
 .claude__heading {
-  margin: 0 0 6px;
+  flex: none;
+  margin: 0;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -196,4 +210,80 @@
 .claude-row__step {
   flex: 0 1 auto;
   max-width: 55%;
+}
+
+/*
+ * Usage limits (2.8f): "5h ▬ 23% resets 14:30". Quiet chrome in Segoe with tabular numerals; the meter is a 24 × 3
+ * hairline track with a neutral fill that turns amber from 80 % and red from 95 %. The fill scales (transform only)
+ * over 200 ms ease-out when a new reading arrives. A stale window dims. Reduced motion: the fill just jumps.
+ */
+.usage {
+  flex: none;
+  max-width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--island-muted);
+}
+
+.usage__item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.usage__item[data-stale="true"] {
+  opacity: 0.6;
+}
+
+.usage__label {
+  flex: none;
+}
+
+.usage__percent {
+  flex: none;
+  color: var(--island-fg);
+}
+
+.usage__reset {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.usage__meter {
+  flex: none;
+  align-self: center;
+  width: 24px;
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.usage__fill {
+  display: block;
+  height: 100%;
+  background: rgba(245, 245, 247, 0.62);
+  transform-origin: left;
+  transition: transform 200ms ease-out;
+}
+
+.usage__item[data-level="warn"] .usage__fill {
+  background: var(--agent);
+}
+
+.usage__item[data-level="danger"] .usage__fill {
+  background: var(--danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .usage__fill {
+    transition: none;
+  }
 }

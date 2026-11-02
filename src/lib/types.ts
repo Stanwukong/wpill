@@ -307,10 +307,32 @@ export interface TodoCount {
 export interface ClaudeSessions {
   /** Most recently updated first. */
   sessions: ClaudeSession[];
+  /** The newest usage limits from any session's status line (2.8f); `null` until one arrives. */
+  limits: UsageLimits | null;
+}
+
+/**
+ * Claude usage limits (2.8f), from Claude Code's status line input (Pro/Max/Ultra, after the session's first response).
+ * Each window may be missing. `stale` is set by Rust once `resetsAtMs` has passed without a newer reading.
+ */
+export interface UsageLimits {
+  fiveHour: LimitWindow | null;
+  sevenDay: LimitWindow | null;
+  /** When the status line read it (Unix ms). */
+  atMs: number;
+}
+
+export interface LimitWindow {
+  /** 0–100. */
+  usedPercent: number;
+  resetsAtMs: number;
+  stale: boolean;
 }
 
 export interface ClaudeHooksStatus {
   installed: boolean;
+  /** Connected by an earlier version: Connect updates it (2.8f). */
+  outOfDate: boolean;
 }
 
 export interface AgentRun {

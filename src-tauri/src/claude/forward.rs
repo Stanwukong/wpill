@@ -90,7 +90,7 @@ fn hold(request: &ask::Request) -> Option<ask::Decision> {
 }
 
 /// Stdin to EOF on a helper thread, so a writer that never closes it can't keep us alive.
-fn read_stdin() -> Option<Vec<u8>> {
+pub(super) fn read_stdin() -> Option<Vec<u8>> {
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
         let mut kept = Vec::new();
@@ -112,7 +112,7 @@ fn read_stdin() -> Option<Vec<u8>> {
     rx.recv_timeout(STDIN_TIMEOUT).ok()
 }
 
-fn send(name: &HSTRING, bytes: &[u8]) -> Result<()> {
+pub(super) fn send(name: &HSTRING, bytes: &[u8]) -> Result<()> {
     let deadline = Instant::now() + CONNECT_BUDGET;
     loop {
         // SAFETY: opens the pipe for writing; the handle is closed by the guard.

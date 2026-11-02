@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::ipc::TodoCount;
+use crate::ipc::{LimitWindow, TodoCount, UsageLimits};
 
 pub const VERSION: u32 = 1;
 /// Largest message the listener reads; anything longer is dropped whole.
@@ -53,6 +53,9 @@ pub struct Envelope {
     /// The session's permission mode as the hook reports it (2.8e), shown read-only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permission_mode: Option<String>,
+    /// `StatusLine` (2.8f): the usage limits from Claude Code's status line input, and nothing else from it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limits: Option<UsageLimits>,
     /// Nearest parent first.
     #[serde(default)]
     pub chain: Vec<Proc>,
@@ -97,6 +100,8 @@ pub enum Event {
     /// The turn ended on an API error.
     StopFailure,
     SessionEnd,
+    /// `cay.exe statusline` (2.8f): new usage limits; no session status changes.
+    Limits,
 }
 
 /// Maps a hook to what we track, or `None` for hooks and notification types we ignore.
@@ -119,6 +124,7 @@ fn event_of(name: &str, notification_type: Option<&str>, source: Option<&str>) -
         "Stop" => Event::Stop,
         "StopFailure" => Event::StopFailure,
         "SessionEnd" => Event::SessionEnd,
+        STATUS_LINE => Event::Limits,
         _ => return None,
     })
 }
@@ -136,6 +142,68 @@ pub struct Message {
     pub todos: Option<TodoCount>,
     /// `default`, `acceptEdits`, `plan`, `auto`, … when the hook said.
     pub mode: Option<String>,
+    /// For `Limits`.
+    pub limits: Option<UsageLimits>,
+}
+
+/// The event name `cay.exe statusline` sends (not a Claude Code hook).
+const STATUS_LINE: &str = "StatusLine";
+/// Most a window's reset can lie ahead of the reading (the 7-day window, with room).
+const MAX_RESET_AHEAD_MS: i64 = 31 * 24 * 60 * 60 * 1000;
+
+/// `cay.exe statusline` side: the usage limits in Claude Code's status line input, as a message for the hook pipe;
+/// `None` when the input has no `rate_limits` (not a subscriber, or before the first response) or isn't valid.
+pub fn limits_envelope(stdin: &[u8], at_ms: i64, chain: Vec<Proc>) -> Option<Envelope> {
+    let input: Value = serde_json::from_slice(stdin).ok()?;
+    let rate = input.get("rate_limits")?;
+    let window = |key: &str| {
+        let w = rate.get(key)?;
+        Some(LimitWindow {
+            used_percent: w.get("used_percentage")?.as_f64()?,
+            resets_at_ms: w.get("resets_at")?.as_i64()?.checked_mul(1000)?,
+            stale: false,
+        })
+    };
+    let limits = UsageLimits {
+        five_hour: window("five_hour"),
+        seven_day: window("seven_day"),
+        at_ms,
+    };
+    if limits.five_hour.is_none() && limits.seven_day.is_none() {
+        return None;
+    }
+    let text = |key: &str| {
+        input
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string()
+    };
+    let envelope = Envelope {
+        v: VERSION,
+        at_ms,
+        event: STATUS_LINE.into(),
+        session_id: text("session_id"),
+        cwd: text("cwd"),
+        notification_type: None,
+        source: None,
+        step: None,
+        todos: None,
+        permission_mode: None,
+        limits: Some(limits),
+        chain,
+    };
+    check(&envelope).map(|_| envelope)
+}
+
+fn limits_ok(l: &UsageLimits, at_ms: i64) -> bool {
+    [l.five_hour, l.seven_day].into_iter().flatten().all(|w| {
+        w.used_percent.is_finite()
+            && (0.0..=1000.0).contains(&w.used_percent)
+            && w.resets_at_ms > 0
+            && w.resets_at_ms < at_ms + MAX_RESET_AHEAD_MS
+            && !w.stale
+    }) && l.at_ms == at_ms
 }
 
 /// Forwarder side: the envelope for a hook's stdin, or `None` if it isn't one we track.
@@ -159,6 +227,7 @@ pub fn envelope(stdin: &[u8], at_ms: i64, chain: Vec<Proc>) -> Option<Envelope> 
         step,
         todos,
         permission_mode: input.permission_mode,
+        limits: None,
         chain,
     };
     check(&envelope).map(|_| envelope)
@@ -180,6 +249,7 @@ pub fn decode(bytes: &[u8]) -> Option<Message> {
         step: envelope.step,
         todos: envelope.todos,
         mode: envelope.permission_mode,
+        limits: envelope.limits,
     })
 }
 
@@ -213,7 +283,13 @@ fn check(e: &Envelope) -> Option<Event> {
         .permission_mode
         .as_deref()
         .is_none_or(|m| m.len() <= 32 && m.chars().all(|c| c.is_ascii_alphanumeric()));
-    if !step_ok || !todos_ok || !mode_ok {
+    // Only the status line carries limits, and it always does.
+    let limits_ok = match (&e.limits, e.event == STATUS_LINE) {
+        (Some(l), true) => limits_ok(l, e.at_ms),
+        (None, false) => true,
+        _ => false,
+    };
+    if !step_ok || !todos_ok || !mode_ok || !limits_ok {
         return None;
     }
     event_of(
@@ -309,6 +385,62 @@ mod tests {
             Some(Event::ToolStart)
         );
         assert_eq!(ev("SubagentStop", ""), None);
+    }
+
+    #[test]
+    fn status_lines_carry_only_the_limits() {
+        // From the statusline docs' example, with the fields Cay must not forward.
+        let stdin = r#"{"cwd":"C:\\p","session_id":"abc","transcript_path":"C:\\t.jsonl","model":{"id":"x"},
+            "cost":{"total_cost_usd":1.5},"rate_limits":{"five_hour":{"used_percentage":23.5,"resets_at":1738425600},
+            "seven_day":{"used_percentage":41.2,"resets_at":1738857600}}}"#;
+        let at = 1_738_400_000_000;
+        let e = limits_envelope(stdin.as_bytes(), at, chain()).unwrap();
+        let wire = String::from_utf8(serde_json::to_vec(&e).unwrap()).unwrap();
+        assert!(!wire.contains("t.jsonl") && !wire.contains("total_cost"));
+        let m = decode(wire.as_bytes()).unwrap();
+        assert_eq!(m.event, Event::Limits);
+        let l = m.limits.unwrap();
+        assert_eq!(l.five_hour.unwrap().used_percent, 23.5);
+        assert_eq!(l.five_hour.unwrap().resets_at_ms, 1_738_425_600_000);
+        assert_eq!(l.seven_day.unwrap().used_percent, 41.2);
+        assert_eq!(l.at_ms, at);
+
+        let one = r#"{"cwd":"C:\\p","session_id":"abc","rate_limits":{"seven_day":{"used_percentage":5,"resets_at":1738857600}}}"#;
+        let l = limits_envelope(one.as_bytes(), at, chain())
+            .unwrap()
+            .limits
+            .unwrap();
+        assert!(
+            l.five_hour.is_none() && l.seven_day.is_some(),
+            "each window may be absent"
+        );
+        let none = r#"{"cwd":"C:\\p","session_id":"abc","model":{"id":"x"}}"#;
+        assert_eq!(limits_envelope(none.as_bytes(), at, chain()), None);
+
+        let mut bad = e.clone();
+        bad.limits
+            .as_mut()
+            .unwrap()
+            .five_hour
+            .as_mut()
+            .unwrap()
+            .used_percent = f64::NAN;
+        assert!(decode(&serde_json::to_vec(&bad).unwrap_or_default()).is_none());
+        let mut far = e.clone();
+        far.limits
+            .as_mut()
+            .unwrap()
+            .seven_day
+            .as_mut()
+            .unwrap()
+            .resets_at_ms = at * 2;
+        assert_eq!(decode(&serde_json::to_vec(&far).unwrap()), None);
+        let mut hook_with_limits = e.clone();
+        hook_with_limits.event = "Stop".into();
+        assert_eq!(
+            decode(&serde_json::to_vec(&hook_with_limits).unwrap()),
+            None
+        );
     }
 
     #[test]

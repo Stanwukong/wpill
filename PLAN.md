@@ -29,9 +29,9 @@ call (2026-11-01) to start 2.8; they resume after it.
 **Now: [Phase 2.8 agent UX](#phase-28-agent-ux-started-2026-11-01) (D34).** 2.8a (approve terminal sessions from the
 island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the card, D37), 2.8c (questions and
 plans, D38) and 2.8d (live step line, D39) are built with their manual checks pending, and 2.8e (Claude Code's
-permission modes, Auto by default, D40) is signed off (2026-11-02). **Next: 2.8f** (Connect you can trust, usage
-limits, sound, Windows Terminal tab spike), in a new session: kick-off prompt
-[prompts/phase-2.8f-connect.md](prompts/phase-2.8f-connect.md).
+permission modes, Auto by default, D40) is signed off (2026-11-02). 2.8f (Connect's three states, usage limits
+through a chained status line, the optional sound, D41) is built, manual check pending; when it's signed off, Phase
+2.8 is complete and **4a-5 (release v0.2) is next** ([prompts/phase-4a-release-readiness.md](prompts/phase-4a-release-readiness.md)).
 Proposed, not started: [6 Google Calendar and Gmail](#phase-6-google-calendar-and-gmail-proposed-2026-11-01-not-started)
 (D35) and [2.9 other agents and open models](#phase-29-other-agents-and-open-models-proposed-2026-11-01-not-started).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
@@ -340,6 +340,10 @@ startFailed`.
 | field | `ClaudeSession.mode` | `string \| null` | A terminal session's mode from its hooks, read-only. |
 | command | `agent_set_mode` / `agent_cycle_mode` | `(runId, mode)` / `(runId)` | Live: `set_permission_mode` control request; else for the next message. Audited. |
 | stream | `control_request` `set_permission_mode`; `system/status` `permissionMode`; `control_response` | | Verified on 2.1.314. |
+| field | `ClaudeSessions.limits` | `{ fiveHour, sevenDay: { usedPercent, resetsAtMs, stale } \| null, atMs } \| null` | 2.8f. Newest status-line reading; `stale` set by Rust after the reset. |
+| field | `ClaudeHooksStatus.outOfDate` | `boolean` | 2.8f. Connected by an earlier version. |
+| exe mode | `cay.exe statusline` | stdin: Claude Code's status line JSON | 2.8f. Pipe message `event: "StatusLine"` with only `limits`; then runs the user's saved command. |
+| file | Cay `settings.json` → `claude` | `{ statusLine: object \| null, statusShell: "bash" \| "powershell" }`; `activities.sound` | 2.8f. Written by Connect, removed by Disconnect. |
 | pipe reply | `ask::Decision` | `"allow" \| "deny" \| "pass" \| { "answers": {…} } \| "approvePlan" \| { "feedback": "…" }` | The forwarder echoes the original input; a plain allow on a question or plan prints nothing. |
 
 ### Reserved for later phases (names fixed now so they slot in)
@@ -1153,12 +1157,48 @@ restart open sessions)
 8. **Routine:** a new routine's editor starts at Auto; an old routine shows Ask.
 9. **Terminal session:** Shift+Tab a terminal session to Accept edits: its panel row shows "Accept edits".
 
-**2.8f Connect you can trust, and small things** (next, in a new session:
+**2.8f Connect you can trust, and small things** (built 2026-11-02, D41; prompt
 [prompts/phase-2.8f-connect.md](prompts/phase-2.8f-connect.md))
-- [ ] Connect shows the exact `settings.json` change first, keeps a dated backup, Disconnect removes only Cay's entries
-- [ ] Usage limits (5 h / 7 d) from Claude Code's status line, no network call; in the panel's Claude section
-- [ ] An optional soft sound for "needs you" (off by default; Phase 4b switch)
-- [ ] Spike: focus the Windows Terminal tab, not just the window (known limitation)
+- [x] Connect has three states (`hooks::state`): connected (every entry as this version writes it, and the status line
+      chained or left alone), out of date (any entry of Cay's or TopBar's, or a timeout/`async` that changed) and not
+      connected. The tray reads "Disconnect…", "Update Claude Code connection…" or "Connect…"; the update dialog shows
+      the change and offers Update or Disconnect. Tests pin the preview to what's written (every event's entry, the
+      status line) and Disconnect to removing only ours, key order included. `claude_hooks_status` gains `outOfDate`
+- [x] Usage limits: Connect chains the status line (the author's choice): `statusLine.command` becomes `cay.exe
+      statusline` (other fields and its place kept), the user's own `statusLine` and shell are kept in Cay's
+      `settings.json` (`claude.statusLine`, `claude.statusShell`) and put back in place on Disconnect. `cay.exe
+      statusline` sends only `rate_limits` (5 h / 7 d `used_percentage`, `resets_at`) over the hook pipe, then runs the
+      user's command through the same shell Claude Code uses (Git Bash, else PowerShell; no console, 10 s cap, 64 KB) with
+      the same input and prints its output unchanged; with no command of theirs it prints nothing. A status line that
+      isn't a `command` is left alone (no limits). Checked from outside: the author's HUD printed byte-for-byte the same
+      through Cay (~0.5 s) as run directly
+- [x] The panel's Claude section shows the newest reading (5 h and 7 d percent, reset time); Rust marks a window stale
+      after its reset (re-checked every 30 s) and re-emits `claude:sessions` (motion-designer)
+- [x] An optional "needs you" sound (`activities.sound`, off by default): Windows' notification sound (`PlaySoundW`
+      alias, async, system-sounds volume, nothing if the user turned it off) when the island first shows a session's
+      "needs input", an approval, a question or a plan; once per activity id; never during fullscreen (activities wait)
+- [x] Spike, Windows Terminal tab focus: **not built.** Tabs are UIA `TabItem`s that `SelectionItem.Select()` can switch
+      without input, but Windows Terminal exposes no process per tab, and Claude Code sets the tab title to its own
+      summary, so a session can't be matched to its tab reliably (two Claude tabs, renamed tabs). `wt.exe focus-tab`
+      needs an index and acts on the most recent window. Not probed live (no terminal open; opening one would take the
+      author's focus). Stays a known limitation
+- [x] Checked: Rust 193 tests, clippy, typecheck, `pnpm build`; the status line from outside (above)
+- [ ] Manual check (below)
+
+**Manual check (Phase 2.8f)** (`pnpm tauri dev`; it changes `~/.claude/settings.json` only when you click OK)
+1. **Update:** the tray reads "Update Claude Code connection…" (your install is from before 2.8f). Click it: the dialog
+   shows every hook entry and the `statusLine` change, naming your HUD command; Update → "up to date".
+2. **Status line:** in a Claude Code session your HUD looks exactly as before. After Claude's first reply the panel's
+   Claude section shows 5 h and 7 d usage with reset times.
+3. **Settings check:** open `~/.claude/settings.json`: `statusLine.command` runs `cay.exe' statusline`; Cay's
+   `settings.json` has `claude.statusLine` with your original.
+4. **Disconnect:** tray → Disconnect: your `statusLine` is back exactly (same place in the file), Cay's hooks are gone,
+   your other hooks and keys untouched (compare with the backup).
+5. **Connect again:** works, and connecting twice never chains Cay to itself.
+6. **Stale:** leave the panel until a 5 h reset passes with no session running: that window reads as reset.
+7. **Sound:** set `"sound": true` under `activities` in Cay's `settings.json`, restart Cay: a permission request, a
+   question and an agent approval each chime once; nothing chimes during a fullscreen video, and it chimes when the card
+   shows after you leave fullscreen. Off by default.
 
 ### Phase 2.9: other agents and open models (proposed 2026-11-01, not started)
 Cay talks to Claude Code in two ways, and "other agents" means something different for each: **sessions** you run in
@@ -1311,7 +1351,9 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
 - Claude Code: needs the hooks in `settings.json` (tray item); open sessions pick them up after a restart. Permission
   prompts are reported ~6 s late (Claude Code's own timing), and after Esc the session reads "working" for about a
   minute (`Stop` doesn't fire; the idle notification corrects it). Clicking focuses the window, not the Windows Terminal
-  tab. The hook entry records the exe that clicked "Connect" (connect from the installed build, like autostart).
+  tab (2.8f's spike: Windows Terminal exposes no process per tab, and Claude Code's tab titles can't tell sessions
+  apart). Usage limits (2.8f) need a Pro/Max/Ultra plan and a session that has had a reply; they come from whichever
+  session updated its status line last. A status line that isn't a `command` isn't chained (no limits). The hook entry records the exe that clicked "Connect" (connect from the installed build, like autostart).
   The PowerShell form of the entry (machines without Git Bash) is untested. Sessions inside WSL aren't seen.
   Approval previews (2.8b): a session's input over 16 KB per string arrives cut, so its card says "cut" without
   counts; a `Write` diffs against the file as it is when asked (≤256 KB, UTF-8), else it reads "Replaces the whole

@@ -62,12 +62,14 @@ the drive once); `cargo clean --profile dev` when space runs low.
   `media/` (`mod.rs` = managed state + commands, `watcher.rs` = GSMTC thread + subscriptions,
   `snapshot.rs`, `artwork.rs`, `logic.rs` = pure helpers, unit-tested),
   `activity/` (`mod.rs` = managed `Activities`, `Watcher` harness, Caps Lock read, drag/open commands; `queue.rs` = pure
-  priority/coalescing, unit-tested; `settings.rs` = switches in `%APPDATA%\io.github.stanwukong.cay\settings.json`; one thread
+  priority/coalescing, unit-tested; `sound.rs` = the optional "needs you" sound (2.8f); `settings.rs` = switches in `%APPDATA%\io.github.stanwukong.cay\settings.json`; one thread
   per source: `audio.rs` (volume + Bluetooth), `brightness.rs`, `power.rs`, `screenshots.rs`; `drag.rs`).
   The activity queue is driven by `hover::logic::Machine` (the `Showing` phase), not by the activity module.
   Sources send `activity::Signal` (`Offer(Activity)` or `Retract(key)`); other features start their threads through
   the same `activity::Watcher` harness (`Activities::sender`/`add_watcher`) so shutdown stops them too.
-  `claude/` (Claude Code via hooks): `forward.rs` = `cay.exe hook` (run from `main.rs` before Tauri), `pipe.rs` =
+  `claude/` (Claude Code via hooks): `forward.rs` = `cay.exe hook` (run from `main.rs` before Tauri), `statusline.rs` =
+  `cay.exe statusline` (2.8f: usage limits to the hook pipe, then the user's own status line; the `claude` block of Cay's
+  `settings.json`), `pipe.rs` =
   per-user pipe + server loop, `process.rs` = ancestor chain/liveness, `protocol.rs` + `sessions.rs` + `hooks.rs`
   (settings.json merge) = pure and unit-tested, `focus.rs` = which window to bring forward, `mod.rs` = listener,
   commands and the tray's Connect/Disconnect dialog. It ignores hooks from sessions Cay itself started (`is_self`).
@@ -241,6 +243,11 @@ the drive once); `cargo clean --profile dev` when space runs low.
   Write tool, not a Git Bash heredoc (it collapsed the doubled backslashes and the forwarder silently ignored the invalid
   JSON). For `PermissionRequest` in `-p` mode use a recent Claude Code (2.1.314 under the VS Code extension runs it;
   2.1.123 on PATH doesn't), a scratch folder and a command that really asks (`touch`, not `echo`).
+- **`cay.exe statusline` (2.8f) is a status line, so it must print exactly the user's output.** It never prints
+  anything of its own, sends only `rate_limits` to the pipe (the input holds paths, costs and session names), runs the
+  user's command through the same shell Claude Code would (Git Bash, else PowerShell) with `CREATE_NO_WINDOW`, and
+  bounds everything (stdin 1 s, connect 1 s, their command 10 s). Connect keeps their `statusLine` in Cay's
+  `settings.json` (`claude`); never put Cay's own command there, and test with `APPDATA` pointed at a scratch folder.
 - **The `PreToolUse` hook (2.8d) is background-only and summarized in the forwarder.** It must never print or block:
   a `PreToolUse` output can allow or deny a tool. Only the step line and to-do counts go on the pipe, never the input.
 - **Editing Rust while `pnpm tauri dev` runs restarts Cay**, and a `cay.exe agent-test …` sent during the rebuild finds

@@ -11,6 +11,7 @@ mod power;
 mod queue;
 mod screenshots;
 mod settings;
+mod sound;
 
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Mutex, MutexGuard};
@@ -93,6 +94,8 @@ struct Inner {
     /// An activity the commands finished early; the poller ends it.
     dismiss: Option<u32>,
     watchers: Vec<Watcher>,
+    /// The "needs you" sound's memory of what it played (2.8f).
+    chime: sound::Chime,
 }
 
 /// Tauri-managed state shared between the sources, the hover poller and commands.
@@ -109,6 +112,7 @@ impl Default for Activities {
             dragging: false,
             dismiss: None,
             watchers: Vec::new(),
+            chime: sound::Chime::default(),
         }))
     }
 }
@@ -129,6 +133,18 @@ impl Activities {
 
     pub fn add_watcher(&self, watcher: Watcher) {
         self.lock().watchers.push(watcher);
+    }
+
+    /// The island is showing `payload`: plays the "needs you" sound if it's switched on and this activity waits on
+    /// you and hasn't sounded yet (2.8f).
+    pub fn shown(&self, payload: &ActivityPayload) {
+        let play = {
+            let mut inner = self.lock();
+            inner.switches.sound && inner.chime.wants(payload.id, &payload.activity)
+        };
+        if play {
+            sound::play();
+        }
     }
 
     pub fn claude_enabled(&self) -> bool {

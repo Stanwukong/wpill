@@ -17,6 +17,7 @@ mod pipe;
 mod process;
 mod protocol;
 mod sessions;
+mod statusline;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
@@ -28,14 +29,14 @@ use tauri::{AppHandle, Emitter, Manager, State, Wry};
 use windows::core::HSTRING;
 use windows::Win32::System::Threading::SetEvent;
 use windows::Win32::UI::WindowsAndMessaging::{
-    MessageBoxW, IDOK, MB_ICONINFORMATION, MB_ICONQUESTION, MB_ICONWARNING, MB_OK, MB_OKCANCEL,
-    MB_SETFOREGROUND, MB_TOPMOST, MESSAGEBOX_STYLE,
+    MessageBoxW, IDNO, IDOK, IDYES, MB_ICONINFORMATION, MB_ICONQUESTION, MB_ICONWARNING, MB_OK,
+    MB_OKCANCEL, MB_SETFOREGROUND, MB_TOPMOST, MB_YESNOCANCEL, MESSAGEBOX_STYLE,
 };
 
 use crate::activity::{claude_key, Activities, Signal, Watcher};
 use crate::error::{AppError, AppResult};
 use crate::hover::Island;
-use crate::ipc::{events, ClaudeHooksStatus, ClaudeSessionsPayload};
+use crate::ipc::{events, ClaudeHooksStatus, ClaudeSessionsPayload, UsageLimits};
 use crate::win32::Handle;
 use crate::{apps, win32, window};
 pub use asks::Asks;
@@ -50,35 +51,49 @@ pub fn forward_hook() {
     forward::run();
 }
 
+/// `cay.exe statusline` (2.8f): `main.rs` calls this before anything else starts.
+pub fn forward_statusline() {
+    statusline::run();
+}
+
 /// The island's name for a working folder (its last component, shortened), shared with agent runs.
 pub fn project_name(cwd: &str) -> String {
     sessions::project(cwd)
 }
 
-/// Tauri-managed copy of the listener's sessions, for commands.
+/// Tauri-managed copy of the listener's sessions and usage limits, for commands.
 #[derive(Default)]
-pub struct Claude(Mutex<Vec<Session>>);
+pub struct Claude(Mutex<Shared>);
+
+#[derive(Default)]
+struct Shared {
+    sessions: Vec<Session>,
+    limits: Option<UsageLimits>,
+}
 
 impl Claude {
-    fn lock(&self) -> MutexGuard<'_, Vec<Session>> {
+    fn lock(&self) -> MutexGuard<'_, Shared> {
         self.0.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     fn session(&self, id: u32) -> Option<Session> {
-        self.lock().iter().find(|s| s.id == id).cloned()
+        self.lock().sessions.iter().find(|s| s.id == id).cloned()
     }
 
     /// Our id for Claude Code's session id, if the listener has seen that session.
     fn row_of(&self, claude_id: &str) -> Option<u32> {
         self.lock()
+            .sessions
             .iter()
             .find(|s| s.claude_id() == claude_id)
             .map(|s| s.id)
     }
 
     fn payload(&self) -> ClaudeSessionsPayload {
+        let shared = self.lock();
         ClaudeSessionsPayload {
-            sessions: sessions::snapshot(&self.lock()),
+            sessions: sessions::snapshot(&shared.sessions),
+            limits: shared.limits,
         }
     }
 }
@@ -117,6 +132,7 @@ fn start(app: AppHandle, out: Sender<Signal>) -> AppResult<Watcher> {
 fn listen(app: &AppHandle, out: &Sender<Signal>, server: &pipe::Server, stop: &Handle) {
     log::info!("listening for Claude Code hooks");
     let mut sessions = Sessions::default();
+    let mut limits: Option<UsageLimits> = None;
     let mut last_prune = Instant::now();
     loop {
         let next = match server.next(stop, PRUNE_INTERVAL.as_millis() as u32) {
@@ -136,6 +152,15 @@ fn listen(app: &AppHandle, out: &Sender<Signal>, server: &pipe::Server, stop: &H
                 // Agent runs started by Cay fire the same hooks; `agent/` shows those itself.
                 Some(msg) if msg.chain.iter().any(process::is_self) => {
                     log::debug!("claude hook {:?} from an agent run; ignored", msg.event);
+                }
+                // The status line (2.8f): account-wide limits, not a session's status.
+                Some(msg) if msg.event == Event::Limits => {
+                    if let Some(reading) = msg.limits {
+                        let mut next = statusline::newest(limits, reading);
+                        statusline::mark_stale(&mut next, now_ms());
+                        changed = limits != Some(next);
+                        limits = Some(next);
+                    }
                 }
                 Some(msg) => {
                     log::debug!(
@@ -172,6 +197,9 @@ fn listen(app: &AppHandle, out: &Sender<Signal>, server: &pipe::Server, stop: &H
                 sessions.prune(now_ms(), |s| s.process().is_none_or(process::alive));
             changed |= dropped;
             effects.extend(retracts);
+            if let Some(l) = limits.as_mut() {
+                changed |= statusline::mark_stale(l, now_ms());
+            }
         }
         for effect in effects {
             let signal = match effect {
@@ -182,7 +210,11 @@ fn listen(app: &AppHandle, out: &Sender<Signal>, server: &pipe::Server, stop: &H
         }
         if changed {
             let claude = app.state::<Claude>();
-            *claude.lock() = sessions.list().to_vec();
+            {
+                let mut shared = claude.lock();
+                shared.sessions = sessions.list().to_vec();
+                shared.limits = limits;
+            }
             if let Err(e) = app.emit(events::CLAUDE_SESSIONS, claude.payload()) {
                 log::warn!("emit {} failed: {e}", events::CLAUDE_SESSIONS);
             }
@@ -300,8 +332,10 @@ pub fn decide_for_test(app: &AppHandle, request_id: u32, allow: bool) -> AppResu
 
 #[tauri::command]
 pub fn claude_hooks_status() -> ClaudeHooksStatus {
+    let state = hook_state();
     ClaudeHooksStatus {
-        installed: hooks_installed(),
+        installed: state == hooks::State::Connected,
+        out_of_date: state == hooks::State::OutOfDate,
     }
 }
 
@@ -315,17 +349,20 @@ pub fn claude_hooks_remove() -> AppResult<()> {
     remove().map(|_| ()).map_err(AppError::ClaudeSettings)
 }
 
-pub fn hooks_installed() -> bool {
+/// Connected, connected by an earlier version (needs an update), or not connected (2.8f).
+fn hook_state() -> hooks::State {
     hooks::settings_path()
         .and_then(|path| hooks::read(&path).ok().flatten())
-        .is_some_and(|settings| hooks::installed(&settings))
+        .map_or(hooks::State::NotConnected, |settings| {
+            hooks::state(&settings)
+        })
 }
 
 pub fn tray_label() -> &'static str {
-    if hooks_installed() {
-        "Disconnect Claude Code…"
-    } else {
-        "Connect Claude Code…"
+    match hook_state() {
+        hooks::State::Connected => "Disconnect Claude Code…",
+        hooks::State::OutOfDate => "Update Claude Code connection…",
+        hooks::State::NotConnected => "Connect Claude Code…",
     }
 }
 
@@ -337,21 +374,51 @@ fn settings_path() -> Result<std::path::PathBuf, String> {
     hooks::settings_path().ok_or_else(|| "couldn't find your user folder".to_string())
 }
 
-/// Returns the backup path, if there was a file to back up.
-fn install() -> Result<Option<std::path::PathBuf>, String> {
-    let path = settings_path()?;
+/// The user's settings with Cay connected as this version writes it (hooks and the chained status line), and what
+/// to keep of their own status line.
+fn connected(
+    settings: serde_json::Value,
+) -> Result<(serde_json::Value, statusline::Saved), String> {
     let shell = hooks::detect_shell();
-    let command = hooks::command(&this_exe()?, shell);
-    let settings = hooks::read(&path)?.unwrap_or_else(|| serde_json::json!({}));
-    hooks::write(&path, &hooks::with_hooks(settings, &command, shell)?)
+    let exe = this_exe()?;
+    let saved = statusline::saved();
+    let saved_line = saved.as_ref().and_then(|s| s.status_line.as_ref());
+    let settings = hooks::with_hooks(settings, &hooks::command(&exe, shell), shell)?;
+    let (settings, original) =
+        hooks::with_status_line(settings, &hooks::status_command(&exe, shell), saved_line)?;
+    Ok((
+        settings,
+        statusline::Saved {
+            status_line: original,
+            shell,
+        },
+    ))
 }
 
+/// Connects (or updates). Returns the backup path, if there was a file to back up.
+fn install() -> Result<Option<std::path::PathBuf>, String> {
+    let path = settings_path()?;
+    let settings = hooks::read(&path)?.unwrap_or_else(|| serde_json::json!({}));
+    let (settings, saved) = connected(settings)?;
+    // Kept first: if writing their settings fails, the next Connect still knows their original status line.
+    statusline::keep(Some(&saved))?;
+    hooks::write(&path, &settings)
+}
+
+/// Disconnects: Cay's hooks out, the user's own status line back in place.
 fn remove() -> Result<Option<std::path::PathBuf>, String> {
     let path = settings_path()?;
     let Some(settings) = hooks::read(&path)? else {
         return Ok(None);
     };
-    hooks::write(&path, &hooks::without_hooks(settings)?)
+    let saved = statusline::saved();
+    let settings = hooks::without_status_line(
+        hooks::without_hooks(settings)?,
+        saved.as_ref().and_then(|s| s.status_line.as_ref()),
+    )?;
+    let backup = hooks::write(&path, &settings)?;
+    statusline::keep(None)?;
+    Ok(backup)
 }
 
 /// Only one dialog at a time (a second tray click while one is open does nothing).
@@ -379,40 +446,73 @@ pub fn toggle_from_tray(item: MenuItem<Wry>) {
 
 fn run_dialog() -> Result<(), String> {
     let path = settings_path()?;
-    if hooks_installed() {
+    let state = hook_state();
+    if state == hooks::State::Connected {
+        if !confirm(&remove_text(&path)) {
+            return Ok(());
+        }
+        return disconnect(&path);
+    }
+    let shell = hooks::detect_shell();
+    let exe = this_exe()?;
+    let current = hooks::read(&path)?.unwrap_or_else(|| serde_json::json!({}));
+    let saved = statusline::saved();
+    let change = format!(
+        "{}\n\n{}",
+        hooks::preview(&hooks::command(&exe, shell), shell),
+        hooks::status_preview(
+            &hooks::without_hooks(current)?,
+            &hooks::status_command(&exe, shell),
+            saved.as_ref().and_then(|s| s.status_line.as_ref()),
+        )
+    );
+    let tail = "Your other settings and hooks stay. A backup of the file is saved next to it first. Claude Code \
+                sessions that are already open may need a restart to pick the change up.";
+    if state == hooks::State::OutOfDate {
         let text = format!(
-            "Remove Cay's hooks from\n{}?\n\nOnly hooks whose command ends in \"cay.exe' hook\" are removed; your \
-             other settings and hooks stay. A backup of the file is saved next to it first.",
+            "Cay's connection in\n{}\nis from an earlier version. Update it to this?\n\n{change}\n\n{tail}\n\n\
+             Yes: update.   No: disconnect Cay instead.",
             path.display()
         );
-        if !confirm(&text) {
-            return Ok(());
-        }
-        let backup = remove()?;
-        log::info!("removed Claude Code hooks from {}", path.display());
-        message(
-            &done_text("Claude Code is disconnected.", backup),
-            MB_OK | MB_ICONINFORMATION,
-        );
-    } else {
-        let shell = hooks::detect_shell();
-        let command = hooks::command(&this_exe()?, shell);
-        let text = format!(
-            "Cay will add these hooks to\n{}\n\n{}\n\nYour other settings and hooks stay. A backup of the file is \
-             saved next to it first. Claude Code sessions that are already open may need a restart to pick them up.",
-            path.display(),
-            hooks::preview(&command, shell)
-        );
-        if !confirm(&text) {
-            return Ok(());
-        }
-        let backup = install()?;
-        log::info!("added Claude Code hooks to {}", path.display());
-        message(
-            &done_text("Claude Code is connected.", backup),
-            MB_OK | MB_ICONINFORMATION,
-        );
+        return match message(&text, MB_YESNOCANCEL | MB_ICONQUESTION) {
+            IDYES => connect(&path, "Claude Code's connection is up to date."),
+            IDNO => disconnect(&path),
+            _ => Ok(()),
+        };
     }
+    let text = format!(
+        "Cay will add this to\n{}\n\n{change}\n\n{tail}",
+        path.display()
+    );
+    if !confirm(&text) {
+        return Ok(());
+    }
+    connect(&path, "Claude Code is connected.")
+}
+
+fn remove_text(path: &std::path::Path) -> String {
+    format!(
+        "Remove Cay from\n{}?\n\nOnly hooks whose command ends in \"cay.exe' hook\" (or TopBar's) are removed, and \
+         your own status line is put back as it was; your other settings and hooks stay. A backup of the file is \
+         saved next to it first.",
+        path.display()
+    )
+}
+
+fn connect(path: &std::path::Path, done: &str) -> Result<(), String> {
+    let backup = install()?;
+    log::info!("connected Claude Code in {}", path.display());
+    message(&done_text(done, backup), MB_OK | MB_ICONINFORMATION);
+    Ok(())
+}
+
+fn disconnect(path: &std::path::Path) -> Result<(), String> {
+    let backup = remove()?;
+    log::info!("disconnected Claude Code in {}", path.display());
+    message(
+        &done_text("Claude Code is disconnected.", backup),
+        MB_OK | MB_ICONINFORMATION,
+    );
     Ok(())
 }
 

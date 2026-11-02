@@ -23,6 +23,12 @@ pub fn forward_hook() {
     claude::forward_hook();
 }
 
+/// `cay.exe statusline`: Claude Code's status line command after Connect (2.8f). Sends the usage limits to the
+/// running Cay, then runs the user's own status line. Called from `main.rs` before `run()`, like `forward_hook`.
+pub fn forward_statusline() {
+    claude::forward_statusline();
+}
+
 /// `cay.exe mcp`: the stdio MCP bridge Claude Code starts for an agent run. Returns the exit code.
 pub fn mcp_bridge() -> i32 {
     agent::mcp_bridge()

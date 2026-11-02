@@ -1,28 +1,30 @@
 import { useEffect, useState } from "react";
 import { commands, on, unlistenAll } from "../../lib/ipc";
-import type { ClaudeSession } from "../../lib/types";
+import type { ClaudeSessions } from "../../lib/types";
+
+const EMPTY: ClaudeSessions = { sessions: [], limits: null };
 
 /**
- * Local Claude Code sessions as tracked by Rust (most recently updated first). Lives at the Island level so
- * state survives the panel remounting on every expand.
+ * Local Claude Code sessions as tracked by Rust (most recently updated first) and the newest usage limits (2.8f).
+ * Lives at the Island level so state survives the panel remounting on every expand.
  */
-export function useClaudeSessions(): ClaudeSession[] {
-  const [sessions, setSessions] = useState<ClaudeSession[]>([]);
+export function useClaudeSessions(): ClaudeSessions {
+  const [state, setState] = useState<ClaudeSessions>(EMPTY);
 
   useEffect(() => {
     let alive = true;
     commands
       .getClaudeSessions()
-      .then((s) => alive && setSessions(s.sessions))
+      .then((s) => alive && setState(s))
       .catch(() => {});
-    const subscriptions = [on.claudeSessions((s) => setSessions(s.sessions))];
+    const subscriptions = [on.claudeSessions(setState)];
     return () => {
       alive = false;
       unlistenAll(subscriptions);
     };
   }, []);
 
-  return sessions;
+  return state;
 }
 
 /** Brings the session's terminal or editor forward. Rust acknowledges and hides its activity; failures stay quiet. */

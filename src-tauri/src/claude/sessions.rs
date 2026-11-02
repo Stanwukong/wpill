@@ -155,6 +155,8 @@ impl Sessions {
             Event::Stop => (ClaudeStatus::Done, Some(done(false))),
             Event::StopFailure => (ClaudeStatus::Done, Some(done(true))),
             Event::SessionEnd => unreachable!("handled above"),
+            // The listener keeps the status line's limits itself; they never change a session.
+            Event::Limits => (before, None),
         };
         let changed = created || status != before || step_changed;
         if status != before {
@@ -239,6 +241,7 @@ mod tests {
             step: None,
             todos: None,
             mode: None,
+            limits: None,
         }
     }
 

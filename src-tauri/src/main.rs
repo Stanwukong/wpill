@@ -8,6 +8,14 @@ fn main() {
         cay_lib::forward_hook();
         return;
     }
+    // `cay.exe statusline` is Claude Code's status line after Connect: usage limits to Cay, then the user's own.
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|arg| arg == "statusline")
+    {
+        cay_lib::forward_statusline();
+        return;
+    }
     // `cay.exe mcp` is Cay's MCP server for agent runs, started by Claude Code over stdio.
     if std::env::args_os().nth(1).is_some_and(|arg| arg == "mcp") {
         std::process::exit(cay_lib::mcp_bridge());

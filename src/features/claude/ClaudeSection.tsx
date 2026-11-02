@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import type { ClaudeSession, ClaudeStatus } from "../../lib/types";
+import type { ClaudeSession, ClaudeStatus, UsageLimits } from "../../lib/types";
 import { SessionModeTag } from "../agent/ModeChip";
 import { StepLabel } from "./StepLabel";
+import { hasLimits, UsageLine } from "./UsageLine";
 import { WorkingIndicator } from "./WorkingGlyphs";
 import { focusClaudeSession } from "./useClaudeSessions";
 import "./claude.css";
@@ -26,13 +27,27 @@ function ago(updatedAtMs: number): string {
 /**
  * Panel section: one row per local Claude Code session; a click focuses its terminal or editor. A session's mode
  * shows as a read-only tag unless it's plain `default` (2.8e). `agent` holds the
- * agent runs' rows (`<li>`s, features/agent), listed first; null when there are none.
+ * agent runs' rows (`<li>`s, features/agent), listed first; null when there are none. `limits` (2.8f) shows
+ * beside the heading; with no rows the section still shows for a live (not stale) reading, as just the heading line.
  */
-export function ClaudeSection({ sessions, agent }: { sessions: ClaudeSession[]; agent?: ReactNode }) {
-  if (sessions.length === 0 && !agent) return null;
+export function ClaudeSection({
+  sessions,
+  agent,
+  limits,
+}: {
+  sessions: ClaudeSession[];
+  agent?: ReactNode;
+  limits: UsageLimits | null;
+}) {
+  const rows = sessions.length > 0 || !!agent;
+  if (!rows && !hasLimits(limits, true)) return null;
   return (
     <section className="claude" aria-label="Claude Code">
-      <h2 className="claude__heading">Claude Code</h2>
+      <div className="claude__head">
+        <h2 className="claude__heading">Claude Code</h2>
+        {hasLimits(limits) && <UsageLine limits={limits} />}
+      </div>
+      {rows && (
       <ul className="claude__list">
         {agent}
         {sessions.map((s) => (
@@ -53,6 +68,7 @@ export function ClaudeSection({ sessions, agent }: { sessions: ClaudeSession[]; 
           </li>
         ))}
       </ul>
+      )}
     </section>
   );
 }
