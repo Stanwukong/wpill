@@ -1,0 +1,77 @@
+{
+  "id": "18c2f0a1b2c3d4e5",
+  "threadId": "18c2f0a1b2c3d4e5",
+  "labelIds": [
+    "INBOX",
+    "UNREAD"
+  ],
+  "snippet": "Hi, The invoice is attached. Bob &amp; co",
+  "payload": {
+    "mimeType": "multipart/mixed",
+    "filename": "",
+    "headers": [
+      {
+        "name": "From",
+        "value": "Bob Smith <bob@example.com>"
+      },
+      {
+        "name": "To",
+        "value": "me@example.com"
+      },
+      {
+        "name": "Subject",
+        "value": "Invoice 42"
+      },
+      {
+        "name": "Date",
+        "value": "Mon, 2 Nov 2026 09:00:00 +0000"
+      },
+      {
+        "name": "Message-ID",
+        "value": "<abc@mail.example.com>"
+      }
+    ],
+    "body": {
+      "size": 0
+    },
+    "parts": [
+      {
+        "mimeType": "multipart/alternative",
+        "filename": "",
+        "headers": [],
+        "body": {
+          "size": 0
+        },
+        "parts": [
+          {
+            "mimeType": "text/plain",
+            "filename": "",
+            "headers": [],
+            "body": {
+              "size": 40,
+              "data": "SGksDQoNClRoZSBpbnZvaWNlIGlzIGF0dGFjaGVkLiAgIA0KDQoNCkJvYg0K"
+            }
+          },
+          {
+            "mimeType": "text/html",
+            "filename": "",
+            "headers": [],
+            "body": {
+              "size": 40,
+              "data": "PHA-SGksPC9wPjxwPkhUTUwgdmVyc2lvbjwvcD4="
+            }
+          }
+        ]
+      },
+      {
+        "mimeType": "application/pdf",
+        "filename": "invoice-42.pdf",
+        "headers": [],
+        "body": {
+          "size": 12345,
+          "attachmentId": "ANGjdJ8"
+        }
+      }
+    ]
+  }
+}

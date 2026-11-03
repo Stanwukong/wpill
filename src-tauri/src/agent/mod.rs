@@ -11,6 +11,8 @@
 //! - The desktop actions (2.7d, `actions.rs` → `crate::desktop::act`) focus, invoke, set fields, click, type,
 //!   press keys and launch. Each is approved on its own (never "for this run"), waits until you let go of the
 //!   mouse and keyboard, shows `agentActing` and the acting glow, and stops at once if you touch either.
+//! - The Google tools (6c, `google_tools.rs` → `crate::google::run_tool`) read Calendar, Tasks and Gmail and save
+//!   Gmail drafts. Gmail always asks in Cay; a run that has read mail has its desktop actions asked about again.
 //! - Hotkeys (`hotkey.rs`) open the command window or stop everything. Everything is logged (`audit.rs`).
 //! - Routines (2.7e, `routines.rs`, `schedule.rs`) are saved instructions, run from the command window or by the
 //!   `agent-routines` thread on a schedule while Cay runs. A routine's run is an ordinary run: same approvals,
@@ -24,6 +26,7 @@ mod audit;
 mod bridge;
 mod describe;
 mod folder;
+mod google_tools;
 mod hotkey;
 mod installs;
 pub mod interact;
@@ -83,6 +86,8 @@ const SCHEDULER_TICK_MS: i64 = 60_000;
 const RESUME_JUMP_MS: i64 = 2 * 60_000;
 /// "Approvals wait for me": you count as away while the screen is locked or after this long without input.
 const AWAY_IDLE_MS: u64 = 5 * 60_000;
+/// Messages named per run for approvals, at most.
+const MAX_MAIL_LABELS: usize = 200;
 
 /// `cay.exe mcp`: `main.rs` calls this before anything else starts.
 pub fn mcp_bridge() -> i32 {
@@ -164,6 +169,11 @@ struct Inner {
     routines: routines::Store,
     /// Wakes the `agent-routines` thread after a change.
     routines_wake: Option<Arc<Handle>>,
+    /// Runs that have read mail (Cay's Gmail tools or a claude.ai Gmail connector): their desktop actions ask in
+    /// Cay even in Auto, since the mail could carry someone else's instructions (D46).
+    read_mail: HashSet<String>,
+    /// How each run's messages are named in approvals (`"Invoice 42" from Bob`), from its searches and reads.
+    mail_labels: HashMap<String, HashMap<String, String>>,
     launched_ms: i64,
     /// Missed routines wait until then to catch up (Cay's start or the PC's wake, plus a little).
     settle_until_ms: i64,
@@ -459,6 +469,11 @@ impl Inner {
                 self.slots.retain(|s| &s.run.id != id);
             }
         }
+        let slots = &self.slots;
+        self.read_mail
+            .retain(|id| slots.iter().any(|s| &s.run.id == id));
+        self.mail_labels
+            .retain(|id, _| slots.iter().any(|s| &s.run.id == id));
     }
 }
 
@@ -642,6 +657,7 @@ fn serve(app: &AppHandle, pipe: Arc<pipe::Pipe>, stop: &Handle) {
             } => approve(app, conn, rpc_id, tool_name, input),
             mcp::Action::Look { rpc_id, name, args } => look(app, conn, rpc_id, name, args),
             mcp::Action::Act { rpc_id, name, args } => act(app, conn, rpc_id, name, args),
+            mcp::Action::Google { rpc_id, name, args } => google(app, conn, rpc_id, name, args),
             mcp::Action::Cancel { request_id } => cancel(app, conn, &request_id),
             mcp::Action::Ignore => {}
         }
@@ -670,9 +686,14 @@ fn approve(app: &AppHandle, conn: u64, rpc_id: Value, tool: String, input: Value
         inner.audit(
             &run_id,
             "approval",
-            json!({ "tool": tool, "input": audit::input_for_log(&actions::redact(&tool, &input)) }),
+            json!({ "tool": tool, "input": audit::input_for_log(&redact(&tool, &input)) }),
         );
         let element = actions::element_for(&tool, &input, &run_id, &inner.refs, Instant::now());
+        let target = if describe::is_google(&tool) {
+            (inner.mail_label(&run_id, &input), None)
+        } else {
+            target
+        };
         let reply = ReplyTo { conn, rpc_id };
         let asked = Ask {
             run_id: &run_id,
@@ -786,7 +807,7 @@ fn act(app: &AppHandle, conn: u64, rpc_id: Value, name: &'static str, args: Valu
                 args,
                 pid,
             });
-        } else if follows_claude(&mut inner, &run_id) {
+        } else if follows_claude(&mut inner, &run_id) && !inner.read_mail.contains(&run_id) {
             after.looks.push(LookJob {
                 pipe,
                 rpc_id,
@@ -815,6 +836,55 @@ fn act(app: &AppHandle, conn: u64, rpc_id: Value, name: &'static str, args: Valu
                     args,
                     pid,
                 });
+            }
+        }
+    }
+    after.run(app, &agents);
+}
+
+/// One of the Google tools was called (6c). Like a look it runs with the grant its approved prompt left, or a
+/// remembered "for this run"; Calendar and Tasks also follow Auto (Claude Code's classifier let them through).
+/// Gmail never follows Auto: without a grant, Cay asks itself.
+fn google(app: &AppHandle, conn: u64, rpc_id: Value, name: &'static str, args: Value) {
+    let tool = format!("mcp__{}__{name}", mcp::SERVER_NAME);
+    let agents = app.state::<Agents>();
+    let mut after = After::default();
+    {
+        let mut inner = agents.lock();
+        let Some(c) = inner.conns.get(&conn) else {
+            return;
+        };
+        let (pipe, run_id) = (c.pipe.clone(), c.run_id.clone());
+        let job = |rpc_id, args| LookJob {
+            pipe: pipe.clone(),
+            rpc_id,
+            run_id: run_id.clone(),
+            tool: tool.clone(),
+            args,
+            pid: None,
+        };
+        if let Err(why) = crate::google::tools::parse(name, &args) {
+            after
+                .replies
+                .push((pipe.clone(), tools::refused(rpc_id, &why)));
+        } else if inner.approvals.take_grant(&run_id, &tool, &args).is_some()
+            || (google_tools::follows_auto(name) && follows_claude(&mut inner, &run_id))
+        {
+            // An approved prompt's grant, or Auto for Calendar and Tasks (Claude Code's classifier let it through).
+            after.looks.push(job(rpc_id, args));
+        } else {
+            log::info!("agent google {tool} arrived without an approved prompt; asking in Cay");
+            let label = inner.mail_label(&run_id, &args);
+            let reply = ReplyTo { conn, rpc_id };
+            let asked = Ask {
+                run_id: &run_id,
+                tool: &tool,
+                purpose: Purpose::Look,
+                target: (label, None),
+                element: None,
+            };
+            if let Some((reply, args, _)) = ask(&mut inner, asked, args, reply, &mut after) {
+                after.looks.push(job(reply.rpc_id, args));
             }
         }
     }
@@ -993,6 +1063,29 @@ fn desktop_target(tool: &str, input: &Value) -> (Option<String>, Option<u32>) {
     )
 }
 
+/// A tool's input as the audit keeps it: typed text and draft bodies replaced by their size.
+fn redact(tool: &str, input: &Value) -> Value {
+    google_tools::redact(tool, &actions::redact(tool, input))
+}
+
+/// A claude.ai Gmail connector's tool (`mcp__claude_ai_Gmail__get_thread`): reading through it counts as reading
+/// mail too.
+fn is_connector_mail(tool: &str) -> bool {
+    tool.strip_prefix("mcp__claude_ai_")
+        .is_some_and(|rest| rest.to_ascii_lowercase().starts_with("gmail"))
+}
+
+impl Inner {
+    /// How the message a Gmail read or reply names is called in this run (from its searches), for the approval.
+    fn mail_label(&self, run_id: &str, input: &Value) -> Option<String> {
+        let id = input
+            .get("id")
+            .or_else(|| input.get("replyToId"))
+            .and_then(Value::as_str)?;
+        self.mail_labels.get(run_id)?.get(id.trim()).cloned()
+    }
+}
+
 struct Ask<'a> {
     run_id: &'a str,
     tool: &'a str,
@@ -1105,6 +1198,9 @@ fn run_look(app: &AppHandle, job: LookJob) {
     if actions::short_name(&job.tool).is_some() {
         return run_act(app, job);
     }
+    if google_tools::short_name(&job.tool).is_some() {
+        return run_google(app, job);
+    }
     let app = app.clone();
     let spawned = std::thread::Builder::new()
         .name("agent-look".into())
@@ -1165,6 +1261,57 @@ fn run_look(app: &AppHandle, job: LookJob) {
         });
     if let Err(e) = spawned {
         log::warn!("agent look thread: {e}");
+    }
+}
+
+/// Runs an approved Google tool call on its own thread (network; never under the lock), then answers it, notes
+/// what the run has seen (mail read, how messages are named) and logs counts and ids, never content.
+fn run_google(app: &AppHandle, job: LookJob) {
+    let app = app.clone();
+    let spawned = std::thread::Builder::new()
+        .name("agent-google".into())
+        .spawn(move || {
+            let name = google_tools::short_name(&job.tool).unwrap_or_default();
+            let result = crate::google::tools::parse(name, &job.args)
+                .map_err(|why| crate::google::ToolError {
+                    code: "invalid",
+                    message: why,
+                })
+                .and_then(|call| crate::google::run_tool(&app, &call));
+            let reply = google_tools::reply(job.rpc_id, name, &result);
+            let agents = app.state::<Agents>();
+            {
+                let mut inner = agents.lock();
+                if let Ok(out) = &result {
+                    let labels = inner.mail_labels.entry(job.run_id.clone()).or_default();
+                    for l in &out.labels {
+                        if labels.len() < MAX_MAIL_LABELS || labels.contains_key(&l.id) {
+                            labels.insert(l.id.clone(), l.text.clone());
+                        }
+                    }
+                    if out.read_mail && inner.read_mail.insert(job.run_id.clone()) {
+                        log::info!(
+                            "agent run {} read mail; its desktop actions ask again",
+                            job.run_id
+                        );
+                    }
+                }
+                inner.audit(
+                    &job.run_id,
+                    "google",
+                    google_tools::audit_fields(name, &result),
+                );
+            }
+            match &result {
+                Ok(_) => log::debug!("agent google {name} done"),
+                Err(e) => log::info!("agent google {name} failed: {}", e.code),
+            }
+            if let Err(e) = job.pipe.write(reply.to_string().as_bytes()) {
+                log::debug!("agent google reply not delivered: {e}");
+            }
+        });
+    if let Err(e) = spawned {
+        log::warn!("agent google thread: {e}");
     }
 }
 
@@ -1374,6 +1521,7 @@ fn run_routine(app: &AppHandle, id: &str, trigger: RoutineTrigger) -> AppResult<
         },
         wait_for_me: r.wait_for_me,
         desktop_tools: r.desktop_tools,
+        google_tools: r.google_tools,
     };
     start_run(app, request, Some(routine))
 }
@@ -1440,12 +1588,18 @@ fn on_line(app: &AppHandle, run_id: &str, generation: u32, line: &[u8]) {
         let mut inner = agents.lock();
         let mut finished = false;
         let mut tools = Vec::new();
+        let mut mail_read_now = false;
         let Some(slot) = inner.slot(run_id).filter(|s| s.generation == generation) else {
             return;
         };
         for event in events {
             if let stream::StreamEvent::Tool { name, input, .. } = &event {
-                tools.push(json!({ "tool": name, "input": audit::input_for_log(input) }));
+                tools.push(
+                    json!({ "tool": name, "input": audit::input_for_log(&redact(name, input)) }),
+                );
+                if is_connector_mail(name) {
+                    mail_read_now = true;
+                }
             }
             let at = now_ms();
             let applied = slot.run.apply(event, at);
@@ -1464,6 +1618,12 @@ fn on_line(app: &AppHandle, run_id: &str, generation: u32, line: &[u8]) {
         }
         for tool in tools {
             inner.audit(run_id, "tool", tool);
+        }
+        if mail_read_now && inner.read_mail.insert(run_id.to_string()) {
+            log::info!(
+                "agent run {run_id} read mail through a connector; its desktop actions ask again"
+            );
+            inner.audit(run_id, "readMail", json!({ "by": "connector" }));
         }
         if finished {
             inner.finished(run_id, &mut after);
@@ -1682,11 +1842,12 @@ pub fn set_routines_paused(app: &AppHandle, paused: bool) {
     .run(app, &agents);
 }
 
-/// How a routine's run differs from a new task's: its name and trigger, and its two switches.
+/// How a routine's run differs from a new task's: its name and trigger, and its three switches.
 struct RoutineStart {
     tag: AgentRunRoutine,
     wait_for_me: bool,
     desktop_tools: bool,
+    google_tools: bool,
 }
 
 /// Starts a run (from the new-task form, or a routine). Blocks while Claude Code installs are probed the
@@ -1729,6 +1890,7 @@ fn start_run(
         user_settings: settings.user_settings,
         name: routine.as_ref().map(|r| r.tag.name.clone()),
         desktop_tools: routine.as_ref().is_none_or(|r| r.desktop_tools),
+        google_tools: routine.as_ref().is_none_or(|r| r.google_tools),
         mode: request.mode.unwrap_or(settings.default_mode),
     };
     let mut after = After::default();
@@ -1748,6 +1910,7 @@ fn start_run(
                 "routine": routine.as_ref().map(|r| json!({ "id": r.tag.id, "name": r.tag.name })),
                 "trigger": routine.as_ref().map(|r| r.tag.trigger),
                 "desktopTools": launch.desktop_tools,
+                "googleTools": launch.google_tools,
                 "mode": launch.mode,
             }),
         );
@@ -2387,4 +2550,26 @@ fn debug_due(app: &AppHandle, id: &str) -> AppResult<String> {
                 "trigger": RoutineTrigger::Schedule, "debug": true }),
     );
     Ok(format!("scheduled run {run_id}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn connector_mail_counts_as_reading_mail() {
+        assert!(is_connector_mail("mcp__claude_ai_Gmail__get_thread"));
+        assert!(is_connector_mail("mcp__claude_ai_gmail__search_threads"));
+        assert!(!is_connector_mail(
+            "mcp__claude_ai_Google_Calendar__list_events"
+        ));
+        assert!(
+            !is_connector_mail("mcp__cay__gmail_read"),
+            "Cay's own tools mark it themselves"
+        );
+        let r = redact("mcp__cay__gmail_draft", &json!({ "body": "hello" }));
+        assert_eq!(r["body"]["chars"], 5);
+        let r = redact("mcp__cay__type_text", &json!({ "hwnd": 1, "text": "pw" }));
+        assert_eq!(r["text"]["chars"], 2, "stream tool lines are redacted too");
+    }
 }

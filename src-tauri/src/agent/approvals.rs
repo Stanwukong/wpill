@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 
 use super::preview::{self, Existing};
-use super::{actions, describe, interact};
+use super::{actions, describe, google_tools, interact};
 use crate::ipc::{AgentApprovalActivity, AgentRisk, ApprovalPreview};
 
 /// Grants kept per run at most (approved prompts whose call never came).
@@ -155,6 +155,9 @@ impl Approvals {
             )
         } else if desktop {
             describe::desktop_summary(&req.tool, &req.input, req.target.as_deref())
+        } else if describe::is_google(&req.tool) {
+            // `target` names the message a read or reply is about, when the run has seen it.
+            google_tools::summary(&req.tool, &req.input, req.target.as_deref())
         } else {
             describe::summary(&req.tool, &req.input, &req.cwd)
         };
@@ -170,7 +173,8 @@ impl Approvals {
                 risk: describe::risk(&req.tool),
                 remember_as: key.as_deref().map(describe::remember_scope),
                 desktop,
-                detail: actions::detail(&req.tool, &req.input),
+                detail: actions::detail(&req.tool, &req.input)
+                    .or_else(|| google_tools::detail(&req.tool, &req.input)),
                 routine_name: req.routine_name,
                 preview: previews.as_ref().and_then(|p| p.card.clone()).map(Box::new),
                 interaction: interact::interaction(&req.tool, &req.input, &BTreeMap::new())
@@ -274,7 +278,7 @@ impl Approvals {
     }
 
     fn add_grant(&mut self, run_id: &str, tool: &str, input: &Value, pid: Option<u32>) {
-        if !describe::is_desktop(tool) && !describe::is_action(tool) {
+        if !describe::is_desktop(tool) && !describe::is_action(tool) && !describe::is_google(tool) {
             return;
         }
         if self.grants.iter().filter(|g| g.run_id == run_id).count() >= MAX_GRANTS {

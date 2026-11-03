@@ -741,6 +741,29 @@ selected row with a short accent bar, and Segoe instead of Cascadia for sidebar 
 *Alternatives:* removing live runs too (Stop already exists, and a hidden live run would be a process nobody sees);
 persisting a "hidden" flag (runs don't outlive Cay anyway).
 
+### D46: Google tools for agent runs, with Gmail asked in Cay and mail treated as someone else's words (Phase 6c)
+*What:* five tools in Cay's own MCP server (`calendar_list_events`, `tasks_list`, `gmail_search`, `gmail_read`,
+`gmail_draft`), served by `cay.exe mcp` like the desktop tools so every backend gets them (2.9). *Approvals (D42's
+agreement, made concrete):* Calendar and Tasks reads behave like desktop looks: Claude Code's prompt or, in Auto, its
+classifier; a call that arrives without a grant is asked in Cay; "for this run" covers each kind. Gmail reads never
+follow Auto: without a grant Cay asks itself, in every mode; searches and reads share one "for this run" (reading
+mail). A draft is a change, asks every time, is never remembered, and its card shows the recipients, subject and the
+whole text. *Mail is untrusted:* the reply opens with a line saying the text is other people's and comes inside
+`<email-data>`, and a run that has read mail (Cay's tools, or a claude.ai Gmail connector's tool seen in stream-json)
+has every desktop action asked about in Cay, even in Auto. Calendar descriptions aren't returned (anyone can send an
+invitation). *Scopes:* Gmail is opt-in (`google.gmail`), which adds `gmail.readonly` and `gmail.compose` to Connect.
+Google has no drafts-only scope: compose also permits sending, so the dialog says Cay never sends, and Cay has no send
+call at all. *Token:* the watcher stays the only holder of the access token and lends it per call over its channel
+(`Wake::Token`); a 401 hands back the stale one for a fresh one, once. *Privacy:* the audit keeps counts and ids, the
+draft body as its size, and the stream's tool lines are redacted the same way (they weren't for `type_text`, fixed
+here). *Reversed: the `agent.claudeConnectors` switch.* Tested with Claude Code 2.1.314 (`--debug-file`):
+`--strict-mcp-config` drops the claude.ai connectors and without it they load, and there's no "connectors only" flag,
+so the switch would have been a second name for `agent.strictMcpConfig: false`. *Alternatives:* listing the tools only
+when Google is connected (tools/list happens once per run, before you might connect); Gmail following Auto (its
+classifier can't know a mail is someone else's instructions); switching a run to Ask once it reads mail (stronger, but
+changes your mode behind your back; noted as a limitation instead); HTML replies for drafts (plain text is what Cay
+can show you exactly on the card).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -946,6 +969,7 @@ the old crate's artifacts are never reused or cleaned by cargo; remove them by h
 | 2026-11-02 | Stage 6b built (D43): the calendar mark in the pill (Google's icon once the author adds it), "starting soon" with Join, the panel's Calendar section (motion-designer, renders at 100/120/150 %). Manual checklist pending. |
 | 2026-11-02 | Command window restyled as Cay (D45): ended runs removable from the sidebar (`agent_remove`, "Clear ended"), lighter controls. |
 | 2026-11-03 | Stage 6b signed off by the author. |
+| 2026-11-03 | Stage 6c built (D46): Calendar, Tasks and Gmail tools in Cay's MCP server, Gmail asked in Cay and opt-in, mail marked untrusted, desktop actions asked again after mail; `claudeConnectors` dropped after testing. The drive filled twice mid-build (C14 again): 4.5 GB of `.rcgu.o` leftovers from crashed builds in `target\debug\deps`. Manual checklist pending. |
 
 ## 7. Results & metrics
 

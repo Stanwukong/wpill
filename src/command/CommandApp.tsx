@@ -40,6 +40,7 @@ function routineDraft(r: RoutineView): RoutineDraft {
     ifMissed: r.ifMissed,
     waitForMe: r.waitForMe,
     desktopTools: r.desktopTools,
+    googleTools: r.googleTools,
     mode: r.mode,
   };
 }
@@ -61,6 +62,7 @@ function newDraft(seed: RoutineSeed, options: AgentOptions): RoutineDraft {
     ifMissed: seed.ifMissed ?? "once",
     waitForMe: seed.waitForMe ?? true,
     desktopTools: seed.desktopTools ?? false,
+    googleTools: seed.googleTools ?? false,
     mode: seed.mode ?? options.mode,
   };
 }

@@ -37,6 +37,9 @@ pub struct RoutineDraft {
     pub if_missed: IfMissed,
     pub wait_for_me: bool,
     pub desktop_tools: bool,
+    /// Cay's Google tools (6c); routines saved before 6c have none.
+    #[serde(default)]
+    pub google_tools: bool,
     /// The mode its runs start in (2.8e); a new routine's form starts at Auto.
     #[serde(default = "auto_mode")]
     pub mode: crate::ipc::AgentMode,
@@ -194,6 +197,7 @@ pub fn validate(
         if_missed: draft.if_missed,
         wait_for_me: draft.wait_for_me,
         desktop_tools: draft.desktop_tools,
+        google_tools: draft.google_tools,
         mode: draft.mode,
         created_at_ms: existing.map_or(now, |old| old.created_at_ms),
         updated_at_ms: now,
@@ -238,6 +242,7 @@ mod tests {
             if_missed: IfMissed::Once,
             wait_for_me: true,
             desktop_tools: false,
+            google_tools: false,
             mode: crate::ipc::AgentMode::Auto,
         }
     }

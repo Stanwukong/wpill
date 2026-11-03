@@ -146,6 +146,27 @@ impl Client {
         }
     }
 
+    /// A Google API POST of a JSON body, parsed as `T` (Gmail drafts).
+    pub fn post_json<T: serde::de::DeserializeOwned>(
+        &self,
+        host: &str,
+        path: &str,
+        bearer: &str,
+        body: &serde_json::Value,
+    ) -> Result<T, FetchError> {
+        let headers = format!(
+            "Authorization: Bearer {bearer}\r\nContent-Type: application/json\r\nAccept: application/json\r\n"
+        );
+        let body = body.to_string();
+        let r = self.request("POST", host, path, &headers, Some(body.as_bytes()))?;
+        match r.status {
+            200..=299 => serde_json::from_slice(&r.body)
+                .map_err(|e| FetchError::Http(r.status, format!("unreadable reply: {e}"))),
+            401 => Err(FetchError::Unauthorized),
+            status => Err(FetchError::Http(status, google_message(&r.body))),
+        }
+    }
+
     /// An `application/x-www-form-urlencoded` POST (the token endpoints).
     pub fn post_form(&self, host: &str, path: &str, form: &str) -> Result<Response, NetError> {
         let headers =

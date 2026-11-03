@@ -88,6 +88,7 @@ export function RoutineEditor({
   const [ifMissed, setIfMissed] = useState<IfMissed>(initial.ifMissed);
   const [waitForMe, setWaitForMe] = useState(initial.waitForMe);
   const [desktopTools, setDesktopTools] = useState(initial.desktopTools);
+  const [googleTools, setGoogleTools] = useState(initial.googleTools);
   const [mode, setMode] = useState<AgentMode>(initial.mode);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +112,7 @@ export function RoutineEditor({
     ifMissed,
     waitForMe,
     desktopTools,
+    googleTools,
     mode,
   });
 
@@ -399,6 +401,17 @@ export function RoutineEditor({
           }
         >
           Can use desktop tools (look at and act on windows)
+        </Switch>
+        <Switch
+          checked={googleTools}
+          onChange={setGoogleTools}
+          hint={
+            mode === "auto"
+              ? "Calendar and task reads follow Auto. Gmail always asks you first, and nothing is ever sent."
+              : "Each read asks you first. Gmail drafts are saved for you to send; nothing is ever sent."
+          }
+        >
+          Can use Google (calendar, tasks and Gmail drafts)
         </Switch>
       </div>
 

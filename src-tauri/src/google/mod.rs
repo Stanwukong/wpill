@@ -10,12 +10,17 @@
 
 mod auth;
 mod calendar;
+mod gmail;
 mod http;
 mod logic;
+mod mail;
 mod network;
 mod settings;
 mod tasks;
+pub mod tools;
 mod vault;
+
+pub use mail::Label as MailLabel;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -58,6 +63,11 @@ pub enum Wake {
     SignedIn(Tokens),
     /// Disconnected: forget the access token.
     SignedOut,
+    /// An agent tool call (6c) needs an access token; `stale` is one Google just refused.
+    Token {
+        stale: Option<String>,
+        reply: Sender<Result<String, String>>,
+    },
     Stop,
 }
 
@@ -133,6 +143,8 @@ impl Inner {
             account: self.account.clone(),
             calendar: self.scopes.contains(auth::SCOPE_CALENDAR_EVENTS),
             tasks: self.scopes.contains(auth::SCOPE_TASKS),
+            gmail: self.scopes.contains(auth::SCOPE_GMAIL_READ)
+                && self.scopes.contains(auth::SCOPE_GMAIL_COMPOSE),
             last_sync_ms: self.last_sync_ms,
             error: self.error.clone(),
             configured: self.client.is_some(),
@@ -278,6 +290,34 @@ fn run(app: &AppHandle, rx: Receiver<Wake>) {
             Ok(Wake::SignedOut) => {
                 access = None;
                 failures = 0;
+            }
+            Ok(Wake::Token { stale, reply }) => {
+                // Lent for one tool call; the watcher keeps its own copy and refreshes it as usual.
+                if stale.is_some() && access.as_ref().map(|t| &t.access) == stale.as_ref() {
+                    access = None;
+                }
+                let connected = google.lock().status == GoogleStatus::Connected;
+                let lent = if connected {
+                    token(app, &http, &mut access)
+                } else {
+                    Err(Failure::Other("Google isn't connected".into()))
+                };
+                let _ = reply.send(match lent {
+                    Ok(t) => Ok(t),
+                    Err(Failure::Revoked) => {
+                        access = None;
+                        next_fetch = i64::MAX;
+                        set_status(
+                            app,
+                            GoogleStatus::Reconnect,
+                            Some("Google no longer accepts Cay's sign-in: connect again".into()),
+                        );
+                        Err("Google no longer accepts Cay's sign-in: Reconnect Google from Cay's tray"
+                            .into())
+                    }
+                    Err(Failure::Other(why)) => Err(why),
+                });
+                continue;
             }
             Err(RecvTimeoutError::Timeout) => {}
         }
@@ -568,7 +608,7 @@ fn write_cache(path: &std::path::Path, cache: &Cache) {
 /// Starts a sign-in in the browser on its own thread. Errors only when it can't start at all.
 fn connect(app: &AppHandle) -> AppResult<()> {
     let google = app.state::<Google>();
-    let (client, cancel) = {
+    let (client, cancel, scopes) = {
         let mut inner = google.lock();
         let Some(client) = inner.client.clone() else {
             return Err(AppError::Google(no_client_text().into()));
@@ -578,7 +618,11 @@ fn connect(app: &AppHandle) -> AppResult<()> {
         }
         inner.signing_in = true;
         inner.cancel.store(false, Ordering::SeqCst);
-        (client, inner.cancel.clone())
+        (
+            client,
+            inner.cancel.clone(),
+            auth::scopes(inner.settings.gmail),
+        )
     };
     let previous = google.lock().status;
     set_status(app, GoogleStatus::Connecting, None);
@@ -588,7 +632,7 @@ fn connect(app: &AppHandle) -> AppResult<()> {
         .spawn(move || {
             let result = Client::new()
                 .map_err(AuthError::Net)
-                .and_then(|http| auth::sign_in(&http, &client, &cancel));
+                .and_then(|http| auth::sign_in(&http, &client, &scopes, &cancel));
             let google = app.state::<Google>();
             google.lock().signing_in = false;
             match result {
@@ -720,7 +764,11 @@ pub fn toggle_from_tray(app: &AppHandle) {
             GoogleStatus::Disconnected | GoogleStatus::Reconnect => {
                 if app.state::<Google>().lock().client.is_none() {
                     message(no_client_text(), MB_OK | MB_ICONINFORMATION);
-                } else if message(&connect_text(), MB_OKCANCEL | MB_ICONQUESTION) == IDOK {
+                } else if message(
+                    &connect_text(app.state::<Google>().lock().settings.gmail),
+                    MB_OKCANCEL | MB_ICONQUESTION,
+                ) == IDOK
+                {
                     if let Err(e) = connect(&app) {
                         message(&format!("Cay couldn't start Google's sign-in:\n\n{e}"), MB_OK | MB_ICONWARNING);
                     }
@@ -731,15 +779,31 @@ pub fn toggle_from_tray(app: &AppHandle) {
     });
 }
 
-fn connect_text() -> String {
-    "Cay will open Google's sign-in in your browser and ask to:\n\n\
-     •  See the events on your calendars\n\
-     •  See the list of calendars you're subscribed to\n\
-     •  See your tasks\n\n\
-     Read-only: Cay can't change, send or delete anything. Your events go from Google to this PC only; there's no Cay \
-     server. The sign-in is kept in Windows Credential Manager, and Disconnect removes it.\n\n\
-     Google may say it hasn't verified Cay yet: choose Advanced, then Go to Cay."
-        .into()
+fn connect_text(gmail: bool) -> String {
+    let mut text = String::from(
+        "Cay will open Google's sign-in in your browser and ask to:\n\n\
+         •  See the events on your calendars\n\
+         •  See the list of calendars you're subscribed to\n\
+         •  See your tasks\n",
+    );
+    if gmail {
+        text.push_str(
+            "•  Read your email, for agent runs, each time you allow it in the island\n\
+             •  Write email drafts, which you send yourself (Google's wording also says \"send\": Cay never \
+             sends)\n",
+        );
+    }
+    text.push_str(if gmail {
+        "\nCay can't change or delete anything, and never sends mail."
+    } else {
+        "\nRead-only: Cay can't change, send or delete anything."
+    });
+    text.push_str(
+        " Your data goes from Google to this PC only; there's no Cay server. The sign-in is kept in Windows \
+         Credential Manager, and Disconnect removes it.\n\n\
+         Google may say it hasn't verified Cay yet: choose Advanced, then Go to Cay.",
+    );
+    text
 }
 
 fn message(
@@ -754,6 +818,207 @@ fn message(
             &HSTRING::from("Cay"),
             style | MB_SETFOREGROUND | MB_TOPMOST,
         )
+    }
+}
+
+// ---- Agent tools (6c) ----
+
+/// A tool call's result: what Claude gets, what the audit keeps (counts and ids, never content), how the messages
+/// it saw are named in later approvals, and whether it carried mail into the run.
+#[derive(Debug)]
+pub struct ToolOutput {
+    pub value: serde_json::Value,
+    pub audit: serde_json::Value,
+    pub labels: Vec<MailLabel>,
+    pub read_mail: bool,
+}
+
+#[derive(Debug)]
+pub struct ToolError {
+    pub code: &'static str,
+    pub message: String,
+}
+
+impl ToolError {
+    fn new(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+        }
+    }
+}
+
+/// How long a tool call waits for the watcher to lend it an access token (it may be mid-refresh).
+const TOKEN_WAIT: Duration = Duration::from_secs(30);
+
+/// Runs one approved tool call for an agent run, on the caller's thread (blocking; never the main thread). A 401
+/// asks the watcher for a fresh token and tries once more.
+pub fn run_tool(app: &AppHandle, call: &tools::ToolCall) -> Result<ToolOutput, ToolError> {
+    let google = app.state::<Google>();
+    let (calendars, gmail_on) = {
+        let inner = google.lock();
+        if inner.status != GoogleStatus::Connected {
+            return Err(ToolError::new(
+                "notConnected",
+                "Google isn't connected in Cay. The user can connect it from Cay's tray (Connect Google…).",
+            ));
+        }
+        if let Some(missing) = call.scopes().iter().find(|s| !inner.scopes.contains(**s)) {
+            return Err(ToolError::new(
+                "notGranted",
+                not_granted(missing, inner.settings.gmail),
+            ));
+        }
+        (inner.settings.calendars.clone(), inner.settings.gmail)
+    };
+    if call.is_mail() && !gmail_on {
+        return Err(ToolError::new(
+            "notGranted",
+            not_granted(auth::SCOPE_GMAIL_READ, false),
+        ));
+    }
+    let http = Client::new().map_err(|e| ToolError::new("network", e.to_string()))?;
+    let mut stale = None;
+    for attempt in 0..2 {
+        let token = lend_token(&google, stale.take())?;
+        match call_with(&http, &token, call, calendars.as_deref()) {
+            Err(FetchError::Unauthorized) if attempt == 0 => stale = Some(token),
+            Err(FetchError::Unauthorized) => {
+                return Err(ToolError::new(
+                    "notConnected",
+                    "Google refused Cay's sign-in. The user can Reconnect Google from Cay's tray.",
+                ))
+            }
+            Err(FetchError::Net(e)) => {
+                return Err(ToolError::new(
+                    "network",
+                    format!("couldn't reach Google: {e}"),
+                ))
+            }
+            Err(FetchError::Http(status, message)) => {
+                return Err(ToolError::new(
+                    "google",
+                    format!("Google answered {status}: {message}"),
+                ))
+            }
+            Ok(out) => return Ok(out),
+        }
+    }
+    unreachable!("the second attempt always returns")
+}
+
+fn not_granted(scope: &str, gmail_on: bool) -> String {
+    if scope.contains("gmail") && !gmail_on {
+        "Gmail isn't turned on in Cay. The user can set \"gmail\": true in the google block of Cay's settings.json, \
+         restart Cay and Reconnect Google from the tray."
+            .into()
+    } else if scope.contains("gmail") {
+        "Cay's Google sign-in doesn't include Gmail. The user can Reconnect Google from Cay's tray and allow it.".into()
+    } else {
+        "Cay's Google sign-in doesn't include this. The user can Reconnect Google from Cay's tray and allow it.".into()
+    }
+}
+
+fn lend_token(google: &Google, stale: Option<String>) -> Result<String, ToolError> {
+    let (tx, rx) = mpsc::channel();
+    google.wake(Wake::Token { stale, reply: tx });
+    match rx.recv_timeout(TOKEN_WAIT) {
+        Ok(Ok(token)) => Ok(token),
+        Ok(Err(why)) => Err(ToolError::new("notConnected", why)),
+        Err(_) => Err(ToolError::new(
+            "network",
+            "Cay's Google watcher didn't answer in time",
+        )),
+    }
+}
+
+fn call_with(
+    http: &Client,
+    token: &str,
+    call: &tools::ToolCall,
+    calendar_ids: Option<&[String]>,
+) -> Result<ToolOutput, FetchError> {
+    use serde_json::json;
+    use tools::ToolCall;
+    let plain = |value: serde_json::Value, audit: serde_json::Value| ToolOutput {
+        value,
+        audit,
+        labels: vec![],
+        read_mail: false,
+    };
+    match call {
+        ToolCall::Events {
+            from,
+            to,
+            query,
+            max,
+        } => {
+            let now = now_ms();
+            let (start, end) = tools::range(from.as_deref(), to.as_deref(), now, offset)
+                .map_err(|e| FetchError::Http(400, e))?;
+            let all = calendar::calendars(http, token)?;
+            let mut events = Vec::new();
+            for c in calendar::chosen(&all, calendar_ids) {
+                events.extend(calendar::range(
+                    http,
+                    token,
+                    &c,
+                    (start, end),
+                    query.as_deref(),
+                    *max,
+                )?);
+            }
+            let (events, more) = tools::merge_events(events, *max);
+            let audit = json!({ "events": events.len(), "more": more });
+            Ok(plain(
+                json!({ "from": logic::format_rfc3339(start), "to": logic::format_rfc3339(end),
+                        "events": events, "more": more }),
+                audit,
+            ))
+        }
+        ToolCall::Tasks { due } => {
+            let today = logic::local_day(now_ms(), offset);
+            let mut out = Vec::new();
+            for l in tasks::lists(http, token)? {
+                let raw = tasks::open(http, token, &l, tools::due_max(*due, today))?;
+                out.extend(tools::agent_tasks(raw, &l, *due, today));
+            }
+            let audit = json!({ "tasks": out.len() });
+            Ok(plain(
+                json!({ "today": logic::format_date(today), "tasks": out }),
+                audit,
+            ))
+        }
+        ToolCall::MailSearch { query, max } => {
+            let (messages, estimate) = gmail::search(http, token, query, *max)?;
+            Ok(ToolOutput {
+                audit: json!({ "messages": messages.len(),
+                               "ids": messages.iter().map(|m| m.id.as_str()).collect::<Vec<_>>() }),
+                labels: messages.iter().map(mail::Message::label).collect(),
+                value: json!({ "messages": messages.iter().map(mail::Message::summary).collect::<Vec<_>>(),
+                               "estimate": estimate }),
+                read_mail: true,
+            })
+        }
+        ToolCall::MailRead { id } => {
+            let m = gmail::read(http, token, id)?;
+            let full = m.full();
+            Ok(ToolOutput {
+                audit: json!({ "id": m.id, "bodyCut": full["bodyCut"],
+                               "attachments": full["attachments"].as_array().map_or(0, Vec::len) }),
+                labels: vec![m.label()],
+                value: json!({ "message": full }),
+                read_mail: true,
+            })
+        }
+        ToolCall::MailDraft(d) => {
+            let (draft, subject, to) = gmail::draft(http, token, d)?;
+            Ok(plain(
+                json!({ "draftId": draft.id, "messageId": draft.message.id, "to": to, "subject": subject,
+                        "note": "Saved as a draft in Gmail (Drafts). It is not sent: the user reviews and sends it." }),
+                json!({ "draftId": draft.id, "to": to.len(), "reply": d.reply_to.is_some() }),
+            ))
+        }
     }
 }
 
@@ -844,6 +1109,28 @@ pub fn debug_command(app: &AppHandle, args: &[String]) {
         Some("disconnect") => {
             let app = app.clone();
             std::thread::spawn(move || disconnect(&app));
+        }
+        // `tool <name> '<json args>'` (6c): one agent tool call without Claude or approvals; the log gets what the
+        // audit would (counts, ids, errors), never the mail, events or tasks.
+        Some("tool") => {
+            let name = args.get(1).cloned().unwrap_or_default();
+            let parsed = serde_json::from_str(args.get(2).map_or("{}", String::as_str))
+                .map_err(|e| e.to_string())
+                .and_then(|v| tools::parse(&name, &v));
+            match parsed {
+                Err(e) => log::warn!("google-test tool {name}: {e}"),
+                Ok(call) => {
+                    let app = app.clone();
+                    std::thread::spawn(move || match run_tool(&app, &call) {
+                        Ok(out) => log::info!(
+                            "google-test tool {name}: ok, read mail {}, {}",
+                            out.read_mail,
+                            out.audit
+                        ),
+                        Err(e) => log::warn!("google-test tool {name}: {}: {}", e.code, e.message),
+                    });
+                }
+            }
         }
         _ => {}
     }

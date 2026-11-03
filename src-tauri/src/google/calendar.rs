@@ -5,6 +5,7 @@
 
 use super::http::{Client, FetchError};
 use super::logic::{self, encode, CalendarEntry, CalendarList, Event, EventList};
+use super::tools;
 
 const HOST: &str = "www.googleapis.com";
 const MAX_PAGES: usize = 4;
@@ -76,6 +77,43 @@ pub fn events(
         out.extend(logic::events(list.items, calendar, now));
         page = list.next_page_token;
         if page.is_none() {
+            break;
+        }
+    }
+    Ok(out)
+}
+
+/// For an agent run (6c): one calendar's events from `from` to `to` (Unix ms), optionally matching `query`, at
+/// most `max`, as `tools::agent_events` gives them to Claude.
+pub fn range(
+    http: &Client,
+    token: &str,
+    calendar: &CalendarEntry,
+    (from, to): (i64, i64),
+    query: Option<&str>,
+    max: usize,
+) -> Result<Vec<(i64, serde_json::Value)>, FetchError> {
+    let mut out = Vec::new();
+    let mut page: Option<String> = None;
+    for _ in 0..MAX_PAGES {
+        let mut path = format!(
+            "/calendar/v3/calendars/{}/events?singleEvents=true&orderBy=startTime&maxResults={}&timeMin={}&timeMax={}&fields={}",
+            encode(&calendar.id),
+            max.min(tools::MAX_EVENTS),
+            encode(&logic::format_rfc3339(from)),
+            encode(&logic::format_rfc3339(to)),
+            encode(EVENT_FIELDS)
+        );
+        if let Some(q) = query {
+            path.push_str(&format!("&q={}", encode(q)));
+        }
+        if let Some(p) = &page {
+            path.push_str(&format!("&pageToken={}", encode(p)));
+        }
+        let list: EventList = http.get_json(HOST, &path, token)?;
+        out.extend(tools::agent_events(list.items, calendar));
+        page = list.next_page_token;
+        if page.is_none() || out.len() >= max {
             break;
         }
     }

@@ -641,6 +641,10 @@ pub struct Routine {
     pub wait_for_me: bool,
     /// Cay's desktop looks and actions; off passes them in `--disallowedTools`.
     pub desktop_tools: bool,
+    /// Cay's Google tools (6c: calendar, tasks, Gmail); off passes them in `--disallowedTools`. Off for routines
+    /// saved before 6c.
+    #[serde(default)]
+    pub google_tools: bool,
     /// The mode its runs start in (2.8e). Routines saved before 2.8e read as Ask.
     #[serde(default = "ask_mode")]
     pub mode: AgentMode,
@@ -845,6 +849,8 @@ pub struct GoogleState {
     /// What was granted: Google's consent screen lets you untick a scope.
     pub calendar: bool,
     pub tasks: bool,
+    /// Gmail for agent runs (6c): reading and drafts were granted.
+    pub gmail: bool,
     pub last_sync_ms: Option<i64>,
     /// Why the last refresh or sign-in failed (offline, Google's error); the last data is kept.
     pub error: Option<String>,

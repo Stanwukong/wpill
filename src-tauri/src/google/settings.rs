@@ -20,6 +20,9 @@ pub struct GoogleSettings {
     pub soon_minutes: u32,
     /// When the "starting soon" activity shows (Phase 6b).
     pub lead_minutes: u32,
+    /// Gmail for agent runs (6c): Connect also asks to read mail and write drafts. Off until you turn it on, then
+    /// Reconnect.
+    pub gmail: bool,
     /// A Google OAuth client of your own (a Desktop app client), instead of the one this build carries.
     pub client_id: Option<String>,
     /// Its secret, if the client has one. Desktop secrets aren't confidential; it's still not a token.
@@ -34,6 +37,7 @@ impl Default for GoogleSettings {
             refresh_minutes: 5,
             soon_minutes: 15,
             lead_minutes: 5,
+            gmail: false,
             client_id: None,
             client_secret: None,
         }
@@ -72,9 +76,10 @@ pub fn load(app: &AppHandle) -> GoogleSettings {
         log::debug!("writing {} failed: {e}", path.display());
     }
     log::info!(
-        "google settings: calendars {:?}, tasks {}, every {} min, soon {} min, own client {}",
+        "google settings: calendars {:?}, tasks {}, gmail {}, every {} min, soon {} min, own client {}",
         settings.calendars,
         settings.tasks,
+        settings.gmail,
         settings.refresh_minutes,
         settings.soon_minutes,
         settings.client_id.is_some()
@@ -117,6 +122,7 @@ mod tests {
         let s = file.google.clone().clamped();
         assert_eq!(s.refresh_minutes, 1);
         assert_eq!(s.soon_minutes, 15);
+        assert!(!s.gmail, "Gmail is opt-in");
         assert_eq!(s.calendars.as_deref(), Some(&["a".to_string()][..]));
         let out = serde_json::to_value(&file).unwrap();
         assert_eq!(out["agent"]["maxTurns"], 3);

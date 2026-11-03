@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::ipc::{CalendarEvent, EventPhase, GoogleTask};
 
 pub const MINUTE_MS: i64 = 60_000;
-const DAY_MS: i64 = 24 * 60 * MINUTE_MS;
+pub const DAY_MS: i64 = 24 * 60 * MINUTE_MS;
 /// Events starting within this window are listed (and fetched).
 pub const AHEAD_MS: i64 = DAY_MS;
 /// Events that started this long ago and haven't ended are still fetched (a long meeting in progress).
@@ -139,6 +139,8 @@ pub struct RawTask {
     pub deleted: bool,
     pub hidden: bool,
     pub web_view_link: Option<String>,
+    /// Only read for agent runs (6c).
+    pub notes: Option<String>,
 }
 
 // ---- What Cay keeps ----
@@ -214,7 +216,7 @@ fn event(e: RawEvent, calendar: &CalendarEntry, now: i64) -> Option<Event> {
     })
 }
 
-fn join_link(e: &RawEvent) -> Option<String> {
+pub(super) fn join_link(e: &RawEvent) -> Option<String> {
     if let Some(link) = e.hangout_link.as_deref().filter(|l| is_https(l)) {
         return Some(link.to_string());
     }
@@ -370,7 +372,7 @@ pub fn backoff(failures: u32) -> Duration {
     Duration::from_secs(MINUTES[i.min(MINUTES.len() - 1)] * 60)
 }
 
-fn title(raw: Option<&str>, fallback: &str) -> String {
+pub(super) fn title(raw: Option<&str>, fallback: &str) -> String {
     let t: String = raw
         .unwrap_or("")
         .chars()
@@ -392,7 +394,7 @@ fn is_https(link: &str) -> bool {
 }
 
 /// An https link whose host is one of `hosts` or a subdomain of one.
-fn is_https_on(link: &str, hosts: &[&str]) -> bool {
+pub(super) fn is_https_on(link: &str, hosts: &[&str]) -> bool {
     host(link).is_some_and(|h| {
         hosts
             .iter()

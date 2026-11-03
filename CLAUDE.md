@@ -46,6 +46,7 @@ pnpm typecheck              # tsc --noEmit
 .\src-tauri\target\debug\cay.exe agent-test session-decide <requestId> allow|deny   # a terminal session's held permission request (2.8a; id in the log)
 .\src-tauri\target\debug\cay.exe agent-test routine list|save '<draftJson>'|run <id>|due <id>|delete <id>|pause on|off   # JSON args: from Git Bash (C12)
 .\src-tauri\target\debug\cay.exe google-test state|refresh|connect|disconnect   # Phase 6: the Google watcher's state and counts in the log
+.\src-tauri\target\debug\cay.exe google-test tool gmail_search '{"query":"newer_than:2d"}'   # 6c: one agent tool call, counts/ids in the log (gmail_draft makes a real draft)
 # Google client (never commit it): set before `pnpm tauri dev` / `pnpm tauri build`, or use google.clientId in settings.json
 $env:CAY_GOOGLE_CLIENT_ID='…apps.googleusercontent.com'; $env:CAY_GOOGLE_CLIENT_SECRET='…'
 cd src-tauri; cargo test -- --ignored winhttp   # live: reaches Google over WinHTTP without an account
@@ -53,8 +54,10 @@ cd src-tauri; cargo test -- --ignored winhttp   # live: reaches Google over WinH
 
 The first `cargo build` compiles ~370 crates (several minutes); later rebuilds of the
 `cay` crate take 1–2 minutes in debug. `target\debug` grows by GBs over many rebuilds (it hit ~20 GB and filled
-the drive once, and again in 6a, C14); `cargo clean --profile dev` when space runs low, or delete
-`target\debug\incremental` and any `topbar*` files in `target\debug\deps` (pre-rename leftovers cargo never reuses).
+the drive once, and again in 6a and 6c, C14); `cargo clean --profile dev` when space runs low, or delete
+`target\debug\incremental`, any `topbar*` files and every `*.rcgu.o` in `target\debug\deps` (crashed builds leave
+thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build was the drive filling. With little space,
+`$env:CARGO_INCREMENTAL=0` and `cargo test --lib` (skips the staticlib/cdylib) keep a build small.
 
 ## Layout
 
@@ -97,8 +100,11 @@ the drive once, and again in 6a, C14); `cargo clean --profile dev` when space ru
   `google/` (Phase 6, D42): `mod.rs` = managed `Google`, the `google-watcher` thread (through `activity::Watcher`),
   sign-in on a `google-auth` thread, tray Connect/Disconnect, commands, the cache; `auth.rs` (PKCE, loopback listener,
   token exchange, refresh, revoke), `http.rs` (WinHTTP client), `vault.rs` (Credential Manager), `calendar.rs`,
-  `tasks.rs`, `network.rs` (connectivity hint), `settings.rs` (`google` block); pure and unit-tested with synthetic
-  fixtures (`google/fixtures/`): `logic.rs` (Google's JSON → events and tasks, phases, boundaries, dates, backoff).
+  `tasks.rs`, `network.rs` (connectivity hint), `settings.rs` (`google` block), `gmail.rs` (6c: search, read, draft);
+  pure and unit-tested with synthetic fixtures (`google/fixtures/`): `logic.rs` (Google's JSON → events and tasks,
+  phases, boundaries, dates, backoff), `tools.rs` (6c: the agent tools' arguments, ranges, events and tasks for
+  Claude), `mail.rs` (6c: messages → text, HTML → text, RFC 2822 drafts). `run_tool` in `mod.rs` runs one agent call;
+  `agent/google_tools.rs` is its MCP side (definitions, approval lines, untrusted replies, audit).
   `win32::local_offset_min` is Windows' time-zone offset (shared with routines).
   `window/command.rs` creates the focusable `command` window (`command.html` → `src/command/`).
   `desktop/` (Phase 2.7c looks, 2.7d actions): `mod.rs` = `run(Look)` on a per-look MTA thread and `act(…)` on a
@@ -328,6 +334,13 @@ the drive once, and again in 6a, C14); `cargo clean --profile dev` when space ru
   live account; ask before anything that signs in, registers with Google or sends a request as the author. Calendar
   sync tokens can't be combined with `timeMin`/`timeMax`/`orderBy`: keep the windowed query. Task `due` is a date
   (midnight UTC), compared with the local date.
+- **Google tools for agent runs (6c, D46).** The access token stays the watcher's: a tool call borrows it per call
+  through `Wake::Token` (never stored elsewhere). Gmail is opt-in (`google.gmail`), never follows Auto (Cay asks), and a
+  draft is never remembered. Mail is someone else's words: replies say so (`<email-data>`), and `read_mail` makes the
+  run's desktop actions ask in Cay even in Auto; keep both. Never add a send call or `gmail.send`; `gmail.compose` is
+  the only write scope. The audit and the debug command log counts and ids, never mail, titles or draft text (redact
+  with `agent::redact`). Gmail ids go into URL paths only after `mail::check_id`; draft headers only after
+  `check_draft` (no CR/LF). Test with the fixtures; a live call or draft needs the author's go-ahead.
 - **Windows PowerShell 5.1 can't list GSMTC sessions** (`GetSessions()` comes back empty). Check media state with the
   `cay_lib=debug` log instead.
 

@@ -3,8 +3,11 @@
 
 use serde_json::Value;
 
-use super::{actions, interact, tools};
+use super::{actions, google_tools, interact, tools};
 use crate::desktop::plan;
+use crate::google::tools::{
+    CALENDAR_LIST_EVENTS, GMAIL_DRAFT, GMAIL_READ, GMAIL_SEARCH, TASKS_LIST,
+};
 use crate::ipc::AgentRisk;
 
 const MAX_SUMMARY: usize = 160;
@@ -29,11 +32,15 @@ const SHELL_TOOLS: &[&str] = &["Bash", "PowerShell"];
 /// Anything here in a shell command makes it compound: remembering its first word would allow far more.
 const SHELL_OPERATORS: &[&str] = &["&", "|", ";", "`", "$(", ">", "<", "\n", "\r"];
 
-/// Unknown tools (other MCP servers, new built-ins) count as changes. Cay's desktop looks are reads.
+/// Unknown tools (other MCP servers, new built-ins) count as changes. Cay's desktop looks and Google reads are
+/// reads; a Gmail draft is a change.
 pub fn risk(tool: &str) -> AgentRisk {
     if is_action(tool) {
         AgentRisk::Input
-    } else if READ_TOOLS.contains(&tool) || is_desktop(tool) {
+    } else if READ_TOOLS.contains(&tool)
+        || is_desktop(tool)
+        || (is_google(tool) && google_tools::short_name(tool) != Some(GMAIL_DRAFT))
+    {
         AgentRisk::Read
     } else {
         AgentRisk::Change
@@ -43,6 +50,11 @@ pub fn risk(tool: &str) -> AgentRisk {
 /// One of Cay's own desktop looks (2.7c): `list_windows`, `focused_window`, `screenshot`, `ui_tree`.
 pub fn is_desktop(tool: &str) -> bool {
     tools::short_name(tool).is_some()
+}
+
+/// One of Cay's own Google tools (6c): calendar, tasks, Gmail.
+pub fn is_google(tool: &str) -> bool {
+    google_tools::short_name(tool).is_some()
 }
 
 /// One of Cay's own desktop actions (2.7d): input into other apps, risk `input`, never remembered.
@@ -236,6 +248,9 @@ pub fn display_tool(tool: &str) -> String {
     if let Some(name) = tools::short_name(tool).or_else(|| actions::short_name(tool)) {
         return format!("desktop · {name}");
     }
+    if let Some(name) = google_tools::display(tool) {
+        return name;
+    }
     match tool
         .strip_prefix("mcp__")
         .and_then(|rest| rest.split_once("__"))
@@ -302,6 +317,9 @@ pub fn step_label(tool: &str, input: &Value, cwd: &str) -> String {
         "mcp__cay__type_text" => "Typing".to_string(),
         "mcp__cay__press_keys" => "Pressing keys".to_string(),
         "mcp__cay__launch" => "Opening".to_string(),
+        _ if is_google(tool) => google_tools::step_label(tool)
+            .unwrap_or_default()
+            .to_string(),
         _ => summary(tool, input, cwd),
     };
     truncate(label.trim(), MAX_LABEL)
@@ -384,6 +402,14 @@ pub fn remember_key(tool: &str, input: &Value) -> Option<String> {
         Some(tools::UI_TREE) => return Some("desktop:ui".into()),
         _ => {}
     }
+    // Google (6c): one key per kind; a draft is about this one message and never remembered.
+    match google_tools::short_name(tool) {
+        Some(GMAIL_DRAFT) => return None,
+        Some(GMAIL_SEARCH | GMAIL_READ) => return Some("google:mail".into()),
+        Some(CALENDAR_LIST_EVENTS) => return Some("google:calendar".into()),
+        Some(TASKS_LIST) => return Some("google:tasks".into()),
+        _ => {}
+    }
     if tool == "WebFetch" {
         return Some(format!(
             "WebFetch:{}",
@@ -399,6 +425,9 @@ pub fn remember_scope(key: &str) -> String {
         "desktop:windows" => return "window lists".into(),
         "desktop:screenshots" => return "screenshots".into(),
         "desktop:ui" => return "reading UIs".into(),
+        "google:mail" => return "reading mail".into(),
+        "google:calendar" => return "your calendar".into(),
+        "google:tasks" => return "your tasks".into(),
         _ => {}
     }
     match key.split_once(':') {
@@ -764,5 +793,36 @@ mod tests {
         assert_eq!(display_tool("ExitPlanMode"), "Plan");
         assert_eq!(remember_scope("Bash:git"), "git");
         assert_eq!(remember_scope("edit"), "edits");
+    }
+
+    #[test]
+    fn google_tools() {
+        let t = |n: &str| format!("mcp__cay__{n}");
+        assert_eq!(risk(&t("calendar_list_events")), AgentRisk::Read);
+        assert_eq!(risk(&t("gmail_read")), AgentRisk::Read);
+        assert_eq!(risk(&t("gmail_draft")), AgentRisk::Change);
+        assert_eq!(display_tool(&t("gmail_search")), "gmail · search");
+        assert_eq!(display_tool(&t("tasks_list")), "tasks · list");
+        // Searches and reads share one "for this run"; a draft is never remembered.
+        assert_eq!(
+            remember_key(&t("gmail_search"), &json!({})).as_deref(),
+            Some("google:mail")
+        );
+        assert_eq!(
+            remember_key(&t("gmail_read"), &json!({ "id": "a" })).as_deref(),
+            Some("google:mail")
+        );
+        assert_eq!(
+            remember_key(&t("gmail_draft"), &json!({ "body": "x" })),
+            None
+        );
+        assert_eq!(remember_scope("google:mail"), "reading mail");
+        assert_eq!(remember_scope("google:calendar"), "your calendar");
+        assert_eq!(
+            step_label(&t("gmail_search"), &json!({}), CWD),
+            "Searching your mail"
+        );
+        // Someone else's server with the same tool name is just another MCP tool.
+        assert_eq!(risk("mcp__other__gmail_read"), AgentRisk::Change);
     }
 }

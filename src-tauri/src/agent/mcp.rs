@@ -44,6 +44,12 @@ pub enum Action {
         name: &'static str,
         args: Value,
     },
+    /// One of the Google tools (6c, `google_tools.rs`): check its approval, then fetch.
+    Google {
+        rpc_id: Value,
+        name: &'static str,
+        args: Value,
+    },
     /// Claude Code gave up on a call (`notifications/cancelled`): withdraw its approval or stop its action.
     Cancel { request_id: Value },
     /// A notification or response: nothing to send.
@@ -87,6 +93,7 @@ pub fn handle(msg: &Value) -> Action {
             let mut tools = vec![approve_tool()];
             tools.extend(super::tools::definitions());
             tools.extend(super::actions::definitions());
+            tools.extend(super::google_tools::definitions());
             Action::Reply(result(id, json!({ "tools": tools })))
         }
         "tools/call" => {
@@ -125,6 +132,19 @@ pub fn handle(msg: &Value) -> Action {
                         .unwrap_or_default(),
                     args: args.cloned().unwrap_or(json!({})),
                 },
+                (Some(name), _)
+                    if super::google_tools::short_name(&format!("mcp__{SERVER_NAME}__{name}"))
+                        .is_some() =>
+                {
+                    Action::Google {
+                        rpc_id: id,
+                        name: super::google_tools::short_name(&format!(
+                            "mcp__{SERVER_NAME}__{name}"
+                        ))
+                        .unwrap_or_default(),
+                        args: args.cloned().unwrap_or(json!({})),
+                    }
+                }
                 _ => Action::Reply(error(id, -32602, "unknown tool")),
             }
         }
@@ -252,6 +272,15 @@ mod tests {
         let act = json!({ "jsonrpc": "2.0", "id": 5, "method": "tools/call",
             "params": { "name": "click", "arguments": { "hwnd": 5, "element": 2 } } });
         assert!(matches!(handle(&act), Action::Act { name: "click", .. }));
+        let google = json!({ "jsonrpc": "2.0", "id": 6, "method": "tools/call",
+            "params": { "name": "gmail_search", "arguments": { "query": "invoice" } } });
+        assert!(matches!(
+            handle(&google),
+            Action::Google {
+                name: "gmail_search",
+                ..
+            }
+        ));
         let cancel = json!({ "jsonrpc": "2.0", "method": "notifications/cancelled",
             "params": { "requestId": 5, "reason": "AbortError" } });
         assert_eq!(

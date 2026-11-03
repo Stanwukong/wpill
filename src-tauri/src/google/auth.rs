@@ -27,8 +27,21 @@ pub const SCOPE_CALENDAR_EVENTS: &str = "https://www.googleapis.com/auth/calenda
 pub const SCOPE_CALENDAR_LIST: &str =
     "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
 pub const SCOPE_TASKS: &str = "https://www.googleapis.com/auth/tasks.readonly";
-/// Read-only Calendar and Tasks: what 6a–b need. Gmail comes only with 6c, and only when you turn it on.
+/// Gmail for agent runs (6c), asked for only with `google.gmail` on. Google has no drafts-only scope: compose also
+/// allows sending, which Cay never does (it has no send call at all).
+pub const SCOPE_GMAIL_READ: &str = "https://www.googleapis.com/auth/gmail.readonly";
+pub const SCOPE_GMAIL_COMPOSE: &str = "https://www.googleapis.com/auth/gmail.compose";
+/// Read-only Calendar and Tasks: what the island needs.
 pub const SCOPES: [&str; 3] = [SCOPE_CALENDAR_EVENTS, SCOPE_CALENDAR_LIST, SCOPE_TASKS];
+
+/// What Connect asks for: the read-only three, and Gmail's two when you turned it on.
+pub fn scopes(gmail: bool) -> Vec<&'static str> {
+    let mut s = SCOPES.to_vec();
+    if gmail {
+        s.extend([SCOPE_GMAIL_READ, SCOPE_GMAIL_COMPOSE]);
+    }
+    s
+}
 
 const AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_HOST: &str = "oauth2.googleapis.com";
@@ -119,6 +132,7 @@ struct ErrorReply {
 pub fn sign_in(
     http: &Client,
     client: &ClientConfig,
+    scopes: &[&str],
     cancel: &AtomicBool,
 ) -> Result<Tokens, AuthError> {
     let verifier = URL_SAFE_NO_PAD.encode(random(32)?);
@@ -133,7 +147,7 @@ pub fn sign_in(
         .map_err(|e| AuthError::Local(e.to_string()))?
         .port();
     let redirect = format!("http://127.0.0.1:{port}");
-    open_browser(&auth_url(&client.id, &redirect, &challenge, &state))?;
+    open_browser(&auth_url(&client.id, &redirect, scopes, &challenge, &state))?;
     log::info!("google: sign-in opened in the browser, waiting on port {port}");
 
     let deadline = Instant::now() + SIGN_IN_TIMEOUT;
@@ -225,13 +239,19 @@ fn parse_tokens(status: u32, body: &[u8], now: Instant) -> Result<Tokens, AuthEr
     }
 }
 
-pub fn auth_url(client_id: &str, redirect: &str, challenge: &str, state: &str) -> String {
+pub fn auth_url(
+    client_id: &str,
+    redirect: &str,
+    scopes: &[&str],
+    challenge: &str,
+    state: &str,
+) -> String {
     format!(
         "{AUTH_URL}?response_type=code&client_id={}&redirect_uri={}&scope={}&code_challenge={}\
          &code_challenge_method=S256&state={}&access_type=offline",
         encode(client_id),
         encode(redirect),
-        encode(&SCOPES.join(" ")),
+        encode(&scopes.join(" ")),
         encode(challenge),
         encode(state)
     )
@@ -377,6 +397,7 @@ mod tests {
         let url = auth_url(
             "id.apps.googleusercontent.com",
             "http://127.0.0.1:5123",
+            &scopes(false),
             "ch",
             "st",
         );
@@ -385,6 +406,10 @@ mod tests {
         assert!(url.contains("code_challenge=ch&code_challenge_method=S256&state=st"));
         assert!(url.contains("calendar.events.readonly%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.calendarlist.readonly"));
         assert!(!url.contains("gmail"));
+        let with_mail = auth_url("id", "http://127.0.0.1:1", &scopes(true), "ch", "st");
+        assert!(with_mail
+            .contains("gmail.readonly%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.compose"));
+        assert!(!with_mail.contains("gmail.send") && !with_mail.contains("mail.google.com"));
     }
 
     #[test]

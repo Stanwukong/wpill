@@ -1,0 +1,26 @@
+{
+  "id": "18c2f0a1b2c3d4e6",
+  "threadId": "18c2f0a1b2c3d4e6",
+  "labelIds": [
+    "INBOX"
+  ],
+  "snippet": "Your order Shipped today.",
+  "payload": {
+    "mimeType": "text/html",
+    "filename": "",
+    "headers": [
+      {
+        "name": "from",
+        "value": "orders@shop.example.com"
+      },
+      {
+        "name": "subject",
+        "value": "Your order"
+      }
+    ],
+    "body": {
+      "size": 200,
+      "data": "PGh0bWw-PGhlYWQ-PHRpdGxlPng8L3RpdGxlPjxzdHlsZT5wIHsgY29sb3I6IHJlZCB9PC9zdHlsZT48L2hlYWQ-PGJvZHk-CjxoMT5Zb3VyIG9yZGVyPC9oMT48cD5TaGlwcGVkIHRvZGF5LjwvcD48c2NyaXB0PmFsZXJ0KDEpPC9zY3JpcHQ-CjxwPjxhIGhyZWY9Imh0dHBzOi8vc2hvcC5leGFtcGxlLmNvbS90cmFjaz9pZD0xJmFtcDt4PTIiPlRyYWNrIGl0PC9hPjwvcD48L2JvZHk-PC9odG1sPg"
+    }
+  }
+}

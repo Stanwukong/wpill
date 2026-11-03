@@ -440,6 +440,8 @@ export interface RoutineDraft {
   waitForMe: boolean;
   /** Cay's desktop looks and actions. Off by default. */
   desktopTools: boolean;
+  /** Cay's Google tools (6c: calendar, tasks, Gmail). Off by default and for routines saved before 6c. */
+  googleTools: boolean;
   /** The mode its runs start in (2.8e); new routines start at `auto`, ones saved before 2.8e read as `default`. */
   mode: AgentMode;
 }
@@ -560,6 +562,8 @@ export interface GoogleState {
   /** What Google granted (the consent screen lets you untick a scope). */
   calendar: boolean;
   tasks: boolean;
+  /** Gmail for agent runs (6c): reading and drafts were granted. */
+  gmail: boolean;
   lastSyncMs: number | null;
   /** Why the last refresh or sign-in failed; the last data is kept. */
   error: string | null;
