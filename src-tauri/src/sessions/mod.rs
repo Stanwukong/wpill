@@ -15,10 +15,12 @@ mod codex;
 mod files;
 mod focus;
 mod forward;
+mod opencode;
 mod pipe;
 mod process;
 mod protocol;
 mod table;
+mod version;
 
 use claude::{hooks, statusline};
 
@@ -374,6 +376,15 @@ pub fn codex_tray_label() -> &'static str {
 
 pub fn codex_toggle_from_tray(item: MenuItem<Wry>) {
     codex::toggle_from_tray(item);
+}
+
+/// Tray "Connect OpenCode…" (2.9a).
+pub fn opencode_tray_label() -> &'static str {
+    opencode::tray_label()
+}
+
+pub fn opencode_toggle_from_tray(item: MenuItem<Wry>) {
+    opencode::toggle_from_tray(item);
 }
 
 pub fn codex_keep_tray_item(item: MenuItem<Wry>) {

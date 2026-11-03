@@ -56,11 +56,13 @@ impl Session {
     }
 
     /// The agent's own process: the nearest `claude.exe` (or `node.exe` for older npm installs of Claude Code), or
-    /// `codex.exe` (npm's shim starts the native exe, which runs the hooks).
+    /// `codex.exe` (npm's shim starts the native exe, which runs the hooks), or `opencode.exe` (whose plugin starts
+    /// the forwarder).
     pub fn process(&self) -> Option<&Proc> {
         let names: &[&str] = match self.agent {
             AgentKind::Claude => &["claude.exe", "node.exe"],
             AgentKind::Codex => &["codex.exe"],
+            AgentKind::Opencode => &["opencode.exe"],
         };
         self.chain
             .iter()

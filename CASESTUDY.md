@@ -1049,6 +1049,7 @@ so tests and Connect must both say which folder they touch; and a hook only prov
 | 2026-11-03 | Stage 6c signed off by the author (all 11 manual checks passed). Phase 6 is complete; next is 2.9 (other agents and open models). |
 | 2026-11-03 | Phase 2.9 research and design agreed (D47): the full `claude/` → `sessions/` rename, Codex sessions through hooks with a minimum version, ACP runs (Goose first, tested on another machine), Ask only plus a watchdog, Calendar and Tasks kept on for ACP runs. |
 | 2026-11-03 | Stage 2.9a built: Codex sessions through the same forwarder (`--agent codex`), Codex Connect in the tray (unquoted 8.3 path, Codex ≥ 0.166.0, `/hooks` trust), `apply_patch` diffs, the agent tag and the "Agents" heading (motion-designer). Codex 0.166's hooks checked in a scratch `CODEX_HOME` and its TUI (C15). All 12 manual checks passed (the author). OpenCode spike next. |
+| 2026-11-03 | OpenCode spike (1.19.5): `permission.ask` is never called, but a plugin can answer through OpenCode's own client. The author chose to build OpenCode sessions in 2.9a: Cay's `cay.js` plugin feeds the same forwarder (`--agent opencode`, tools renamed in Rust), answers permissions through the client, fails open (checked with Cay closed). Manual checks pending. |
 | 2026-11-03 | Stage 2.9a, step 1: the rename (`claude/` → `sessions/`, session IPC names, `features/sessions/`, `--font-agent`, `data-agent`), no behaviour change; 230 Rust tests, clippy and typecheck clean. Codex updated to 0.166.0. |
 
 ## 7. Results & metrics

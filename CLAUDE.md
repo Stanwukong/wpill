@@ -86,7 +86,10 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
   merge, the command, version parsing, `MIN_VERSION`) and `mod.rs` (8.3 path, version check, tray Connect/Finish/
   Update/Disconnect Codex, `codex.hooksSeen` in Cay's `settings.json`). `files.rs` = reading, backing up and writing
   those settings files and Cay's own blocks. Sessions carry an `AgentKind`; the forwarder takes `--agent codex`.
-  `agent/patch.rs` (pure) reads Codex's `apply_patch` format for cards, summaries and step lines. It ignores hooks from sessions Cay itself started (`is_self`).
+  `agent/patch.rs` (pure) reads Codex's `apply_patch` format for cards, summaries and step lines. OpenCode's parts are
+  in `sessions/opencode/`: `plugin.rs` (pure: the `cay.js` template, its marker and states), `tools.rs` (pure:
+  OpenCode's tool and argument names → Claude Code's, applied by the forwarder for `--agent opencode`) and `mod.rs`
+  (tray Connect/Update/Disconnect OpenCode). `version.rs` = which version of an agent CLI is on PATH. It ignores hooks from sessions Cay itself started (`is_self`).
   Permission requests (2.8a): `ask.rs` (pure: the held request, the reply, the hook output) and `asks.rs` (managed
   `Asks`, the `session-asks` pipe server, one thread per held request, `sessionApproval` cards). Questions and plans
   (2.8c): `agent/interact.rs` (pure: questions, answers, `updatedInput`, plan titles), shared by sessions and runs. They're never allowed bare:
@@ -260,6 +263,11 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
   `bypassPermissions`): test permission cards in the TUI. Test with a scratch `CODEX_HOME` (its own `codex login`, so
   test runs never share a refresh token with your real login); never write the real `~\.codex\hooks.json` in tests.
   `SessionEnd` and `Interrupt` time out after 3 s at most.
+- **OpenCode (2.9a, D47).** Its `permission.ask` plugin hook is declared but never called (1.19.5): Cay's plugin answers
+  `permission.asked` through OpenCode's own client instead, and kills its waiting forwarder on `permission.replied`.
+  `opencode run` rejects every request at once, so test cards in the TUI or `opencode serve`. Connect never edits the
+  user's `opencode.json` (OpenCode allows edits and shell by default). Test with `OPENCODE_CONFIG_DIR` pointing at a
+  scratch folder; OpenCode creates its own defaults in `~\.config\opencode` on first run, Cay doesn't.
 - **The hook forwarder must stay quiet and fast.** `cay.exe hook` runs before Tauri, never panics
   (release is `panic = "abort"`, a non-zero exit shows as a hook error in Claude Code) and bounds every wait. The only
   thing it ever prints is a `PermissionRequest` decision you made in the island (2.8a); with no decision it prints

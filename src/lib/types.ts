@@ -45,7 +45,7 @@ export interface ScreenshotActivity {
 }
 
 /** Which coding agent a terminal session belongs to (2.9a, D47). Mirrors Rust's `AgentKind`. */
-export type AgentKind = "claude" | "codex";
+export type AgentKind = "claude" | "codex" | "opencode";
 
 export interface SessionDoneActivity {
   /** Ours (matches `AgentSession.sessionId`). */

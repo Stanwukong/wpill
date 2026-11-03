@@ -21,7 +21,7 @@ use windows::Win32::Storage::FileSystem::{
 };
 use windows::Win32::System::Pipes::WaitNamedPipeW;
 
-use super::{ask, asks, pipe, process, protocol};
+use super::{ask, asks, opencode, pipe, process, protocol};
 use crate::duplex;
 use crate::ipc::AgentKind;
 use crate::win32::Handle;
@@ -48,6 +48,7 @@ fn agent_arg(args: &[String]) -> Option<AgentKind> {
         Some(i) => match args.get(i + 1).map(String::as_str) {
             Some("claude") => Some(AgentKind::Claude),
             Some("codex") => Some(AgentKind::Codex),
+            Some("opencode") => Some(AgentKind::Opencode),
             _ => None,
         },
     }
@@ -61,9 +62,16 @@ pub fn run() {
     let at_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_millis() as i64);
-    let Some(stdin) = read_stdin() else {
+    let Some(mut stdin) = read_stdin() else {
         return;
     };
+    // OpenCode's plugin sends its own tool names and arguments; the rest of Cay reads Claude Code's.
+    if agent == AgentKind::Opencode {
+        let Some(shaped) = opencode::claude_shaped(&stdin) else {
+            return;
+        };
+        stdin = shaped;
+    }
     let chain = process::ancestors();
     if let Some(request) = ask::request(&stdin, agent, at_ms, chain.clone()) {
         // The answer is built from the input as the agent sent it, not Cay's trimmed copy.
@@ -181,6 +189,10 @@ mod tests {
         assert_eq!(
             agent_arg(&args(&["--agent", "claude"])),
             Some(AgentKind::Claude)
+        );
+        assert_eq!(
+            agent_arg(&args(&["--agent", "opencode"])),
+            Some(AgentKind::Opencode)
         );
         assert_eq!(agent_arg(&args(&["--agent", "gemini"])), None);
         assert_eq!(agent_arg(&args(&["--agent"])), None);

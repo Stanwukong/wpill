@@ -5,29 +5,24 @@
 
 pub mod hooks;
 
-use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
-use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 use tauri::menu::MenuItem;
 use tauri::Wry;
 use windows::core::HSTRING;
 use windows::Win32::Storage::FileSystem::GetShortPathNameW;
-use windows::Win32::System::Threading::CREATE_NO_WINDOW;
 use windows::Win32::UI::WindowsAndMessaging::{
     IDYES, MB_ICONINFORMATION, MB_ICONQUESTION, MB_ICONWARNING, MB_OK, MB_YESNO, MB_YESNOCANCEL,
 };
 
-use super::{confirm, done_text, files, message, this_exe};
+use super::{confirm, done_text, files, message, this_exe, version};
 use hooks::State;
 
 /// Cay's own `settings.json` block: `{ "hooksSeen": bool }`, false from Connect until a Codex hook arrives.
 const BLOCK: &str = "codex";
-const VERSION_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The tray item, relabelled when the first Codex hook arrives.
 static TRAY: OnceLock<MenuItem<Wry>> = OnceLock::new();
@@ -104,57 +99,6 @@ fn short_path(path: &Path) -> Option<PathBuf> {
     (n > 0 && n < buf.len()).then(|| PathBuf::from(String::from_utf16_lossy(&buf[..n])))
 }
 
-/// The `codex` you'd run: the first on PATH, either a native `codex.exe` (asked with `--version`) or npm's shim (its
-/// package's `package.json`). `None` if there's none, or it didn't say.
-fn installed_version() -> Option<(u32, u32, u32)> {
-    let path = std::env::var_os("PATH")?;
-    for dir in std::env::split_paths(&path) {
-        let exe = dir.join("codex.exe");
-        if exe.is_file() {
-            return run_version(&exe);
-        }
-        if ["codex.cmd", "codex.ps1", "codex"]
-            .iter()
-            .any(|n| dir.join(n).is_file())
-        {
-            let package = dir.join(r"node_modules\@openai\codex\package.json");
-            return std::fs::read_to_string(package)
-                .ok()
-                .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-                .and_then(|v| v.get("version")?.as_str().and_then(hooks::parse_version));
-        }
-    }
-    None
-}
-
-fn run_version(exe: &Path) -> Option<(u32, u32, u32)> {
-    let mut child = Command::new(exe)
-        .arg("--version")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .creation_flags(CREATE_NO_WINDOW.0)
-        .spawn()
-        .ok()?;
-    let deadline = Instant::now() + VERSION_TIMEOUT;
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => break,
-            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
-            _ => {
-                let _ = child.kill();
-                return None;
-            }
-        }
-    }
-    let output = child.wait_with_output().ok()?;
-    hooks::parse_version(&String::from_utf8_lossy(&output.stdout))
-}
-
-fn version_text((a, b, c): (u32, u32, u32)) -> String {
-    format!("{a}.{b}.{c}")
-}
-
 /// Tray "Connect/Disconnect Codex…", as for Claude Code: a native dialog on its own thread that shows exactly what
 /// changes before writing.
 pub fn toggle_from_tray(item: MenuItem<Wry>) {
@@ -203,14 +147,14 @@ fn run_dialog() -> Result<(), String> {
         }
         return Ok(());
     }
-    let version = installed_version();
+    let version = version::installed("codex", r"node_modules\@openai\codex");
     if let Some(v) = version.filter(|v| *v < hooks::MIN_VERSION) {
         message(
             &format!(
                 "Codex {} is older than {}, the first version Cay works with. Update it (codex update, or \
                  npm install -g @openai/codex), then connect again.",
-                version_text(v),
-                version_text(hooks::MIN_VERSION)
+                version::text(v),
+                version::text(hooks::MIN_VERSION)
             ),
             MB_OK | MB_ICONINFORMATION,
         );
@@ -218,10 +162,10 @@ fn run_dialog() -> Result<(), String> {
     }
     let command = command()?;
     let checked = match version {
-        Some(v) => format!("Codex {} found.", version_text(v)),
+        Some(v) => format!("Codex {} found.", version::text(v)),
         None => format!(
             "Cay couldn't find Codex to check its version; it needs {} or later.",
-            version_text(hooks::MIN_VERSION)
+            version::text(hooks::MIN_VERSION)
         ),
     };
     let change = hooks::preview(&command);

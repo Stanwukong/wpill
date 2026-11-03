@@ -411,12 +411,15 @@ Added in 2.9a (Codex sessions):
 
 | Kind | Name | Payload / signature | Notes |
 |---|---|---|---|
-| type / field | `AgentKind` on `AgentSession`, `SessionDoneActivity`, `SessionNeedsInputActivity`, `SessionApprovalActivity` | `"claude" \| "codex"` | Which agent a session belongs to. |
+| type / field | `AgentKind` on `AgentSession`, `SessionDoneActivity`, `SessionNeedsInputActivity`, `SessionApprovalActivity` | `"claude" \| "codex" \| "opencode"` | Which agent a session belongs to. |
 | pipe field | `Envelope.agent`, `ask::Request.agent` | `"codex"`, absent for Claude | Old forwarders and entries read as Claude. |
 | exe mode | `cay.exe hook --agent codex` | Codex hook stdin | An unknown `--agent` value sends nothing. Codex's `Interrupt` → idle. |
 | file | `$CODEX_HOME\hooks.json` (else `~\.codex\hooks.json`) | 8 events, `command` = `commandWindows` | Written by Connect Codex; backed up first; only entries ending in `cay.exe hook --agent codex` are Cay's. |
 | file | Cay `settings.json` → `codex` | `{ hooksSeen: boolean }` | False from Connect until a Codex hook arrives ("Finish connecting Codex…" in the tray). |
 | tray | Connect / Finish connecting / Update / Disconnect Codex… | | Checks Codex ≥ 0.166.0 (npm's `package.json` or `codex.exe --version`). |
+| exe mode | `cay.exe hook --agent opencode` | Claude-shaped hook JSON from Cay's OpenCode plugin | OpenCode's tool names and arguments are renamed to Claude Code's (`sessions/opencode/tools.rs`). |
+| file | `$OPENCODE_CONFIG_DIR\plugins\cay.js` (else `~\.config\opencode\plugins\cay.js`) | Cay's plugin, `cay-plugin: 1` on line 2 | Written by Connect OpenCode, deleted by Disconnect; a `cay.js` without the marker is never touched. Answers permissions with `postSessionIdPermissionsPermissionId` (`once` / `reject`). |
+| tray | Connect / Update / Disconnect OpenCode… | | Checks OpenCode ≥ 1.19.5. Never changes the user's `opencode.json`. |
 
 Unchanged, because they're Claude Code's own: `claude_hooks_status` / `_install` / `_remove`, `ClaudeHooksStatus`,
 `ClaudeInstall`, `agent.claudePath`, the `claude` block and `activities.claude` switch in `settings.json`, the pipe
@@ -1323,7 +1326,7 @@ Tasks stay on for ACP runs (desktop tools and Gmail off until a scripted look-an
       `cay.exe hook --agent opencode`; check `permission.ask` can really decide. Attaching to the TUI's server is out
       (random port, no auth by default). **Result (1.19.5):** `permission.ask` is never called; a plugin answers through its own
       client (`postSessionIdPermissionsPermissionId`, `once` / `reject`), checked for allow and deny (D47)
-- [ ] OpenCode sessions: Connect writes `cay.js` into OpenCode's `plugins/` folder; it pipes Claude-shaped hook JSON
+- [x] OpenCode sessions: Connect writes `cay.js` into OpenCode's `plugins/` folder; it pipes Claude-shaped hook JSON
       into `cay.exe hook --agent opencode` (`session.status` busy → working, `tool.execute.before` → step line,
       `session.idle` → done, `permission.asked` → held card, answered through the plugin's client), fails open, and
       needs OpenCode ≥ 1.19.5
@@ -1346,6 +1349,18 @@ Tasks stay on for ACP runs (desktop tools and Gmail off until a scripted look-an
 10. Turn ends: a done activity tagged `codex`; quitting Codex removes the session (or the next prune does).
 11. A Claude Code session at the same time: both rows tagged; with Codex closed, Claude-only rows show no tag.
 12. Disconnect Codex: only Cay's entries are removed (a backup is made); Claude Code's connection is untouched.
+
+**2.9a OpenCode manual checks** (dev build, OpenCode ≥ 1.19.5, a test folder whose `opencode.json` has
+`"permission": { "edit": "ask", "bash": "ask" }`)
+13. Tray → "Connect OpenCode…": the dialog names `~\.config\opencode\plugins\cay.js`, the exe it runs, the version
+    found and the note about `"ask"` rules. OK writes the file; the tray then reads "Disconnect OpenCode…".
+14. In the test folder, start `opencode` (the TUI) and ask something: a row tagged `opencode` appears and works.
+15. Ask for a shell write: a card in the island (and OpenCode's own prompt). Deny in Cay → OpenCode reports it rejected.
+16. Again; Allow in Cay → the command runs.
+17. Again; answer in OpenCode's prompt instead → the island's card goes away.
+18. An edit: the card shows a diff of the file.
+19. Turn ends → done activity tagged `opencode`; Esc mid-answer → idle, not done.
+20. Disconnect OpenCode deletes only `cay.js`; OpenCode still starts normally.
 
 **2.9b ACP run backend** (Agent Client Protocol v1: JSON-RPC to an agent subprocess over stdio)
 - [ ] `agent::backend`: launch, encode a message, decode a line (event / approval / reply to write), stop;

@@ -205,20 +205,6 @@ pub fn path() -> Option<PathBuf> {
     Some(dir.join("hooks.json"))
 }
 
-/// `codex-cli 0.166.0` (or a bare `0.166.0`) → `(0, 166, 0)`.
-pub fn parse_version(text: &str) -> Option<(u32, u32, u32)> {
-    let word = text
-        .split_whitespace()
-        .find(|w| w.chars().next().is_some_and(|c| c.is_ascii_digit()))?;
-    let core = word.split(['-', '+']).next()?;
-    let mut parts = core.split('.').map(|p| p.parse::<u32>().ok());
-    Some((
-        parts.next()??,
-        parts.next()??,
-        parts.next().flatten().unwrap_or(0),
-    ))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -352,14 +338,5 @@ mod tests {
         assert!(with_hooks(json!({ "hooks": [] }), &cmd()).is_err());
         assert!(with_hooks(json!({ "hooks": { "Stop": {} } }), &cmd()).is_err());
         assert!(without_hooks(json!({ "hooks": 3 })).is_err());
-    }
-
-    #[test]
-    fn versions() {
-        assert_eq!(parse_version("codex-cli 0.166.0"), Some((0, 166, 0)));
-        assert_eq!(parse_version("0.167.2-alpha.1\n"), Some((0, 167, 2)));
-        assert_eq!(parse_version("codex-cli 1.2"), Some((1, 2, 0)));
-        assert_eq!(parse_version("codex-cli"), None);
-        assert!(parse_version("codex-cli 0.130.0").unwrap() < MIN_VERSION);
     }
 }
