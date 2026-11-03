@@ -388,6 +388,28 @@ startFailed`.
 | setting | `settings.json` → `google.gmail` | `boolean` (false) | Connect also asks for `gmail.readonly` and `gmail.compose`. Reconnect after turning it on. |
 | debug | `cay.exe google-test tool <name> '<json>'` | | One tool call without Claude or approvals; logs counts, ids and errors only. `gmail_draft` creates a real draft. |
 
+### Phase 2.9a
+
+The rename (D47): the session names below replace the ones in the 2.6 and 2.8 tables above, which keep their old
+names as history. No payload changed shape.
+
+| Kind | Old name | New name |
+|---|---|---|
+| event | `claude:sessions` | `sessions:changed` |
+| event | `claude:asks` | `sessions:asks` |
+| command | `get_claude_sessions` | `get_sessions` |
+| command | `claude_focus_session` / `claude_decide` / `claude_asks` / `claude_answer` / `claude_plan` / `claude_ask_preview` | `session_focus` / `session_decide` / `session_asks` / `session_answer` / `session_plan` / `session_ask_preview` |
+| activity kind | `claudeDone` / `claudeNeedsInput` / `claudeApproval` | `sessionDone` / `sessionNeedsInput` / `sessionApproval` |
+| type | `ClaudeSession`, `ClaudeSessions` (TS) / `ClaudeSessionsPayload` (Rust), `ClaudeStatus` | `AgentSession`, `AgentSessions` / `SessionsPayload`, `SessionStatus` |
+| type | `ClaudeDoneActivity` / `ClaudeNeedsInputActivity` / `ClaudeApprovalActivity`, `ClaudeAsks(Payload)` | `SessionDoneActivity` / `SessionNeedsInputActivity` / `SessionApprovalActivity`, `SessionAsks(Payload)` |
+| error | `claudeSessionGone` / `claudeWindowNotFound` | `sessionGone` / `sessionWindowNotFound` |
+| attribute | `.island[data-claude]` | `.island[data-agent]` (runs drive it too) |
+| CSS | `--font-claude`, `.claude__*`, `.claude-row*`, `.claude-activity*`, `.activity--claude` | `--font-agent`, `.agents__*`, `.session-row*`, `.session-activity*`, `.activity--session` |
+
+Unchanged, because they're Claude Code's own: `claude_hooks_status` / `_install` / `_remove`, `ClaudeHooksStatus`,
+`ClaudeInstall`, `agent.claudePath`, the `claude` block and `activities.claude` switch in `settings.json`, the pipe
+names `cay-claude-…` and the hook marker.
+
 ### Reserved for later phases (names fixed now so they slot in)
 
 | Phase | Kind | Name |
@@ -1266,9 +1288,9 @@ require a minimum version; the live Goose/Ollama test runs on another machine (t
 Tasks stay on for ACP runs (desktop tools and Gmail off until a scripted look-and-act test passes).
 
 **2.9a Agent-neutral sessions** (smallest step, matches Nook)
-- [ ] Rename, no behaviour change, own commit: `claude/` → `sessions/` (`sessions/claude/` for `hooks.rs`,
+- [x] Rename, no behaviour change, own commit (2026-11-03; IPC table "Phase 2.9a"): `claude/` → `sessions/` (`sessions/claude/` for `hooks.rs`,
       `statusline.rs`; `sessions/codex/` next), `ClaudeSession` → `AgentSession`, `claude:sessions` →
-      `sessions:changed`, `claude:asks` → `sessions:asks`, `claude_*` commands → `session_*`, activity kinds
+      `sessions:changed`, `claude:asks` → `sessions:asks`, the session `claude_*` commands → `session_*` (Connect's `claude_hooks_*` stay), activity kinds
       `claudeDone` / `claudeNeedsInput` / `claudeApproval` → `sessionDone` / `sessionNeedsInput` / `sessionApproval`,
       `ClaudeSection` → `AgentsSection` ("Agents"), `ClaudeActivity` → `SessionActivity`, `--font-claude` →
       `--font-agent`. Pipe names and the hook marker stay; `cay.exe hook` without `--agent` means Claude.

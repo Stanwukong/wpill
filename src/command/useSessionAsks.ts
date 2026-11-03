@@ -1,25 +1,25 @@
 import { useEffect, useState } from "react";
 import { commands, on, unlistenAll } from "../lib/ipc";
-import type { ApprovalPreview, ClaudeApprovalActivity } from "../lib/types";
+import type { ApprovalPreview, SessionApprovalActivity } from "../lib/types";
 
-export interface ClaudeAsksState {
+export interface SessionAsksState {
   /** Held session requests, oldest first. */
-  asks: ClaudeApprovalActivity[];
+  asks: SessionApprovalActivity[];
   /** The first list has arrived (until then a selected ask may simply not be known yet). */
   loaded: boolean;
 }
 
-/** Terminal sessions' requests the island holds (2.8b): the list on load, then every `claude:asks`. */
-export function useClaudeAsks(): ClaudeAsksState {
-  const [state, setState] = useState<ClaudeAsksState>({ asks: [], loaded: false });
+/** Terminal sessions' requests the island holds (2.8b): the list on load, then every `sessions:asks`. */
+export function useSessionAsks(): SessionAsksState {
+  const [state, setState] = useState<SessionAsksState>({ asks: [], loaded: false });
 
   useEffect(() => {
     let alive = true;
     commands
-      .claudeAsks()
+      .sessionAsks()
       .then((a) => alive && setState({ asks: a.asks, loaded: true }))
-      .catch((err: unknown) => console.debug("claude asks", err));
-    const subscriptions = [on.claudeAsks((a) => setState({ asks: a.asks, loaded: true }))];
+      .catch((err: unknown) => console.debug("session asks", err));
+    const subscriptions = [on.sessionAsks((a) => setState({ asks: a.asks, loaded: true }))];
     return () => {
       alive = false;
       unlistenAll(subscriptions);

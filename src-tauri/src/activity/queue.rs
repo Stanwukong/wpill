@@ -63,9 +63,9 @@ fn rules(activity: &Activity) -> Rules {
         Activity::Power(_) => notice(2, ms(3000), ms(10_000)),
         Activity::Bluetooth(_) => notice(2, ms(3000), ms(10_000)),
         Activity::Screenshot(_) => notice(2, ms(6000), ms(30_000)),
-        Activity::ClaudeDone(_) => notice(2, ms(5000), ms(120_000)),
-        Activity::ClaudeNeedsInput(_)
-        | Activity::ClaudeApproval(_)
+        Activity::SessionDone(_) => notice(2, ms(5000), ms(120_000)),
+        Activity::SessionNeedsInput(_)
+        | Activity::SessionApproval(_)
         | Activity::AgentApproval(_) => Rules {
             sticky: true,
             ..notice(3, Duration::ZERO, Duration::ZERO)
@@ -91,10 +91,10 @@ fn key(activity: &Activity) -> String {
         Activity::Bluetooth(b) => format!("bluetooth:{}", b.container),
         Activity::Screenshot(_) => "screenshot".into(),
         // One key per session, so "done" replaces that session's "needs input" in place.
-        Activity::ClaudeDone(c) => claude_key(c.session_id),
-        Activity::ClaudeNeedsInput(c) => claude_key(c.session_id),
+        Activity::SessionDone(c) => session_key(c.session_id),
+        Activity::SessionNeedsInput(c) => session_key(c.session_id),
         // One per request, so approvals from several runs take turns like several sessions' questions.
-        Activity::ClaudeApproval(a) => claude_approval_key(a.request_id),
+        Activity::SessionApproval(a) => session_approval_key(a.request_id),
         Activity::AgentApproval(a) => approval_key(a.request_id),
         Activity::AgentActing(_) => ACTING_KEY.into(),
         Activity::AgentFinished(f) => format!("agent:{}", f.run_id),
@@ -111,7 +111,7 @@ pub fn approval_key(request_id: u32) -> String {
 }
 
 /// The key of a terminal session's approval (2.8a), for `Signal::Retract` once it's answered or handed back.
-pub fn claude_approval_key(request_id: u32) -> String {
+pub fn session_approval_key(request_id: u32) -> String {
     format!("sessionApproval:{request_id}")
 }
 
@@ -120,8 +120,8 @@ pub fn calendar_key(event_id: &str) -> String {
     format!("calendar:{event_id}")
 }
 
-pub fn claude_key(session_id: u32) -> String {
-    format!("claude:{session_id}")
+pub fn session_key(session_id: u32) -> String {
+    format!("session:{session_id}")
 }
 
 /// Interactive activities accept clicks while hovered and pause their countdown.
@@ -129,9 +129,9 @@ pub fn interactive(activity: &Activity) -> bool {
     matches!(
         activity,
         Activity::Screenshot(_)
-            | Activity::ClaudeDone(_)
-            | Activity::ClaudeNeedsInput(_)
-            | Activity::ClaudeApproval(_)
+            | Activity::SessionDone(_)
+            | Activity::SessionNeedsInput(_)
+            | Activity::SessionApproval(_)
             | Activity::AgentApproval(_)
             | Activity::AgentFinished(_)
             | Activity::CalendarSoon(_)
@@ -356,8 +356,8 @@ fn payload(shown: &Shown, now: Instant) -> ActivityPayload {
 pub mod tests {
     use super::*;
     use crate::ipc::{
-        BluetoothActivity, CapsLockActivity, ClaudeDoneActivity, ClaudeNeedsInputActivity,
-        PowerActivity, ScreenshotActivity, VolumeActivity,
+        BluetoothActivity, CapsLockActivity, PowerActivity, ScreenshotActivity,
+        SessionDoneActivity, SessionNeedsInputActivity, VolumeActivity,
     };
 
     pub fn volume(level: u8) -> Activity {
@@ -379,14 +379,14 @@ pub mod tests {
     }
 
     pub fn needs_input(session_id: u32) -> Activity {
-        Activity::ClaudeNeedsInput(ClaudeNeedsInputActivity {
+        Activity::SessionNeedsInput(SessionNeedsInputActivity {
             session_id,
             project: "wpill".into(),
         })
     }
 
     pub fn done(session_id: u32) -> Activity {
-        Activity::ClaudeDone(ClaudeDoneActivity {
+        Activity::SessionDone(SessionDoneActivity {
             session_id,
             project: "wpill".into(),
             failed: false,
@@ -538,13 +538,13 @@ pub mod tests {
         let mut q = Queue::default();
         let p = q.offer(needs_input(7), t0, true).unwrap();
         let json = serde_json::to_value(&p).unwrap();
-        assert_eq!(json["kind"], "claudeNeedsInput");
+        assert_eq!(json["kind"], "sessionNeedsInput");
         assert_eq!(json["payload"]["sessionId"], 7);
         assert!(json["durationMs"].is_null());
         q.hold(t0 + HOUR);
         assert!(!q.is_over(t0 + 24 * HOUR));
-        assert_eq!(q.retract(&claude_key(8)), None);
-        assert_eq!(q.retract(&claude_key(7)), Some(p.id));
+        assert_eq!(q.retract(&session_key(8)), None);
+        assert_eq!(q.retract(&session_key(7)), Some(p.id));
         assert_eq!(q.take_next(t0 + HOUR), None);
     }
 
@@ -572,7 +572,7 @@ pub mod tests {
         assert!(q.is_over(t0 + ms(6100)));
         q.finish();
         let back = q.take_next(t0 + ms(6100)).unwrap();
-        assert!(matches!(back.activity, Activity::ClaudeNeedsInput(_)));
+        assert!(matches!(back.activity, Activity::SessionNeedsInput(_)));
         assert_eq!(back.duration_ms, None);
         // Feedback interrupts it too, and it comes back sticky.
         q.offer(volume(3), t0 + ms(7000), true).unwrap();
@@ -589,7 +589,7 @@ pub mod tests {
         assert!(q.offer(needs_input(1), t0, true).is_none());
         q.finish();
         let next = q.take_next(t0 + 10 * HOUR).unwrap();
-        assert!(matches!(next.activity, Activity::ClaudeNeedsInput(_)));
+        assert!(matches!(next.activity, Activity::SessionNeedsInput(_)));
     }
 
     #[test]
@@ -631,7 +631,7 @@ pub mod tests {
         let mut q = Queue::default();
         q.offer(needs_input(1), t0, false);
         q.offer(done(2), t0, false);
-        assert_eq!(q.retract(&claude_key(1)), None);
+        assert_eq!(q.retract(&session_key(1)), None);
         assert_eq!(q.take_next(t0).unwrap().activity, done(2));
     }
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { commands, errorMessage } from "../lib/ipc";
 import type { Routines, RoutineView } from "../lib/types";
 import { ClockGlyph } from "../features/agent/AgentGlyphs";
-import { WorkingIndicator } from "../features/claude/WorkingGlyphs";
+import { WorkingIndicator } from "../features/sessions/WorkingGlyphs";
 import { lastLine, scheduleLine } from "./routineLabels";
 import { folderName } from "./TaskFields";
 

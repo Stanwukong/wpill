@@ -44,8 +44,8 @@ export interface ScreenshotActivity {
   height: number;
 }
 
-export interface ClaudeDoneActivity {
-  /** Ours (matches `ClaudeSession.sessionId`). */
+export interface SessionDoneActivity {
+  /** Ours (matches `AgentSession.sessionId`). */
   sessionId: number;
   /** The session's working folder name. */
   project: string;
@@ -53,7 +53,7 @@ export interface ClaudeDoneActivity {
   failed: boolean;
 }
 
-export interface ClaudeNeedsInputActivity {
+export interface SessionNeedsInputActivity {
   sessionId: number;
   project: string;
 }
@@ -64,7 +64,7 @@ export type AgentRisk = "read" | "change" | "input";
  * A terminal session asks to use a tool (2.8a). Sticky: Rust withdraws it once you answer here or in the terminal,
  * or after it hands the request back to the terminal. Allow / Deny only.
  */
-export interface ClaudeApprovalActivity {
+export interface SessionApprovalActivity {
   requestId: number;
   /** The session's row (click to focus its window); `null` if Cay hasn't seen the session yet. */
   sessionId: number | null;
@@ -74,9 +74,9 @@ export interface ClaudeApprovalActivity {
   /** One line: the command, the file, the host. */
   summary: string;
   risk: AgentRisk;
-  /** The card's diff or wrapped command (2.8b); the whole one comes from `claudeAskPreview`. */
+  /** The card's diff or wrapped command (2.8b); the whole one comes from `sessionAskPreview`. */
   preview: ApprovalPreview | null;
-  /** A question or a plan (2.8c): answered with `claudeAnswer` / `claudePlan`, never Allow. Deny skips it. */
+  /** A question or a plan (2.8c): answered with `sessionAnswer` / `sessionPlan`, never Allow. Deny skips it. */
   interaction: Interaction | null;
 }
 
@@ -104,9 +104,9 @@ export interface QuestionAnswer {
   other: string | null;
 }
 
-/** `claude:asks` / `claude_asks`: the session requests the island holds, oldest first (command window). */
-export interface ClaudeAsks {
-  asks: ClaudeApprovalActivity[];
+/** `sessions:asks` / `session_asks`: the session requests the island holds, oldest first (command window). */
+export interface SessionAsks {
+  asks: SessionApprovalActivity[];
 }
 
 /**
@@ -218,9 +218,9 @@ export type Activity =
   | { kind: "power"; payload: PowerActivity }
   | { kind: "capsLock"; payload: CapsLockActivity }
   | { kind: "screenshot"; payload: ScreenshotActivity }
-  | { kind: "claudeDone"; payload: ClaudeDoneActivity }
-  | { kind: "claudeNeedsInput"; payload: ClaudeNeedsInputActivity }
-  | { kind: "claudeApproval"; payload: ClaudeApprovalActivity }
+  | { kind: "sessionDone"; payload: SessionDoneActivity }
+  | { kind: "sessionNeedsInput"; payload: SessionNeedsInputActivity }
+  | { kind: "sessionApproval"; payload: SessionApprovalActivity }
   | { kind: "agentApproval"; payload: AgentApprovalActivity }
   | { kind: "agentActing"; payload: AgentActingActivity }
   | { kind: "agentFinished"; payload: AgentFinishedActivity }
@@ -285,13 +285,13 @@ export interface MediaState {
   sessions: MediaSession[];
 }
 
-export type ClaudeStatus = "idle" | "working" | "done" | "needsInput";
+export type SessionStatus = "idle" | "working" | "done" | "needsInput";
 
-export interface ClaudeSession {
+export interface AgentSession {
   /** Assigned by Rust, stable for the session's lifetime. */
   sessionId: number;
   project: string;
-  status: ClaudeStatus;
+  status: SessionStatus;
   /** Unix epoch ms of the last status change. */
   updatedAtMs: number;
   /** The tool it's using and on what ("Edit · hover/logic.rs"), from Rust (2.8d); `null` between tasks. */
@@ -317,9 +317,9 @@ export interface TodoCount {
   total: number;
 }
 
-export interface ClaudeSessions {
+export interface AgentSessions {
   /** Most recently updated first. */
-  sessions: ClaudeSession[];
+  sessions: AgentSession[];
   /** The newest usage limits from any session's status line (2.8f); `null` until one arrives. */
   limits: UsageLimits | null;
 }
@@ -534,8 +534,8 @@ export interface AppError {
     | "mediaSessionGone"
     | "mediaRejected"
     | "activityGone"
-    | "claudeSessionGone"
-    | "claudeWindowNotFound"
+    | "sessionGone"
+    | "sessionWindowNotFound"
     | "claudeSettings"
     | "agentRunGone"
     | "agentApprovalGone"

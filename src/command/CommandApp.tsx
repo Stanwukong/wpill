@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { commands, on, unlistenAll } from "../lib/ipc";
-import type { AgentOptions, AgentRun, ClaudeApprovalActivity, RoutineDraft, RoutineView } from "../lib/types";
+import type { AgentOptions, AgentRun, SessionApprovalActivity, RoutineDraft, RoutineView } from "../lib/types";
 import { ClockGlyph, RunDot } from "../features/agent/AgentGlyphs";
 import { ago, endLabel } from "../features/agent/labels";
 import { isLive, useAgentRuns } from "../features/agent/useAgentRuns";
-import { AgentMark, WorkingIndicator } from "../features/claude/WorkingGlyphs";
+import { AgentMark, WorkingIndicator } from "../features/sessions/WorkingGlyphs";
 import { NewTask } from "./NewTask";
 import { RoutineEditor } from "./RoutineEditor";
 import { RoutineList } from "./RoutineList";
 import { nameFromPrompt, WORKDAYS, type RoutineSeed } from "./routineLabels";
 import { RunView } from "./RunView";
 import { SessionAskView } from "./SessionAskView";
-import { useClaudeAsks } from "./useClaudeAsks";
+import { useSessionAsks } from "./useSessionAsks";
 import { useRoutines } from "./useRoutines";
 import { useTranscripts } from "./useTranscripts";
 
@@ -75,7 +75,7 @@ export function CommandApp() {
   const runs = useAgentRuns();
   const transcripts = useTranscripts();
   const routines = useRoutines();
-  const asks = useClaudeAsks();
+  const asks = useSessionAsks();
   /** Set while the routine editor shows (it takes the main area over a run, an ask or the new-task form). */
   const [editing, setEditing] = useState<Editing | null>(null);
   const [options, setOptions] = useState<AgentOptions | null>(null);
@@ -313,7 +313,7 @@ export function CommandApp() {
 }
 
 /** A session's held request: a breathing amber dot (it waits on you), the project, and the tool. */
-function AskItem({ ask, selected, onSelect }: { ask: ClaudeApprovalActivity; selected: boolean; onSelect: () => void }) {
+function AskItem({ ask, selected, onSelect }: { ask: SessionApprovalActivity; selected: boolean; onSelect: () => void }) {
   return (
     <button className="cmd-run" data-status="waiting" aria-pressed={selected} onClick={onSelect} title={ask.summary}>
       <span className="cmd-run__line">

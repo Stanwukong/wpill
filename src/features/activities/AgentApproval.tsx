@@ -5,7 +5,7 @@ import { RISK_LABEL } from "../agent/labels";
 import { ModeChip } from "../agent/ModeChip";
 import { changePreview, PreviewBlock, type ChangePreview } from "../agent/PreviewBlock";
 import { decide, openRun } from "../agent/useAgentRuns";
-import { AgentMark } from "../claude/WorkingGlyphs";
+import { AgentMark } from "../sessions/WorkingGlyphs";
 import "../agent/agent.css";
 
 export type ApprovalChoice = "allow" | "deny" | "run";

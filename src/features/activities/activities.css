@@ -83,7 +83,7 @@
  * Sessions and agent runs: the edge glows amber (--agent) while their activity shows. An inset ring with a soft inner
  * glow on `::after` (follows the morphing radius via `border-radius: inherit`), over a steady halo on `.island`.
  * Done holds steady; needs-input breathes the ring (opacity 1 → 0.5 → 1 over 2 s, ease-in-out).
- * Opacity only, so the loop stays on the compositor; absent unless `data-claude` is set.
+ * Opacity only, so the loop stays on the compositor; absent unless `data-agent` is set.
  */
 .island::after {
   content: "";
@@ -98,19 +98,19 @@
   transition: opacity 250ms ease-in;
 }
 
-.island[data-claude]::after {
+.island[data-agent]::after {
   opacity: 1;
   transition: opacity 400ms ease-out;
 }
 
 /* edge-in fades the ring in (it's listed last, so it wins while it runs); then the breathing takes over. */
-.island[data-claude="needsInput"]::after {
+.island[data-agent="needsInput"]::after {
   animation:
     edge-breathe 2000ms ease-in-out infinite,
     edge-in 400ms ease-out;
 }
 
-.island[data-claude] {
+.island[data-agent] {
   box-shadow:
     0 0 0 1px rgba(var(--agent-rgb), 0.2),
     0 0 22px rgba(var(--agent-rgb), 0.28),
@@ -134,12 +134,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .island[data-claude="needsInput"]::after {
+  .island[data-agent="needsInput"]::after {
     animation: none;
   }
 }
 
-.activity--claude {
+.activity--session {
   width: 100%;
   border: 0;
   background: transparent;
@@ -148,36 +148,36 @@
   transition: background-color 120ms ease;
 }
 
-.activity--claude:hover {
+.activity--session:hover {
   background: rgba(255, 255, 255, 0.05);
 }
 
-.activity--claude:active {
+.activity--session:active {
   background: var(--tile-hover);
 }
 
 /*
  * One row: mark · project · status, then the state's mark at the right end. The name gives way (ellipsis) before the
- * status or the mark. The status slides out of a clip right after the name (Framer, `claudeStatusIn`).
+ * status or the mark. The status slides out of a clip right after the name (Framer, `sessionStatusIn`).
  */
-.claude-activity__line {
+.session-activity__line {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-family: var(--font-claude);
+  font-family: var(--font-agent);
 }
 
 /* Cascadia's 600 reads heavy next to Segoe; 500 matches the weight of the other activity titles. */
-.claude-activity__line .activity__title {
+.session-activity__line .activity__title {
   flex: 0 1 auto;
   font-size: 13.5px;
   font-weight: 500;
 }
 
 /* The clip reaches 2 px left so Cascadia's edge-to-edge glyphs (the T of "Turn") aren't shaved. */
-.claude-activity__status {
+.session-activity__status {
   flex: none;
   overflow: hidden;
   padding-left: 2px;
@@ -187,12 +187,12 @@
   color: var(--agent-status);
 }
 
-.claude-activity__status > span {
+.session-activity__status > span {
   display: inline-block;
 }
 
 /* A fixed 22 px icon box so the dots and the check share one spot and the row never shifts. */
-.claude-activity__end {
+.session-activity__end {
   flex: none;
   width: 22px;
   height: 22px;
@@ -201,33 +201,33 @@
   color: var(--agent);
 }
 
-.claude-activity__end > * {
+.session-activity__end > * {
   grid-area: 1 / 1;
 }
 
 /* Waiting: three dots brightening in turn, 1.4 s per cycle. Only rendered while needs-input shows. */
-.claude-dots {
+.session-dots {
   display: flex;
   gap: 3px;
 }
 
-.claude-dots > span {
+.session-dots > span {
   width: 4px;
   height: 4px;
   border-radius: 50%;
   background: currentColor;
-  animation: claude-dot 1400ms ease-in-out infinite both;
+  animation: session-dot 1400ms ease-in-out infinite both;
 }
 
-.claude-dots > span:nth-child(2) {
+.session-dots > span:nth-child(2) {
   animation-delay: 200ms;
 }
 
-.claude-dots > span:nth-child(3) {
+.session-dots > span:nth-child(3) {
   animation-delay: 400ms;
 }
 
-@keyframes claude-dot {
+@keyframes session-dot {
   0%,
   70%,
   100% {
@@ -239,7 +239,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .claude-dots > span {
+  .session-dots > span {
     animation: none;
     opacity: 0.75;
   }
@@ -340,7 +340,7 @@
 /*
  * Agent approval: three compact lines. mark · project · tool · risk; the command (Claude font, one line) in a quiet
  * well that opens the command window; then the choices, aligned to the project column. No motion of its own: the
- * island morphs to its height and the amber edge breathes (`data-claude="needsInput"`).
+ * island morphs to its height and the amber edge breathes (`data-agent="needsInput"`).
  */
 .activity--approval {
   height: auto;
@@ -362,7 +362,7 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-family: var(--font-claude);
+  font-family: var(--font-agent);
 }
 
 .approval__title .activity__title {
@@ -479,7 +479,7 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: var(--font-claude);
+  font-family: var(--font-agent);
   font-size: 12px;
   color: rgba(245, 245, 247, 0.9);
 }
@@ -537,7 +537,7 @@
   overflow: hidden;
   white-space: normal;
   overflow-wrap: anywhere;
-  font-family: var(--font-claude);
+  font-family: var(--font-agent);
   font-size: 12px;
   line-height: 17px;
   color: rgba(245, 245, 247, 0.92);
@@ -575,7 +575,7 @@
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.08);
   color: var(--island-fg);
-  font-family: var(--font-claude);
+  font-family: var(--font-agent);
   font-size: 11.5px;
   cursor: pointer;
   transition:
@@ -662,7 +662,7 @@
 }
 
 /* The project keeps up to 60 % of the line; the step gives way (ellipsis) first. */
-.activity--acting .claude-activity__line .activity__title {
+.activity--acting .session-activity__line .activity__title {
   flex: none;
   max-width: 60%;
 }

@@ -16,16 +16,16 @@ export const islandSpring: Transition = { type: "spring", stiffness: 420, dampin
 export const contentFade: Transition = { duration: 0.16, ease: "easeOut" };
 
 /** Claude activities: "Done"/"Stopped" slides out from behind the project name (ease-out quint). */
-export const claudeStatusIn: Transition = { duration: 0.32, ease: [0.22, 1, 0.36, 1] };
+export const sessionStatusIn: Transition = { duration: 0.32, ease: [0.22, 1, 0.36, 1] };
 
 /** Claude activities: the check draws at the right end, a beat after the status text starts. */
-export const claudeCheckDraw: Transition = {
+export const sessionCheckDraw: Transition = {
   pathLength: { duration: 0.36, delay: 0.12, ease: [0.33, 1, 0.68, 1] },
   opacity: { duration: 0.08, delay: 0.12 },
 };
 
 /** Claude activities: the waiting dots fade out (faster than things come in) when needs-input turns into done. */
-export const claudeDotsOut: Transition = { duration: 0.12, ease: "easeIn" };
+export const sessionDotsOut: Transition = { duration: 0.12, ease: "easeIn" };
 
 /** Agent acting: the hint line crossfades in place when waiting turns into acting (the row itself stays). */
 export const actingHintIn: Transition = { duration: 0.2, ease: "easeOut" };

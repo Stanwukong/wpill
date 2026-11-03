@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { AgentApprovalActivity, AgentRun } from "../../lib/types";
-import { StepLabel } from "../claude/StepLabel";
-import { WorkingIndicator } from "../claude/WorkingGlyphs";
+import { StepLabel } from "../sessions/StepLabel";
+import { WorkingIndicator } from "../sessions/WorkingGlyphs";
 import { ClockGlyph, RunDot, StopGlyph } from "./AgentGlyphs";
 import { ago, runLabel } from "./labels";
 import { ModeChip } from "./ModeChip";
@@ -9,7 +9,7 @@ import { decide, isLive, openRun, stopRun } from "./useAgentRuns";
 import "./agent.css";
 
 /**
- * Agent runs as rows of the panel's Claude Code list (`<li>`s; `ClaudeSection` owns the list). A row opens the
+ * Agent runs as rows of the panel's Claude Code list (`<li>`s; `AgentsSection` owns the list). A row opens the
  * command window on its run; its mode chip cycles the permission mode (2.8e); Stop ends a live run. Pending approvals sit under their run: the panel is where they
  * are answered while the island is expanded.
  */
@@ -29,13 +29,13 @@ function AgentRunItem({ run }: { run: AgentRun }) {
     <>
       <li>
         <div
-          className="claude-row agent-row"
+          className="session-row agent-row"
           data-status={run.status}
           role="button"
           title={run.prompt}
           onClick={() => openRun(run.runId)}
         >
-          <span className="claude-row__mark">
+          <span className="session-row__mark">
             {run.status === "working" || run.status === "starting" ? <WorkingIndicator small /> : <RunDot status={run.status} />}
           </span>
           <span className="agent-row__project">{run.routine?.name ?? run.project}</span>
@@ -62,7 +62,7 @@ function AgentRunItem({ run }: { run: AgentRun }) {
               <StopGlyph />
             </button>
           ) : (
-            <span className="claude-row__time">{ago(run.updatedAtMs)}</span>
+            <span className="session-row__time">{ago(run.updatedAtMs)}</span>
           )}
         </div>
       </li>

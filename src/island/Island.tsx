@@ -8,10 +8,10 @@ import { AppsList } from "../features/apps/AppsList";
 import { CalendarMark } from "../features/calendar/CalendarMark";
 import { CalendarSection } from "../features/calendar/CalendarSection";
 import { useCalendar } from "../features/calendar/useCalendar";
-import { latestStep, StepLabel } from "../features/claude/StepLabel";
-import { WorkingIndicator } from "../features/claude/WorkingGlyphs";
-import { ClaudeSection } from "../features/claude/ClaudeSection";
-import { useClaudeSessions } from "../features/claude/useClaudeSessions";
+import { latestStep, StepLabel } from "../features/sessions/StepLabel";
+import { WorkingIndicator } from "../features/sessions/WorkingGlyphs";
+import { AgentsSection } from "../features/sessions/AgentsSection";
+import { useSessions } from "../features/sessions/useSessions";
 import { useArtTheme } from "../features/media/artTheme";
 import { MediaCard } from "../features/media/MediaCard";
 import { Equalizer, PillArt } from "../features/media/PillMedia";
@@ -20,7 +20,7 @@ import { Clock } from "./Clock";
 import { ACTIVITY_RADIUS, contentFade, islandSpring, PANEL_RADIUS, PILL_RADIUS } from "./motion";
 import { useIslandState } from "./useIslandState";
 import { usePanelSizeReporter } from "./usePanelSizeReporter";
-import type { ActivityPayload, AgentRun, ClaudeSession } from "../lib/types";
+import type { ActivityPayload, AgentRun, AgentSession } from "../lib/types";
 import "./island.css";
 
 const RADIUS = { pill: PILL_RADIUS, activity: ACTIVITY_RADIUS, panel: PANEL_RADIUS } as const;
@@ -31,33 +31,32 @@ export function Island() {
   // Drives the orbiting charge ring on the island's edge (features/activities/activities.css).
   const charging = activity?.kind === "power" && activity.payload.event === "pluggedIn";
   // Drives the amber agent edge (activities.css): steady when done or acting, breathing while it needs the user.
-  const claude =
-    activity?.kind === "claudeDone" || activity?.kind === "agentFinished" || activity?.kind === "agentActing"
+  const agentEdge =    activity?.kind === "sessionDone" || activity?.kind === "agentFinished" || activity?.kind === "agentActing"
       ? "done"
-      : activity?.kind === "claudeNeedsInput" ||
-          activity?.kind === "claudeApproval" ||
+      : activity?.kind === "sessionNeedsInput" ||
+          activity?.kind === "sessionApproval" ||
           activity?.kind === "agentApproval"
         ? "needsInput"
         : undefined;
   // An approval with a diff or command (2.8b), or a question with long options (2.8c), needs a wider card; the layout
   // spring morphs to it like any shape change.
   const wide =
-    (activity?.kind === "agentApproval" || activity?.kind === "claudeApproval") &&
+    (activity?.kind === "agentApproval" || activity?.kind === "sessionApproval") &&
     (activity.payload.preview !== null ||
       (activity.payload.interaction !== null && questionNeedsRoom(activity.payload.interaction)));
   const ref = useRef<HTMLDivElement>(null);
   usePanelSizeReporter(ref, mode === "pill" ? null : mode);
   const media = useMedia();
-  const { sessions: claudeSessions, limits: claudeLimits } = useClaudeSessions();
+  const { sessions: agentSessions, limits: usageLimits } = useSessions();
   const agentRuns = useAgentRuns();
   const calendar = useCalendar();
   const calendarListed =
     calendar.connected && (calendar.upcoming.events.length > 0 || calendar.upcoming.tasks.length > 0);
-  const workingSessions = claudeSessions.filter((s) => s.status === "working");
+  const workingSessions = agentSessions.filter((s) => s.status === "working");
   const liveRuns = agentRuns.filter((r) => isLive(r.status));
-  const claudeWorking = workingSessions.length > 0 || liveRuns.length > 0;
+  const agentWorking = workingSessions.length > 0 || liveRuns.length > 0;
   // The pill's step line (2.8d): whichever working session or live run changed last and has a step.
-  const pillStep = latestStep<ClaudeSession | AgentRun>([...workingSessions, ...liveRuns]);
+  const pillStep = latestStep<AgentSession | AgentRun>([...workingSessions, ...liveRuns]);
   // Computed at render (no timer): the panel remounts on every expand and re-renders on run events.
   const panelRuns = expanded ? recentRuns(agentRuns) : [];
   const nowPlaying = media.active?.status === "playing" ? media.active : null;
@@ -83,7 +82,7 @@ export function Island() {
         data-expanded={expanded}
         data-mode={mode}
         data-charging={charging}
-        data-claude={claude}
+        data-agent={agentEdge}
         data-wide={wide}
         transition={islandSpring}
         style={{ borderRadius: RADIUS[mode] }}
@@ -121,9 +120,9 @@ export function Island() {
               {/* One scroller under the fixed clock and media card; each section keeps its natural height. */}
               <div className="island__scroll">
                 {calendarListed && <CalendarSection upcoming={calendar.upcoming} />}
-                <ClaudeSection
-                  sessions={claudeSessions}
-                  limits={claudeLimits}
+                <AgentsSection
+                  sessions={agentSessions}
+                  limits={usageLimits}
                   agent={panelRuns.length > 0 ? <AgentRunItems runs={panelRuns} /> : null}
                 />
                 <AppsList />
@@ -140,7 +139,7 @@ export function Island() {
               transition={contentFade}
             >
               {nowPlaying && <PillArt session={nowPlaying} />}
-              {claudeWorking && <WorkingIndicator />}
+              {agentWorking && <WorkingIndicator />}
               {pillStep?.step && <StepLabel className="pill-step" text={pillStep.step} todos={pillStep.todos} />}
               <Clock variant="pill" />
               {calendar.connected && calendar.upcoming.pending && <CalendarMark className="pill-calendar" />}
@@ -154,11 +153,11 @@ export function Island() {
 }
 
 function activityKey(activity: ActivityPayload): string {
-  if (activity.kind === "claudeDone" || activity.kind === "claudeNeedsInput") {
-    return `activity-claude-${activity.payload.sessionId}`;
+  if (activity.kind === "sessionDone" || activity.kind === "sessionNeedsInput") {
+    return `activity-session-${activity.payload.sessionId}`;
   }
   // Each approval is its own card (the next one crossfades in); the finished notice never morphs out of one.
-  if (activity.kind === "claudeApproval") return `activity-claude-approval-${activity.payload.requestId}`;
+  if (activity.kind === "sessionApproval") return `activity-session-approval-${activity.payload.requestId}`;
   if (activity.kind === "agentApproval") return `activity-agent-approval-${activity.payload.requestId}`;
   // Per run, so waiting → acting (same activity) updates in place.
   if (activity.kind === "agentActing") return `activity-agent-acting-${activity.payload.runId}`;

@@ -112,7 +112,7 @@ pub fn step_of(tool: &str, input: &Value, cwd: &str) -> (String, Option<crate::i
 }
 
 /// A terminal session's request (2.8b): the card's and the command window's diff or command. `cut` names the input
-/// fields shortened on the way (`claude::ask`). For a `Write`, the file it replaces is read here (≤256 KB).
+/// fields shortened on the way (`sessions::ask`). For a `Write`, the file it replaces is read here (≤256 KB).
 pub fn preview_tool(
     tool: &str,
     input: &Value,
@@ -2374,10 +2374,12 @@ pub fn debug_command(app: &AppHandle, args: &[String]) {
             )
             .map(|()| "decided".into()),
             // A terminal session's permission request (2.8a); its id is in the `permission request <id>` log line.
-            "session-decide" => {
-                crate::claude::decide_for_test(&app, arg(1).parse().unwrap_or(0), arg(2) == "allow")
-                    .map(|()| "decided".into())
-            }
+            "session-decide" => crate::sessions::decide_for_test(
+                &app,
+                arg(1).parse().unwrap_or(0),
+                arg(2) == "allow",
+            )
+            .map(|()| "decided".into()),
             "send" => agent_send(app.clone(), agents, arg(1), arg(2))
                 .await
                 .map(|()| "sent".into()),

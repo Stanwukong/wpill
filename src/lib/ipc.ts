@@ -18,10 +18,10 @@ import type {
   ApprovalPreview,
   CalendarUpcoming,
   GoogleState,
-  ClaudeAsks,
+  SessionAsks,
   QuestionAnswer,
   ClaudeHooksStatus,
-  ClaudeSessions,
+  AgentSessions,
   CommandFocus,
   IslandState,
   MediaState,
@@ -38,12 +38,12 @@ const EVENTS = {
   mediaState: "media:state",
   activityShow: "activity:show",
   activityHide: "activity:hide",
-  claudeSessions: "claude:sessions",
+  agentSessions: "sessions:changed",
   agentRuns: "agent:runs",
   agentOutput: "agent:output",
   commandFocusRun: "command:focus-run",
   commandFocusAsk: "command:focus-ask",
-  claudeAsks: "claude:asks",
+  sessionAsks: "sessions:asks",
   routinesChanged: "routines:changed",
   googleState: "google:state",
   calendarUpcoming: "calendar:upcoming",
@@ -69,20 +69,20 @@ export const commands = {
   /** Call while the mouse button is still down; resolves when the drop or cancel is done. */
   activityDragScreenshot: (id: number) => invoke<void>("activity_drag_screenshot", { id }),
   activityOpenScreenshot: (id: number) => invoke<void>("activity_open_screenshot", { id }),
-  getClaudeSessions: () => invoke<ClaudeSessions>("get_claude_sessions"),
+  getSessions: () => invoke<AgentSessions>("get_sessions"),
   /** Brings the session's terminal or editor to the front and acknowledges its activity. */
-  claudeFocusSession: (sessionId: number) => invoke<void>("claude_focus_session", { sessionId }),
+  sessionFocus: (sessionId: number) => invoke<void>("session_focus", { sessionId }),
   /** Answers a terminal session's permission request (2.8a). Errors `agentApprovalGone` once it's no longer held. */
-  claudeDecide: (requestId: number, answer: "allow" | "deny") => invoke<void>("claude_decide", { requestId, answer }),
+  sessionDecide: (requestId: number, answer: "allow" | "deny") => invoke<void>("session_decide", { requestId, answer }),
   /** Session requests the island holds (2.8b), for the command window. */
-  claudeAsks: () => invoke<ClaudeAsks>("claude_asks"),
+  sessionAsks: () => invoke<SessionAsks>("session_asks"),
   /** A held session request's whole diff or command; `null` once it's answered or handed back. */
-  claudeAskPreview: (requestId: number) => invoke<ApprovalPreview | null>("claude_ask_preview", { requestId }),
+  sessionAskPreview: (requestId: number) => invoke<ApprovalPreview | null>("session_ask_preview", { requestId }),
   /** One question of a held session question (2.8c). Errors `agentInvalid` (not an option), `agentApprovalGone`. */
-  claudeAnswer: (requestId: number, answer: QuestionAnswer) => invoke<void>("claude_answer", { requestId, answer }),
+  sessionAnswer: (requestId: number, answer: QuestionAnswer) => invoke<void>("session_answer", { requestId, answer }),
   /** Approve a held session plan, or send it back with feedback (required then). */
-  claudePlan: (requestId: number, approve: boolean, feedback?: string) =>
-    invoke<void>("claude_plan", { requestId, approve, feedback: feedback ?? null }),
+  sessionPlan: (requestId: number, approve: boolean, feedback?: string) =>
+    invoke<void>("session_plan", { requestId, approve, feedback: feedback ?? null }),
   claudeHooksStatus: () => invoke<ClaudeHooksStatus>("claude_hooks_status"),
   claudeHooksInstall: () => invoke<void>("claude_hooks_install"),
   claudeHooksRemove: () => invoke<void>("claude_hooks_remove"),
@@ -151,8 +151,8 @@ export const on = {
     listen<ActivityPayload>(EVENTS.activityShow, (e) => cb(e.payload)),
   activityHide: (cb: (payload: ActivityHidePayload) => void): Promise<UnlistenFn> =>
     listen<ActivityHidePayload>(EVENTS.activityHide, (e) => cb(e.payload)),
-  claudeSessions: (cb: (payload: ClaudeSessions) => void): Promise<UnlistenFn> =>
-    listen<ClaudeSessions>(EVENTS.claudeSessions, (e) => cb(e.payload)),
+  agentSessions: (cb: (payload: AgentSessions) => void): Promise<UnlistenFn> =>
+    listen<AgentSessions>(EVENTS.agentSessions, (e) => cb(e.payload)),
   agentRuns: (cb: (payload: AgentRuns) => void): Promise<UnlistenFn> =>
     listen<AgentRuns>(EVENTS.agentRuns, (e) => cb(e.payload)),
   /** Delivered to the command window only. */
@@ -164,8 +164,8 @@ export const on = {
   /** Command window only: which held session request to show. */
   commandFocusAsk: (cb: (requestId: number) => void): Promise<UnlistenFn> =>
     listen<number>(EVENTS.commandFocusAsk, (e) => cb(e.payload)),
-  claudeAsks: (cb: (payload: ClaudeAsks) => void): Promise<UnlistenFn> =>
-    listen<ClaudeAsks>(EVENTS.claudeAsks, (e) => cb(e.payload)),
+  sessionAsks: (cb: (payload: SessionAsks) => void): Promise<UnlistenFn> =>
+    listen<SessionAsks>(EVENTS.sessionAsks, (e) => cb(e.payload)),
   routinesChanged: (cb: (payload: Routines) => void): Promise<UnlistenFn> =>
     listen<Routines>(EVENTS.routinesChanged, (e) => cb(e.payload)),
   googleState: (cb: (payload: GoogleState) => void): Promise<UnlistenFn> =>

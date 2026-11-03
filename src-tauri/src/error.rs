@@ -19,9 +19,9 @@ pub enum AppError {
     #[error("That activity has ended.")]
     ActivityGone,
     #[error("That Claude Code session has ended.")]
-    ClaudeSessionGone,
+    SessionGone,
     #[error("Couldn't find the window that session runs in.")]
-    ClaudeWindowNotFound,
+    SessionWindowNotFound,
     #[error("{0}")]
     ClaudeSettings(String),
     #[error("That agent run is gone.")]
@@ -58,8 +58,8 @@ impl AppError {
             Self::MediaSessionGone => "mediaSessionGone",
             Self::MediaRejected => "mediaRejected",
             Self::ActivityGone => "activityGone",
-            Self::ClaudeSessionGone => "claudeSessionGone",
-            Self::ClaudeWindowNotFound => "claudeWindowNotFound",
+            Self::SessionGone => "sessionGone",
+            Self::SessionWindowNotFound => "sessionWindowNotFound",
             Self::ClaudeSettings(_) => "claudeSettings",
             Self::AgentRunGone => "agentRunGone",
             Self::AgentApprovalGone => "agentApprovalGone",

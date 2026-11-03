@@ -2,7 +2,7 @@ import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { errorMessage } from "../lib/ipc";
 import type { ApprovalPreview, Interaction, QuestionAnswer, QuestionView } from "../lib/types";
 import { Markdown } from "./Markdown";
-import { useWholePreview } from "./useClaudeAsks";
+import { useWholePreview } from "./useSessionAsks";
 
 type Question = Extract<Interaction, { kind: "question" }>;
 

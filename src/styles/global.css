@@ -54,7 +54,7 @@
   --agent-ink: #0f0f0f;
   /* Claude content (projects, statuses, commands, transcripts): Claude Code lives in a terminal. The working wave and
      the mark are SVG (WorkingGlyphs.tsx); headings and chrome stay Segoe. */
-  --font-claude: "Cascadia Mono", "Cascadia Code", Consolas, "Segoe UI Variable Text", monospace;
+  --font-agent: "Cascadia Mono", "Cascadia Code", Consolas, "Segoe UI Variable Text", monospace;
   --agent-status: rgba(245, 245, 247, 0.48);
 
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;

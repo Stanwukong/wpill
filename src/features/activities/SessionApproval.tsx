@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { commands } from "../../lib/ipc";
-import type { ClaudeApprovalActivity } from "../../lib/types";
+import type { SessionApprovalActivity } from "../../lib/types";
 import { changePreview } from "../agent/PreviewBlock";
-import { decideClaude, focusClaudeSession } from "../claude/useClaudeSessions";
+import { decideSession, focusSession } from "../sessions/useSessions";
 import { ApprovalCard, type ApprovalChoice } from "./AgentApproval";
 
 /**
@@ -11,15 +11,15 @@ import { ApprovalCard, type ApprovalChoice } from "./AgentApproval";
  * the request in the command window; the project title focuses the session's window when Cay knows it.
  * Sticky: Rust withdraws it when answered here or in the terminal, or when it hands back at 55 s.
  */
-export function ClaudeApproval({ approval }: { approval: ClaudeApprovalActivity }) {
+export function SessionApproval({ approval }: { approval: SessionApprovalActivity }) {
   const { requestId, sessionId, project, tool, summary, risk, preview } = approval;
   const [chosen, setChosen] = useState<ApprovalChoice | null>(null);
 
   const answer = (choice: ApprovalChoice) => {
     if (choice === "run") return;
     setChosen(choice);
-    decideClaude(requestId, choice).catch((err: unknown) => {
-      console.debug("claude decide", err);
+    decideSession(requestId, choice).catch((err: unknown) => {
+      console.debug("session decide", err);
       setChosen(null);
     });
   };
@@ -28,7 +28,7 @@ export function ClaudeApproval({ approval }: { approval: ClaudeApprovalActivity 
     <ApprovalCard
       title={project}
       titleHint="Show session"
-      onTitle={sessionId === null ? undefined : () => focusClaudeSession(sessionId)}
+      onTitle={sessionId === null ? undefined : () => focusSession(sessionId)}
       origin="session"
       tool={tool}
       risk={risk}

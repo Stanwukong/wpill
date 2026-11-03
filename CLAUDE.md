@@ -75,17 +75,19 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
   The activity queue is driven by `hover::logic::Machine` (the `Showing` phase), not by the activity module.
   Sources send `activity::Signal` (`Offer(Activity)` or `Retract(key)`); other features start their threads through
   the same `activity::Watcher` harness (`Activities::sender`/`add_watcher`) so shutdown stops them too.
-  `claude/` (Claude Code via hooks): `forward.rs` = `cay.exe hook` (run from `main.rs` before Tauri), `statusline.rs` =
-  `cay.exe statusline` (2.8f: usage limits to the hook pipe, then the user's own status line; the `claude` block of Cay's
-  `settings.json`), `pipe.rs` =
-  per-user pipe + server loop, `process.rs` = ancestor chain/liveness, `protocol.rs` + `sessions.rs` + `hooks.rs`
-  (settings.json merge) = pure and unit-tested, `focus.rs` = which window to bring forward, `mod.rs` = listener,
-  commands and the tray's Connect/Disconnect dialog. It ignores hooks from sessions Cay itself started (`is_self`).
+  `sessions/` (terminal sessions of coding agents via their hooks; `claude/` until 2.9a, D47): `forward.rs` =
+  `cay.exe hook` (run from `main.rs` before Tauri), `pipe.rs` = per-user pipe + server loop, `process.rs` = ancestor
+  chain/liveness, `protocol.rs` + `table.rs` (the session table) = pure and unit-tested, `focus.rs` = which window to
+  bring forward, `mod.rs` = managed `Sessions`, the `session-listener` thread, commands and the tray's Connect/Disconnect
+  dialog. Claude Code's own parts are in `sessions/claude/`: `hooks.rs` (settings.json merge, pure and unit-tested) and
+  `statusline.rs` = `cay.exe statusline` (2.8f: usage limits to the hook pipe, then the user's own status line; the
+  `claude` block of Cay's `settings.json`). The pipe names (`cay-claude-…`) and the hook marker kept their names, so
+  installed entries keep working. It ignores hooks from sessions Cay itself started (`is_self`).
   Permission requests (2.8a): `ask.rs` (pure: the held request, the reply, the hook output) and `asks.rs` (managed
-  `Asks`, the `claude-asks` pipe server, one thread per held request, `claudeApproval` cards). Questions and plans
+  `Asks`, the `session-asks` pipe server, one thread per held request, `sessionApproval` cards). Questions and plans
   (2.8c): `agent/interact.rs` (pure: questions, answers, `updatedInput`, plan titles), shared by sessions and runs. They're never allowed bare:
   only `Answers` / `ApprovePlan` allow them, built from the input as Claude Code sent it.
-  `duplex.rs` = the duplex, multi-instance pipe shared by the agent pipe (`agent/pipe.rs` names it) and `claude/asks.rs`.
+  `duplex.rs` = the duplex, multi-instance pipe shared by the agent pipe (`agent/pipe.rs` names it) and `sessions/asks.rs`.
   `agent/` (Phase 2.7, headless Claude Code runs): `mod.rs` = managed `Agents`, pipe server + connection threads,
   approval flow, commands; `run.rs` = command line + spawn (suspended, `CREATE_NO_WINDOW`, Job Object via `job.rs`);
   `bridge.rs` = `cay.exe mcp` (run from `main.rs`, relays stdio JSON-RPC ↔ `pipe.rs`); `hotkey.rs`, `folder.rs`
@@ -132,14 +134,14 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
   `features/calendar/` (Phase 6b: `useCalendar` lives in `Island`; `CalendarMark` = Cay's own line calendar (D43: not
   Google's icon, and never a look-alike of it); `CalendarSoon` activity, `CalendarSection` in the panel),
   `features/agent/PreviewBlock.tsx` renders an `ApprovalPreview` exactly as Rust built it (island and command window),
-  `features/activities/` (`ActivityView` per kind, `ScreenshotActivity` with the drag/click gesture, `ClaudeActivity`,
-  inline SVG `icons`), `features/claude/` (`useClaudeSessions` lives in `Island`, `WorkingGlyphs.tsx` =
+  `features/activities/` (`ActivityView` per kind, `ScreenshotActivity` with the drag/click gesture, `SessionActivity`,
+  inline SVG `icons`), `features/sessions/` (`useSessions` lives in `Island`, `WorkingGlyphs.tsx` =
   `WorkingIndicator` (the amber wave while something works) and `AgentMark` (the wave at rest), `StepLabel` (the
-  live step line and `n/m`, 2.8d), the panel's `ClaudeSection`; `--agent` (amber, with `--agent-rgb`/`-deep`/`-ink`) is a fixed token like `--charge`, mirrored by
+  live step line and `n/m`, 2.8d), the panel's `AgentsSection`; `--agent` (amber, with `--agent-rgb`/`-deep`/`-ink`) is a fixed token like `--charge`, mirrored by
   `COLOR` in `window/glow.rs`; never reintroduce Claude Code's spinner, `✻` or orange (D30); Claude content uses
-  `--font-claude`, Cascadia Mono). The equaliser uses `--media-accent`: the art's accent, or soft white with no art, `features/agent/` (`useAgentRuns` lives in `Island`, panel rows `AgentRunItems` in ClaudeSection's
+  `--font-agent`, Cascadia Mono). The equaliser uses `--media-accent`: the art's accent, or soft white with no art, `features/agent/` (`useAgentRuns` lives in `Island`, panel rows `AgentRunItems` in AgentsSection's
   `agent` slot; the `agentApproval` view is `features/activities/AgentApproval.tsx`), `command/` (the command window's
-  own page: new task form, run list, transcript, follow-ups; `SessionAskView` + `useClaudeAsks` for terminal sessions'
+  own page: new task form, run list, transcript, follow-ups; `SessionAskView` + `useSessionAsks` for terminal sessions'
   held requests (2.8b); routines: `RoutineList`, `RoutineEditor`, `TaskFields`
   shared with `NewTask`, `useRoutines`, `routineLabels`).
   The island has three shapes (`data-mode`: `pill` | `activity` | `panel`), all driven by Rust events.

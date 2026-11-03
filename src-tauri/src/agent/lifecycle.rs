@@ -65,7 +65,7 @@ impl Run {
     pub fn new(id: String, cwd: String, model: Option<String>, at_ms: i64) -> Self {
         Self {
             id,
-            project: crate::claude::project_name(&cwd),
+            project: crate::sessions::project_name(&cwd),
             cwd,
             prompt: String::new(),
             model,

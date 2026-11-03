@@ -1,19 +1,19 @@
 import { useState } from "react";
 import { commands, errorMessage } from "../lib/ipc";
-import type { ClaudeApprovalActivity } from "../lib/types";
+import type { SessionApprovalActivity } from "../lib/types";
 import { RISK_LABEL } from "../features/agent/labels";
 import { changePreview, PreviewBlock } from "../features/agent/PreviewBlock";
-import { decideClaude, focusClaudeSession } from "../features/claude/useClaudeSessions";
-import { AgentMark } from "../features/claude/WorkingGlyphs";
+import { decideSession, focusSession } from "../features/sessions/useSessions";
+import { AgentMark } from "../features/sessions/WorkingGlyphs";
 import { PlanView, QuestionForm } from "./InteractionViews";
-import { useWholePreview } from "./useClaudeAsks";
+import { useWholePreview } from "./useSessionAsks";
 
 /**
  * A terminal session's held request (2.8b): who asks, the one line, the whole diff or command, Deny / Allow; or its
  * question or plan (2.8c, `QuestionForm` / `PlanView`). Once it leaves Rust's list (answered here or in the terminal,
  * or handed back at 55 s) the view stays on what was asked and the buttons give way to one quiet line. Keyed by request, so the last-seen copy never crosses requests.
  */
-export function SessionAskView({ ask, loaded }: { ask: ClaudeApprovalActivity | undefined; loaded: boolean }) {
+export function SessionAskView({ ask, loaded }: { ask: SessionApprovalActivity | undefined; loaded: boolean }) {
   // The last copy Rust listed: kept so the view can still say what was asked after it's gone.
   const [known, setKnown] = useState(ask);
   if (ask && ask !== known) setKnown(ask);
@@ -30,14 +30,14 @@ export function SessionAskView({ ask, loaded }: { ask: ClaudeApprovalActivity | 
   return <AskBody ask={known} waiting={waiting} />;
 }
 
-function AskBody({ ask, waiting }: { ask: ClaudeApprovalActivity; waiting: boolean }) {
+function AskBody({ ask, waiting }: { ask: SessionApprovalActivity; waiting: boolean }) {
   const { requestId, sessionId, project, tool, summary, risk } = ask;
-  const preview = changePreview(useWholePreview(requestId, ask.preview, commands.claudeAskPreview));
+  const preview = changePreview(useWholePreview(requestId, ask.preview, commands.sessionAskPreview));
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const showSession = sessionId !== null && (
-    <button className="agent-link" onClick={() => focusClaudeSession(sessionId)}>
+    <button className="agent-link" onClick={() => focusSession(sessionId)}>
       Show session
     </button>
   );
@@ -45,7 +45,7 @@ function AskBody({ ask, waiting }: { ask: ClaudeApprovalActivity; waiting: boole
   const answer = (choice: "allow" | "deny") => {
     setSent(true);
     setError(null);
-    decideClaude(requestId, choice).catch((err: unknown) => {
+    decideSession(requestId, choice).catch((err: unknown) => {
       setSent(false);
       setError(errorMessage(err));
     });
@@ -73,18 +73,18 @@ function AskBody({ ask, waiting }: { ask: ClaudeApprovalActivity; waiting: boole
               interaction={ask.interaction}
               waiting={waiting}
               lead={showSession}
-              onAnswer={(answer) => commands.claudeAnswer(requestId, answer)}
-              onSkip={() => decideClaude(requestId, "deny")}
+              onAnswer={(answer) => commands.sessionAnswer(requestId, answer)}
+              onSkip={() => decideSession(requestId, "deny")}
             />
           ) : (
             <PlanView
               requestId={requestId}
-              fetch={commands.claudeAskPreview}
+              fetch={commands.sessionAskPreview}
               cutNote="Cut on the way to Cay; the terminal shows it whole."
               waiting={waiting}
               lead={showSession}
-              onPlan={(approve, feedback) => commands.claudePlan(requestId, approve, feedback)}
-              onReject={() => decideClaude(requestId, "deny")}
+              onPlan={(approve, feedback) => commands.sessionPlan(requestId, approve, feedback)}
+              onReject={() => decideSession(requestId, "deny")}
             />
           )}
         </div>

@@ -7,7 +7,7 @@
 //! - The `TopBar` startup entry becomes `Cay` (`autostart::migrate_from_topbar`).
 //!
 //! Claude Code hooks aren't touched here: `~/.claude/settings.json` is only written when you click Connect. Old
-//! TopBar entries don't count as connected, so the tray offers Connect, which replaces them (`claude::hooks`).
+//! TopBar entries don't count as connected, so the tray offers Connect, which replaces them (`sessions::claude::hooks`).
 
 use std::fs;
 use std::io;

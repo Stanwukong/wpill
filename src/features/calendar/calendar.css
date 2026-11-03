@@ -116,7 +116,7 @@
   color: var(--danger);
 }
 
-/* Panel section: ClaudeSection's density (30 px rows, 12 px uppercase heading), at its natural height in the panel's
+/* Panel section: AgentsSection's density (30 px rows, 12 px uppercase heading), at its natural height in the panel's
    scroller (island.css): at most three events and one tasks line, so it never needs a scroller of its own. */
 .calendar {
   margin-bottom: 14px;

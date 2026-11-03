@@ -1,5 +1,5 @@
 import type { TodoCount } from "../../lib/types";
-import "./claude.css";
+import "./sessions.css";
 
 /** Anything that reports a live step (sessions and agent runs, 2.8d). */
 interface Stepping {
@@ -19,7 +19,7 @@ export function latestStep<T extends Stepping>(items: T[]): T | null {
 
 /**
  * What a session or run is doing ("Edit · src/hover/logic.rs"), ellipsized, plus its to-do progress ("3/7"). The
- * text is keyed, so a new step fades in over the old one (claude.css); the count just swaps (tabular).
+ * text is keyed, so a new step fades in over the old one (sessions.css); the count just swaps (tabular).
  */
 export function StepLabel({ text, todos, className }: { text: string; todos: TodoCount | null; className?: string }) {
   return (

@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
-import type { ClaudeSession, ClaudeStatus, UsageLimits } from "../../lib/types";
+import type { AgentSession, SessionStatus, UsageLimits } from "../../lib/types";
 import { SessionModeTag } from "../agent/ModeChip";
 import { StepLabel } from "./StepLabel";
 import { hasLimits, UsageLine } from "./UsageLine";
 import { WorkingIndicator } from "./WorkingGlyphs";
-import { focusClaudeSession } from "./useClaudeSessions";
-import "./claude.css";
+import { focusSession } from "./useSessions";
+import "./sessions.css";
 
-const STATUS: Record<ClaudeStatus, string> = {
+const STATUS: Record<SessionStatus, string> = {
   working: "Working",
   needsInput: "Needs your input",
   done: "Done",
@@ -30,40 +30,40 @@ function ago(updatedAtMs: number): string {
  * agent runs' rows (`<li>`s, features/agent), listed first; null when there are none. `limits` (2.8f) shows
  * beside the heading; with no rows the section still shows for a live (not stale) reading, as just the heading line.
  */
-export function ClaudeSection({
+export function AgentsSection({
   sessions,
   agent,
   limits,
 }: {
-  sessions: ClaudeSession[];
+  sessions: AgentSession[];
   agent?: ReactNode;
   limits: UsageLimits | null;
 }) {
   const rows = sessions.length > 0 || !!agent;
   if (!rows && !hasLimits(limits, true)) return null;
   return (
-    <section className="claude" aria-label="Claude Code">
-      <div className="claude__head">
-        <h2 className="claude__heading">Claude Code</h2>
+    <section className="agents" aria-label="Claude Code">
+      <div className="agents__head">
+        <h2 className="agents__heading">Claude Code</h2>
         {hasLimits(limits) && <UsageLine limits={limits} />}
       </div>
       {rows && (
-      <ul className="claude__list">
+      <ul className="agents__list">
         {agent}
         {sessions.map((s) => (
           <li key={s.sessionId}>
-            <button className="claude-row" data-status={s.status} onClick={() => focusClaudeSession(s.sessionId)}>
-              <span className="claude-row__mark">
-                {s.status === "working" ? <WorkingIndicator small /> : <span className="claude-row__dot" />}
+            <button className="session-row" data-status={s.status} onClick={() => focusSession(s.sessionId)}>
+              <span className="session-row__mark">
+                {s.status === "working" ? <WorkingIndicator small /> : <span className="session-row__dot" />}
               </span>
-              <span className="claude-row__project">{s.project}</span>
+              <span className="session-row__project">{s.project}</span>
               {s.status === "working" && (s.step || s.todos) ? (
-                <StepLabel className="claude-row__status claude-row__step" text={s.step ?? STATUS.working} todos={s.todos} />
+                <StepLabel className="session-row__status session-row__step" text={s.step ?? STATUS.working} todos={s.todos} />
               ) : (
-                <span className="claude-row__status">{STATUS[s.status]}</span>
+                <span className="session-row__status">{STATUS[s.status]}</span>
               )}
               <SessionModeTag mode={s.mode} />
-              <span className="claude-row__time">{ago(s.updatedAtMs)}</span>
+              <span className="session-row__time">{ago(s.updatedAtMs)}</span>
             </button>
           </li>
         ))}

@@ -1,9 +1,9 @@
-import "./claude.css";
+import "./sessions.css";
 
 /**
  * The working wave's two sizes. Each path is a sine one wavelength longer than its window, built from cubic half-waves
  * (controls at 0.4244 of the half-width and 4/3 of the amplitude, which matches the sine's slope and peak). The CSS
- * slides it one wavelength to the right per cycle (claude.css), so it reads as a continuous ripple.
+ * slides it one wavelength to the right per cycle (sessions.css), so it reads as a continuous ripple.
  */
 const WAVES = {
   pill: {

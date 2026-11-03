@@ -1,23 +1,24 @@
 //! Claude Code sessions through Claude Code hooks (CASESTUDY D17, D19).
 //!
 //! `cay.exe hook` (`forward.rs`) runs as the hook command and writes a trimmed message to a per-user
-//! named pipe. The `claude-listener` thread (`pipe.rs`, started through the activity `Watcher` harness)
+//! named pipe. The `session-listener` thread (`pipe.rs`, started through the activity `Watcher` harness)
 //! keeps session state (`sessions.rs`), offers and withdraws activities on the shared activity channel,
-//! and emits `claude:sessions` for the panel. `hooks.rs` installs the hooks from the tray.
+//! and emits `sessions:changed` for the panel. `hooks.rs` installs the hooks from the tray.
 //!
 //! Permission requests (2.8a) have their own pipe: the forwarder holds each one open until you answer it in the
 //! island or it's handed back to the terminal (`ask.rs` on the wire, `asks.rs` in Cay).
 
 mod ask;
 mod asks;
+mod claude;
 mod focus;
 mod forward;
-mod hooks;
 mod pipe;
 mod process;
 mod protocol;
-mod sessions;
-mod statusline;
+mod table;
+
+use claude::{hooks, statusline};
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
@@ -33,15 +34,15 @@ use windows::Win32::UI::WindowsAndMessaging::{
     MB_OKCANCEL, MB_SETFOREGROUND, MB_TOPMOST, MB_YESNOCANCEL, MESSAGEBOX_STYLE,
 };
 
-use crate::activity::{claude_key, Activities, Signal, Watcher};
+use crate::activity::{session_key, Activities, Signal, Watcher};
 use crate::error::{AppError, AppResult};
 use crate::hover::Island;
-use crate::ipc::{events, ClaudeHooksStatus, ClaudeSessionsPayload, UsageLimits};
+use crate::ipc::{events, ClaudeHooksStatus, SessionsPayload, UsageLimits};
 use crate::win32::Handle;
 use crate::{apps, win32, window};
 pub use asks::Asks;
 use protocol::Event;
-use sessions::{Effect, Session, Sessions};
+use table::{Effect, Session, Table};
 
 /// With no client, the listener wakes this often to drop sessions whose process is gone.
 const PRUNE_INTERVAL: Duration = Duration::from_secs(30);
@@ -58,12 +59,12 @@ pub fn forward_statusline() {
 
 /// The island's name for a working folder (its last component, shortened), shared with agent runs.
 pub fn project_name(cwd: &str) -> String {
-    sessions::project(cwd)
+    table::project(cwd)
 }
 
 /// Tauri-managed copy of the listener's sessions and usage limits, for commands.
 #[derive(Default)]
-pub struct Claude(Mutex<Shared>);
+pub struct Sessions(Mutex<Shared>);
 
 #[derive(Default)]
 struct Shared {
@@ -71,7 +72,7 @@ struct Shared {
     limits: Option<UsageLimits>,
 }
 
-impl Claude {
+impl Sessions {
     fn lock(&self) -> MutexGuard<'_, Shared> {
         self.0.lock().unwrap_or_else(|e| e.into_inner())
     }
@@ -81,18 +82,18 @@ impl Claude {
     }
 
     /// Our id for Claude Code's session id, if the listener has seen that session.
-    fn row_of(&self, claude_id: &str) -> Option<u32> {
+    fn row_of(&self, native_id: &str) -> Option<u32> {
         self.lock()
             .sessions
             .iter()
-            .find(|s| s.claude_id() == claude_id)
+            .find(|s| s.native_id() == native_id)
             .map(|s| s.id)
     }
 
-    fn payload(&self) -> ClaudeSessionsPayload {
+    fn payload(&self) -> SessionsPayload {
         let shared = self.lock();
-        ClaudeSessionsPayload {
-            sessions: sessions::snapshot(&shared.sessions),
+        SessionsPayload {
+            sessions: table::snapshot(&shared.sessions),
             limits: shared.limits,
         }
     }
@@ -120,7 +121,7 @@ fn start(app: AppHandle, out: Sender<Signal>) -> AppResult<Watcher> {
     let stop = Arc::new(Handle::event()?);
     let signal = stop.clone();
     Watcher::spawn(
-        "claude-listener",
+        "session-listener",
         move || listen(&app, &out, &server, &stop),
         move || {
             // SAFETY: signals the event both sides hold through the Arc.
@@ -131,7 +132,7 @@ fn start(app: AppHandle, out: Sender<Signal>) -> AppResult<Watcher> {
 
 fn listen(app: &AppHandle, out: &Sender<Signal>, server: &pipe::Server, stop: &Handle) {
     log::info!("listening for Claude Code hooks");
-    let mut sessions = Sessions::default();
+    let mut sessions = Table::default();
     let mut limits: Option<UsageLimits> = None;
     let mut last_prune = Instant::now();
     loop {
@@ -163,11 +164,7 @@ fn listen(app: &AppHandle, out: &Sender<Signal>, server: &pipe::Server, stop: &H
                     }
                 }
                 Some(msg) => {
-                    log::debug!(
-                        "claude hook {:?} ({})",
-                        msg.event,
-                        sessions::project(&msg.cwd)
-                    );
+                    log::debug!("claude hook {:?} ({})", msg.event, table::project(&msg.cwd));
                     let asks = app.state::<Asks>();
                     let held = asks.holds_for(&msg.session);
                     let event = msg.event;
@@ -204,19 +201,19 @@ fn listen(app: &AppHandle, out: &Sender<Signal>, server: &pipe::Server, stop: &H
         for effect in effects {
             let signal = match effect {
                 Effect::Offer(activity) => Signal::Offer(activity),
-                Effect::Retract(id) => Signal::Retract(claude_key(id)),
+                Effect::Retract(id) => Signal::Retract(session_key(id)),
             };
             let _ = out.send(signal);
         }
         if changed {
-            let claude = app.state::<Claude>();
+            let claude = app.state::<Sessions>();
             {
                 let mut shared = claude.lock();
                 shared.sessions = sessions.list().to_vec();
                 shared.limits = limits;
             }
-            if let Err(e) = app.emit(events::CLAUDE_SESSIONS, claude.payload()) {
-                log::warn!("emit {} failed: {e}", events::CLAUDE_SESSIONS);
+            if let Err(e) = app.emit(events::SESSIONS, claude.payload()) {
+                log::warn!("emit {} failed: {e}", events::SESSIONS);
             }
         }
     }
@@ -229,33 +226,31 @@ fn now_ms() -> i64 {
 }
 
 #[tauri::command]
-pub fn get_claude_sessions(claude: State<'_, Claude>) -> ClaudeSessionsPayload {
+pub fn get_sessions(claude: State<'_, Sessions>) -> SessionsPayload {
     claude.payload()
 }
 
 #[tauri::command]
 /// Brings the session's terminal or editor window to the front and acknowledges its activity. Sync, so it
 /// runs on the main thread, which `apps::bring_to_front` needs.
-pub fn claude_focus_session(
+pub fn session_focus(
     app: AppHandle,
-    claude: State<'_, Claude>,
+    claude: State<'_, Sessions>,
     activities: State<'_, Activities>,
     island: State<'_, Island>,
     session_id: u32,
 ) -> AppResult<()> {
-    let session = claude
-        .session(session_id)
-        .ok_or(AppError::ClaudeSessionGone)?;
+    let session = claude.session(session_id).ok_or(AppError::SessionGone)?;
     // Clicking it counts as handling it, even if its window can't be found.
     let _ = activities
         .sender()
-        .send(Signal::Retract(claude_key(session_id)));
+        .send(Signal::Retract(session_key(session_id)));
     let own = app
         .get_webview_window(window::LABEL)
         .ok_or(AppError::NoIslandWindow)?
         .hwnd()?;
-    let hwnd =
-        focus::find(&session.chain, &session.project, own).ok_or(AppError::ClaudeWindowNotFound)?;
+    let hwnd = focus::find(&session.chain, &session.project, own)
+        .ok_or(AppError::SessionWindowNotFound)?;
     apps::bring_to_front(win32::from_raw(hwnd))?;
     island.request_collapse();
     Ok(())
@@ -270,19 +265,19 @@ pub enum Answer {
 
 #[tauri::command]
 /// Your answer to a terminal session's permission request (2.8a). The request's thread replies and withdraws the card.
-pub fn claude_decide(app: AppHandle, request_id: u32, answer: Answer) -> AppResult<()> {
+pub fn session_decide(app: AppHandle, request_id: u32, answer: Answer) -> AppResult<()> {
     asks::decide(&app, request_id, matches!(answer, Answer::Allow))
 }
 
 #[tauri::command]
 /// The session requests the island holds (2.8b), for the command window.
-pub fn claude_asks(asks: tauri::State<'_, asks::Asks>) -> crate::ipc::ClaudeAsksPayload {
-    crate::ipc::ClaudeAsksPayload { asks: asks.list() }
+pub fn session_asks(asks: tauri::State<'_, asks::Asks>) -> crate::ipc::SessionAsksPayload {
+    crate::ipc::SessionAsksPayload { asks: asks.list() }
 }
 
 #[tauri::command]
 /// A held request's whole diff or command; `None` once it's answered or handed back.
-pub fn claude_ask_preview(
+pub fn session_ask_preview(
     asks: tauri::State<'_, asks::Asks>,
     request_id: u32,
 ) -> Option<crate::ipc::ApprovalPreview> {
@@ -304,7 +299,7 @@ pub struct QuestionAnswer {
 #[tauri::command]
 /// Your answer to one question of a session's held `AskUserQuestion` (2.8c). Errors `agentInvalid` for an answer
 /// that isn't one of its options, `agentApprovalGone` once it's no longer held.
-pub fn claude_answer(app: AppHandle, request_id: u32, answer: QuestionAnswer) -> AppResult<()> {
+pub fn session_answer(app: AppHandle, request_id: u32, answer: QuestionAnswer) -> AppResult<()> {
     asks::answer(
         &app,
         request_id,
@@ -316,7 +311,7 @@ pub fn claude_answer(app: AppHandle, request_id: u32, answer: QuestionAnswer) ->
 
 #[tauri::command]
 /// Approve a session's held plan, or send it back with `feedback` (2.8c).
-pub fn claude_plan(
+pub fn session_plan(
     app: AppHandle,
     request_id: u32,
     approve: bool,

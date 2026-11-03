@@ -1,7 +1,7 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { actingHintIn } from "../../island/motion";
 import type { AgentActingActivity } from "../../lib/types";
-import { AgentMark } from "../claude/WorkingGlyphs";
+import { AgentMark } from "../sessions/WorkingGlyphs";
 import { PointerIcon } from "./icons";
 
 const HINT: Record<AgentActingActivity["phase"], string> = {
@@ -13,7 +13,7 @@ const HINT: Record<AgentActingActivity["phase"], string> = {
  * Cay is about to click or type for an agent run, or is doing it: mark · project · step, and a quiet line saying
  * what stops it. Not interactive (the island stays click-through). Keyed per run, so waiting → acting re-renders in
  * place: only the hint crossfades and the pointer at the end turns amber. The edge holds steady
- * (`data-claude="acting"`); nothing loops.
+ * (`data-agent="acting"`); nothing loops.
  */
 export function AgentActing({ acting }: { acting: AgentActingActivity }) {
   const { project, step, phase } = acting;
@@ -23,7 +23,7 @@ export function AgentActing({ acting }: { acting: AgentActingActivity }) {
     <div className="activity activity--acting" data-phase={phase}>
       <AgentMark />
       <span className="acting__text">
-        <span className="claude-activity__line">
+        <span className="session-activity__line">
           <span className="activity__title">{project}</span>
           <span className="acting__step">{step}</span>
         </span>

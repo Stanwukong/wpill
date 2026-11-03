@@ -2,7 +2,8 @@
 //! Pure; unit-tested. The listener thread owns the only instance.
 
 use crate::ipc::{
-    Activity, ClaudeDoneActivity, ClaudeNeedsInputActivity, ClaudeSession, ClaudeStatus, TodoCount,
+    Activity, AgentSession, SessionDoneActivity, SessionNeedsInputActivity, SessionStatus,
+    TodoCount,
 };
 
 use super::protocol::{Event, Message, Proc};
@@ -19,9 +20,9 @@ const MAX_PROJECT_CHARS: usize = 64;
 pub struct Session {
     /// Ours, for IPC and activity keys.
     pub id: u32,
-    claude_id: String,
+    native_id: String,
     pub project: String,
-    pub status: ClaudeStatus,
+    pub status: SessionStatus,
     pub updated_at_ms: i64,
     last_event_ms: i64,
     /// The forwarder's ancestors, nearest first: used to find the window and check the session is alive.
@@ -35,12 +36,12 @@ pub struct Session {
 
 impl Session {
     /// Claude Code's session id.
-    pub fn claude_id(&self) -> &str {
-        &self.claude_id
+    pub fn native_id(&self) -> &str {
+        &self.native_id
     }
 
-    pub fn ipc(&self) -> ClaudeSession {
-        ClaudeSession {
+    pub fn ipc(&self) -> AgentSession {
+        AgentSession {
             session_id: self.id,
             project: self.project.clone(),
             status: self.status,
@@ -67,20 +68,20 @@ pub enum Effect {
 }
 
 #[derive(Debug, Default)]
-pub struct Sessions {
+pub struct Table {
     list: Vec<Session>,
     next_id: u32,
 }
 
-impl Sessions {
+impl Table {
     pub fn list(&self) -> &[Session] {
         &self.list
     }
 
-    /// Applies one hook. Returns whether the session list changed (to emit `claude:sessions`) and what to
+    /// Applies one hook. Returns whether the session list changed (to emit `sessions:changed`) and what to
     /// tell the activity queue.
     pub fn apply(&mut self, msg: Message) -> (bool, Vec<Effect>) {
-        let found = self.list.iter().position(|s| s.claude_id == msg.session);
+        let found = self.list.iter().position(|s| s.native_id == msg.session);
         if msg.event == Event::SessionEnd {
             return match found {
                 Some(i) if msg.at_ms >= self.list[i].last_event_ms => {
@@ -90,7 +91,7 @@ impl Sessions {
                 _ => (false, vec![]),
             };
         }
-        // Sessions that started before the hooks were installed show up on their first event.
+        // Table that started before the hooks were installed show up on their first event.
         let (i, created) = match found {
             Some(i) => (i, false),
             None => (self.create(&msg), true),
@@ -120,13 +121,13 @@ impl Sessions {
 
         let before = s.status;
         let needs_input = || {
-            Effect::Offer(Activity::ClaudeNeedsInput(ClaudeNeedsInputActivity {
+            Effect::Offer(Activity::SessionNeedsInput(SessionNeedsInputActivity {
                 session_id: s.id,
                 project: s.project.clone(),
             }))
         };
         let done = |failed| {
-            Effect::Offer(Activity::ClaudeDone(ClaudeDoneActivity {
+            Effect::Offer(Activity::SessionDone(SessionDoneActivity {
                 session_id: s.id,
                 project: s.project.clone(),
                 failed,
@@ -135,25 +136,25 @@ impl Sessions {
         let (status, effect) = match msg.event {
             Event::SessionStart { compact: true } => (before, None),
             Event::SessionStart { compact: false } => {
-                (ClaudeStatus::Idle, Some(Effect::Retract(s.id)))
+                (SessionStatus::Idle, Some(Effect::Retract(s.id)))
             }
             // A new task makes a "done" from the last one old news.
-            Event::Prompt => (ClaudeStatus::Working, Some(Effect::Retract(s.id))),
+            Event::Prompt => (SessionStatus::Working, Some(Effect::Retract(s.id))),
             // Before a tool runs (it may still ask): working, unless a prompt is already waiting on you.
-            Event::ToolStart if before == ClaudeStatus::NeedsInput => (before, None),
-            Event::ToolStart => (ClaudeStatus::Working, None),
+            Event::ToolStart if before == SessionStatus::NeedsInput => (before, None),
+            Event::ToolStart => (SessionStatus::Working, None),
             Event::ToolDone => {
-                let answered = before == ClaudeStatus::NeedsInput;
+                let answered = before == SessionStatus::NeedsInput;
                 (
-                    ClaudeStatus::Working,
+                    SessionStatus::Working,
                     answered.then_some(Effect::Retract(s.id)),
                 )
             }
-            Event::NeedsInput => (ClaudeStatus::NeedsInput, Some(needs_input())),
-            Event::Idle if before == ClaudeStatus::Working => (ClaudeStatus::Done, None),
+            Event::NeedsInput => (SessionStatus::NeedsInput, Some(needs_input())),
+            Event::Idle if before == SessionStatus::Working => (SessionStatus::Done, None),
             Event::Idle => (before, None),
-            Event::Stop => (ClaudeStatus::Done, Some(done(false))),
-            Event::StopFailure => (ClaudeStatus::Done, Some(done(true))),
+            Event::Stop => (SessionStatus::Done, Some(done(false))),
+            Event::StopFailure => (SessionStatus::Done, Some(done(true))),
             Event::SessionEnd => unreachable!("handled above"),
             // The listener keeps the status line's limits itself; they never change a session.
             Event::Limits => (before, None),
@@ -189,9 +190,9 @@ impl Sessions {
         self.next_id = self.next_id.wrapping_add(1).max(1);
         self.list.push(Session {
             id: self.next_id,
-            claude_id: msg.session.clone(),
+            native_id: msg.session.clone(),
             project: project(&msg.cwd),
-            status: ClaudeStatus::Idle,
+            status: SessionStatus::Idle,
             updated_at_ms: msg.at_ms,
             last_event_ms: i64::MIN,
             chain: Vec::new(),
@@ -204,7 +205,7 @@ impl Sessions {
 }
 
 /// The IPC view of `list`, most recently updated first.
-pub fn snapshot(list: &[Session]) -> Vec<ClaudeSession> {
+pub fn snapshot(list: &[Session]) -> Vec<AgentSession> {
     let mut out: Vec<_> = list.iter().map(Session::ipc).collect();
     out.sort_by_key(|s| std::cmp::Reverse(s.updated_at_ms));
     out
@@ -247,7 +248,7 @@ mod tests {
 
     #[test]
     fn tool_starts_set_the_step_until_the_task_ends() {
-        let mut s = Sessions::default();
+        let mut s = Table::default();
         s.apply(msg("a", 1, Event::Prompt));
         let tool = |at, step: &str, todos| Message {
             step: Some(step.into()),
@@ -266,12 +267,12 @@ mod tests {
         let ipc = s.list()[0].ipc();
         assert_eq!(ipc.step.as_deref(), Some("Bash · cargo test"));
         assert_eq!(ipc.todos, two, "kept until the next TodoWrite");
-        assert_eq!(ipc.status, ClaudeStatus::Working);
+        assert_eq!(ipc.status, SessionStatus::Working);
         s.apply(msg("a", 5, Event::NeedsInput));
         s.apply(tool(6, "Read · x", None));
         assert_eq!(
             status(&s, 0),
-            ClaudeStatus::NeedsInput,
+            SessionStatus::NeedsInput,
             "a prompt still waits"
         );
         s.apply(msg("a", 7, Event::Stop));
@@ -279,59 +280,59 @@ mod tests {
         assert_eq!((ipc.step, ipc.todos), (None, None));
     }
 
-    fn status(s: &Sessions, i: usize) -> ClaudeStatus {
+    fn status(s: &Table, i: usize) -> SessionStatus {
         s.list()[i].status
     }
 
     #[test]
     fn a_task_from_prompt_to_done() {
-        let mut s = Sessions::default();
+        let mut s = Table::default();
         let (changed, fx) = s.apply(msg("a", 1, Event::SessionStart { compact: false }));
         assert!(changed);
         let id = s.list()[0].id;
         assert_eq!(fx, vec![Effect::Retract(id)]);
-        assert_eq!(status(&s, 0), ClaudeStatus::Idle);
+        assert_eq!(status(&s, 0), SessionStatus::Idle);
         assert_eq!(s.list()[0].project, "wpill");
 
         let (changed, fx) = s.apply(msg("a", 2, Event::Prompt));
         assert!(changed);
         assert_eq!(fx, vec![Effect::Retract(id)]);
-        assert_eq!(status(&s, 0), ClaudeStatus::Working);
+        assert_eq!(status(&s, 0), SessionStatus::Working);
 
         // Tools while working change nothing visible.
         assert_eq!(s.apply(msg("a", 3, Event::ToolDone)), (false, vec![]));
 
         let (changed, fx) = s.apply(msg("a", 4, Event::Stop));
         assert!(changed);
-        assert!(matches!(&fx[..], [Effect::Offer(Activity::ClaudeDone(d))]
+        assert!(matches!(&fx[..], [Effect::Offer(Activity::SessionDone(d))]
             if d.session_id == id && d.project == "wpill" && !d.failed));
         assert_eq!(s.list()[0].updated_at_ms, 4);
     }
 
     #[test]
     fn a_permission_prompt_is_withdrawn_once_work_goes_on() {
-        let mut s = Sessions::default();
+        let mut s = Table::default();
         s.apply(msg("a", 1, Event::Prompt));
         let id = s.list()[0].id;
         let (_, fx) = s.apply(msg("a", 2, Event::NeedsInput));
         assert!(
-            matches!(&fx[..], [Effect::Offer(Activity::ClaudeNeedsInput(n))] if n.session_id == id)
+            matches!(&fx[..], [Effect::Offer(Activity::SessionNeedsInput(n))] if n.session_id == id)
         );
-        assert_eq!(status(&s, 0), ClaudeStatus::NeedsInput);
+        assert_eq!(status(&s, 0), SessionStatus::NeedsInput);
         let (changed, fx) = s.apply(msg("a", 3, Event::ToolDone));
         assert!(changed);
         assert_eq!(fx, vec![Effect::Retract(id)]);
-        assert_eq!(status(&s, 0), ClaudeStatus::Working);
+        assert_eq!(status(&s, 0), SessionStatus::Working);
     }
 
     #[test]
     fn idle_prompt_only_corrects_a_stuck_working_status() {
-        let mut s = Sessions::default();
+        let mut s = Table::default();
         // Esc: Stop never fires, idle_prompt comes about a minute later.
         s.apply(msg("a", 1, Event::Prompt));
         let (changed, fx) = s.apply(msg("a", 2, Event::Idle));
         assert!(changed && fx.is_empty());
-        assert_eq!(status(&s, 0), ClaudeStatus::Done);
+        assert_eq!(status(&s, 0), SessionStatus::Done);
         // After a real Stop it changes nothing.
         s.apply(msg("a", 3, Event::Prompt));
         s.apply(msg("a", 4, Event::Stop));
@@ -340,29 +341,29 @@ mod tests {
 
     #[test]
     fn api_errors_finish_as_failed() {
-        let mut s = Sessions::default();
+        let mut s = Table::default();
         s.apply(msg("a", 1, Event::Prompt));
         let (_, fx) = s.apply(msg("a", 2, Event::StopFailure));
-        assert!(matches!(&fx[..], [Effect::Offer(Activity::ClaudeDone(d))] if d.failed));
+        assert!(matches!(&fx[..], [Effect::Offer(Activity::SessionDone(d))] if d.failed));
     }
 
     #[test]
     fn late_async_events_are_ignored() {
-        let mut s = Sessions::default();
+        let mut s = Table::default();
         s.apply(msg("a", 10, Event::Stop));
         // A PostToolUse forwarded before the Stop but delivered after it.
         assert_eq!(s.apply(msg("a", 9, Event::ToolDone)), (false, vec![]));
-        assert_eq!(status(&s, 0), ClaudeStatus::Done);
+        assert_eq!(status(&s, 0), SessionStatus::Done);
         assert_eq!(s.apply(msg("a", 8, Event::SessionEnd)), (false, vec![]));
         assert_eq!(s.list().len(), 1);
     }
 
     #[test]
     fn compaction_keeps_the_status_and_end_removes_the_session() {
-        let mut s = Sessions::default();
+        let mut s = Table::default();
         s.apply(msg("a", 1, Event::Prompt));
         s.apply(msg("a", 2, Event::SessionStart { compact: true }));
-        assert_eq!(status(&s, 0), ClaudeStatus::Working);
+        assert_eq!(status(&s, 0), SessionStatus::Working);
         let id = s.list()[0].id;
         assert_eq!(
             s.apply(msg("a", 3, Event::SessionEnd)),
@@ -374,7 +375,7 @@ mod tests {
 
     #[test]
     fn sessions_are_separate_and_listed_most_recent_first() {
-        let mut s = Sessions::default();
+        let mut s = Table::default();
         s.apply(msg("a", 1, Event::Prompt));
         let mut other = msg("b", 2, Event::Prompt);
         other.cwd = "D:/work/api/".into();
@@ -389,7 +390,7 @@ mod tests {
 
     #[test]
     fn prune_drops_dead_and_silent_sessions() {
-        let mut s = Sessions::default();
+        let mut s = Table::default();
         s.apply(msg("a", 1_000, Event::Prompt));
         s.apply(msg("b", 2_000, Event::Prompt));
         let (a, b) = (s.list()[0].id, s.list()[1].id);
@@ -407,7 +408,7 @@ mod tests {
 
     #[test]
     fn finds_the_claude_process_in_the_chain() {
-        let mut s = Sessions::default();
+        let mut s = Table::default();
         let mut m = msg("a", 1, Event::Prompt);
         m.chain = vec![
             Proc {

@@ -15,8 +15,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde_json::{json, Value};
 
 use super::hooks::{self, Shell};
-use super::{forward, pipe, process, protocol};
 use crate::ipc::UsageLimits;
+use crate::sessions::{forward, pipe, process, protocol};
 
 /// The user's command gets this long; Claude Code cancels a slow status line on the next update anyway.
 const RUN_TIMEOUT: Duration = Duration::from_secs(10);

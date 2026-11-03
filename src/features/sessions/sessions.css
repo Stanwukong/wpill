@@ -51,7 +51,7 @@
 }
 
 /* Panel section, at its natural height in the panel's scroller (island.css). */
-.claude {
+.agents {
   margin-bottom: 14px;
 }
 
@@ -59,7 +59,7 @@
  * The heading and, right-aligned on its baseline, the usage limits (2.8f). Where they don't both fit (large Text
  * size, long 12 h times) the limits wrap to a slim line of their own, flush left (space-between starts a lone item).
  */
-.claude__head {
+.agents__head {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -68,7 +68,7 @@
   margin-bottom: 6px;
 }
 
-.claude__heading {
+.agents__heading {
   flex: none;
   margin: 0;
   font-size: 12px;
@@ -78,13 +78,13 @@
   color: var(--island-muted);
 }
 
-.claude__list {
+.agents__list {
   list-style: none;
   margin: 0 -6px;
   padding: 0;
 }
 
-.claude-row {
+.session-row {
   width: 100%;
   height: 30px;
   display: flex;
@@ -96,39 +96,39 @@
   background: transparent;
   text-align: left;
   white-space: nowrap;
-  font-family: var(--font-claude);
+  font-family: var(--font-agent);
   font-size: 12.5px;
   transition: background-color 120ms ease;
 }
 
-.claude-row:hover {
+.session-row:hover {
   background: var(--tile-hover);
 }
 
-.claude-row:active {
+.session-row:active {
   background: var(--tile-active);
 }
 
-.claude-row__mark {
+.session-row__mark {
   flex: none;
   width: 14px;
   display: grid;
   place-items: center;
 }
 
-.claude-row__dot {
+.session-row__dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: var(--island-muted);
 }
 
-.claude-row[data-status="needsInput"] .claude-row__dot {
+.session-row[data-status="needsInput"] .session-row__dot {
   background: var(--agent);
 }
 
 /* It gives way last: a step or a mode tag (2.8e) shrinks before the name goes below a few letters. */
-.claude-row__project {
+.session-row__project {
   flex: 1;
   min-width: 6ch;
   overflow: hidden;
@@ -136,17 +136,17 @@
   font-weight: 500;
 }
 
-.claude-row__status {
+.session-row__status {
   flex: none;
   font-size: 11px;
   color: var(--agent-status);
 }
 
-.claude-row[data-status="needsInput"] .claude-row__status {
+.session-row[data-status="needsInput"] .session-row__status {
   color: var(--agent);
 }
 
-.claude-row__time {
+.session-row__time {
   flex: none;
   min-width: 58px;
   text-align: right;
@@ -166,7 +166,7 @@
   gap: 6px;
   min-width: 0;
   white-space: nowrap;
-  font-family: var(--font-claude);
+  font-family: var(--font-agent);
   font-size: 11px;
   font-weight: 400;
 }
@@ -198,7 +198,7 @@
 }
 
 /* Session rows: the step replaces "Working", right-aligned beside the time; the project gives way first. */
-.claude-row__step {
+.session-row__step {
   flex: 0 1 auto;
   max-width: 55%;
 }

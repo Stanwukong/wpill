@@ -3,12 +3,12 @@ import type { ActivityPayload, AgentRun, PowerActivity } from "../../lib/types";
 import { endLabel } from "../agent/labels";
 import { CalendarSoon } from "../calendar/CalendarSoon";
 import { openRun } from "../agent/useAgentRuns";
-import { focusClaudeSession } from "../claude/useClaudeSessions";
+import { focusSession } from "../sessions/useSessions";
 import { AgentActing } from "./AgentActing";
 import { AgentApproval } from "./AgentApproval";
-import { ClaudeApproval } from "./ClaudeApproval";
-import { ClaudeActivity } from "./ClaudeActivity";
-import { AgentInteraction, ClaudeInteraction } from "./InteractionCards";
+import { SessionApproval } from "./SessionApproval";
+import { SessionActivity } from "./SessionActivity";
+import { AgentInteraction, SessionInteraction } from "./InteractionCards";
 import { BatteryIcon, CapsLockIcon, HeadphonesIcon, SpeakerIcon, SunIcon } from "./icons";
 import { ScreenshotActivity } from "./ScreenshotActivity";
 import "./activities.css";
@@ -57,27 +57,27 @@ export function ActivityView({ activity, agentRuns = [] }: { activity: ActivityP
       return <Power power={activity.payload} />;
     case "screenshot":
       return <ScreenshotActivity id={activity.id} shot={activity.payload} />;
-    case "claudeDone": {
+    case "sessionDone": {
       const { sessionId, project, failed } = activity.payload;
       return (
-        <ClaudeActivity
+        <SessionActivity
           project={project}
           state={failed ? "stopped" : "done"}
-          onOpen={() => focusClaudeSession(sessionId)}
+          onOpen={() => focusSession(sessionId)}
         />
       );
     }
-    case "claudeNeedsInput": {
+    case "sessionNeedsInput": {
       const { sessionId, project } = activity.payload;
-      return <ClaudeActivity project={project} state="needsInput" onOpen={() => focusClaudeSession(sessionId)} />;
+      return <SessionActivity project={project} state="needsInput" onOpen={() => focusSession(sessionId)} />;
     }
     // A question or a plan (2.8c) has its own card; everything else asks for Allow / Deny.
-    case "claudeApproval": {
+    case "sessionApproval": {
       const { interaction } = activity.payload;
       return interaction ? (
-        <ClaudeInteraction approval={activity.payload} interaction={interaction} />
+        <SessionInteraction approval={activity.payload} interaction={interaction} />
       ) : (
-        <ClaudeApproval approval={activity.payload} />
+        <SessionApproval approval={activity.payload} />
       );
     }
     case "agentApproval": {
@@ -95,7 +95,7 @@ export function ActivityView({ activity, agentRuns = [] }: { activity: ActivityP
       const { runId, project, routineName, status, reason } = activity.payload;
       // Only a completed run gets the check; limits, failures and stops read as "stopped" (no mark).
       return (
-        <ClaudeActivity
+        <SessionActivity
           project={routineName ?? project}
           state={reason === "completed" || (reason === null && status === "done") ? "done" : "stopped"}
           label={endLabel(status, reason)}

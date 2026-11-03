@@ -1015,6 +1015,7 @@ the old crate's artifacts are never reused or cleaned by cargo; remove them by h
 | 2026-11-03 | Stage 6c built (D46): Calendar, Tasks and Gmail tools in Cay's MCP server, Gmail asked in Cay and opt-in, mail marked untrusted, desktop actions asked again after mail; `claudeConnectors` dropped after testing. The drive filled twice mid-build (C14 again): 4.5 GB of `.rcgu.o` leftovers from crashed builds in `target\debug\deps`. Manual checklist pending. |
 | 2026-11-03 | Stage 6c signed off by the author (all 11 manual checks passed). Phase 6 is complete; next is 2.9 (other agents and open models). |
 | 2026-11-03 | Phase 2.9 research and design agreed (D47): the full `claude/` → `sessions/` rename, Codex sessions through hooks with a minimum version, ACP runs (Goose first, tested on another machine), Ask only plus a watchdog, Calendar and Tasks kept on for ACP runs. |
+| 2026-11-03 | Stage 2.9a, step 1: the rename (`claude/` → `sessions/`, session IPC names, `features/sessions/`, `--font-agent`, `data-agent`), no behaviour change; 230 Rust tests, clippy and typecheck clean. Codex updated to 0.166.0. |
 
 ## 7. Results & metrics
 

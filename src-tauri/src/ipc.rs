@@ -11,7 +11,7 @@ pub mod events {
     pub const MEDIA_STATE: &str = "media:state";
     pub const ACTIVITY_SHOW: &str = "activity:show";
     pub const ACTIVITY_HIDE: &str = "activity:hide";
-    pub const CLAUDE_SESSIONS: &str = "claude:sessions";
+    pub const SESSIONS: &str = "sessions:changed";
     pub const AGENT_RUNS: &str = "agent:runs";
     /// Sent to the `command` window only.
     pub const AGENT_OUTPUT: &str = "agent:output";
@@ -19,7 +19,7 @@ pub mod events {
     pub const COMMAND_FOCUS_RUN: &str = "command:focus-run";
     pub const ROUTINES_CHANGED: &str = "routines:changed";
     /// Terminal sessions' held requests changed (2.8b): the command window lists them.
-    pub const CLAUDE_ASKS: &str = "claude:asks";
+    pub const SESSION_ASKS: &str = "sessions:asks";
     /// Sent to the `command` window only: which held session request to show when it opens (2.8b).
     pub const COMMAND_FOCUS_ASK: &str = "command:focus-ask";
     /// Google sign-in state changed (Phase 6a).
@@ -78,9 +78,9 @@ pub enum Activity {
     Power(PowerActivity),
     CapsLock(CapsLockActivity),
     Screenshot(ScreenshotActivity),
-    ClaudeDone(ClaudeDoneActivity),
-    ClaudeNeedsInput(ClaudeNeedsInputActivity),
-    ClaudeApproval(ClaudeApprovalActivity),
+    SessionDone(SessionDoneActivity),
+    SessionNeedsInput(SessionNeedsInputActivity),
+    SessionApproval(SessionApprovalActivity),
     AgentApproval(AgentApprovalActivity),
     AgentActing(AgentActingActivity),
     AgentFinished(AgentFinishedActivity),
@@ -169,8 +169,8 @@ pub struct ScreenshotActivity {
 /// A Claude Code turn finished (`Stop`), or ended on an API error (`StopFailure`, `failed`).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ClaudeDoneActivity {
-    /// Ours (`ClaudeSession::session_id`), not Claude Code's id.
+pub struct SessionDoneActivity {
+    /// Ours (`AgentSession::session_id`), not Claude Code's id.
     pub session_id: u32,
     /// The session's working folder name.
     pub project: String,
@@ -181,16 +181,16 @@ pub struct ClaudeDoneActivity {
 /// session's next event.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ClaudeNeedsInputActivity {
+pub struct SessionNeedsInputActivity {
     pub session_id: u32,
     pub project: String,
 }
 
 /// A terminal session asks to use a tool (2.8a), held until you answer here, answer in the terminal, or it's handed
-/// back (`claude::asks::HOLD`). Sticky. Allow / Deny only: a terminal session isn't Cay's to widen.
+/// back (`sessions::asks::HOLD`). Sticky. Allow / Deny only: a terminal session isn't Cay's to widen.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ClaudeApprovalActivity {
+pub struct SessionApprovalActivity {
     pub request_id: u32,
     /// The session's row, for focusing its window; `None` if Cay hasn't seen the session yet.
     pub session_id: Option<u32>,
@@ -200,9 +200,9 @@ pub struct ClaudeApprovalActivity {
     /// One line built in Rust (`agent::describe`).
     pub summary: String,
     pub risk: AgentRisk,
-    /// The card's diff or wrapped command (2.8b); the whole one comes from `claude_ask_preview`.
+    /// The card's diff or wrapped command (2.8b); the whole one comes from `session_ask_preview`.
     pub preview: Option<Box<ApprovalPreview>>,
-    /// A question or a plan (2.8c), answered with `claude_answer` / `claude_plan` instead of Allow.
+    /// A question or a plan (2.8c), answered with `session_answer` / `session_plan` instead of Allow.
     pub interaction: Option<Box<Interaction>>,
 }
 
@@ -218,16 +218,16 @@ pub enum CommandFocus {
     Ask { request_id: u32 },
 }
 
-/// `claude:asks` and `claude_asks`: the session requests the island holds, oldest first.
+/// `sessions:asks` and `session_asks`: the session requests the island holds, oldest first.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ClaudeAsksPayload {
-    pub asks: Vec<ClaudeApprovalActivity>,
+pub struct SessionAsksPayload {
+    pub asks: Vec<SessionApprovalActivity>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub enum ClaudeStatus {
+pub enum SessionStatus {
     /// Open, no task yet (or a new one after `/clear`).
     Idle,
     Working,
@@ -235,23 +235,23 @@ pub enum ClaudeStatus {
     NeedsInput,
 }
 
-/// `claude:sessions`.
+/// `sessions:changed`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ClaudeSessionsPayload {
+pub struct SessionsPayload {
     /// Most recently updated first.
-    pub sessions: Vec<ClaudeSession>,
+    pub sessions: Vec<AgentSession>,
     /// The newest usage limits from any session's status line (2.8f).
     pub limits: Option<UsageLimits>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ClaudeSession {
+pub struct AgentSession {
     /// Ours, stable for the session's lifetime; Claude Code's id stays in Rust.
     pub session_id: u32,
     pub project: String,
-    pub status: ClaudeStatus,
+    pub status: SessionStatus,
     /// Unix epoch ms of the last status change.
     pub updated_at_ms: i64,
     /// The tool it's using and on what ("Edit · hover/logic.rs"), from `PreToolUse` (2.8d); `None` between tasks.

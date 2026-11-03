@@ -23,21 +23,21 @@ Read `CLAUDE.md` first (architecture rules and Windows gotchas apply to you too)
   `--agent-rgb`, `--agent-deep` `#f59e0b` for pressed and `--agent-ink` `#0f0f0f` for text on amber) are their own
   tokens. The equalizer uses `--media-accent`: the art's accent, or a soft white (`rgba(245,245,247,0.85)`) on the plain
   black island, so the no-art default green never reads as charging. Edge effects on `.island`: the charge ring uses
-  `::before`, the amber agent glow `::after` (driven by `data-charging` / `data-claude`). Design for both the plain
+  `::before`, the amber agent glow `::after` (driven by `data-charging` / `data-agent`). Design for both the plain
   black island (primary: it's what most people see, including while media without art plays) and a tinted one.
 - **Cay's own agent look** (Phase 4a): never copy Claude Code's visuals (no ✻-style marks, starbursts, glyph-cycling
-  spinners or its orange). Working = `WorkingIndicator` (`features/claude/WorkingGlyphs.tsx`): an amber sine rippling
+  spinners or its orange). Working = `WorkingIndicator` (`features/sessions/WorkingGlyphs.tsx`): an amber sine rippling
   right through a window with faded ends, one wavelength per 1.6 s, linear, `translateX` only; pill 22×10 (λ 8, 1.6 px
   stroke), `small` 14×6 (λ 6, 1.5 px) for rows and lists; absent when nothing works; reduced motion holds it still. The
   static mark is `AgentMark`: the wave at rest (two periods, 1.8 px) in the 22 px icon slot, 18 px in the command bar.
-- **Claude content uses `--font-claude`** (Cascadia Mono → Consolas fallback): project names (13.5 px, weight 500;
+- **Claude content uses `--font-agent`** (Cascadia Mono → Consolas fallback): project names (13.5 px, weight 500;
   Cascadia's 600 reads heavy), statuses (11 px, 400, `--agent-status`), commands, prompts and transcripts. Headings,
   buttons and other chrome stay Segoe (so do the command window's sidebar names and prompt snippets, D45); the wave and the mark are SVG. Cascadia's glyphs touch the
   cell edge, so clips around its text need ~2 px of slack.
 - **Agent UI** (Phase 2.7): `features/agent/` (shared `agent.css`: `agent-btn` with Allow as the only filled, amber
   button (`--agent-ink` text, `--agent-deep` pressed), `agent-link` for quiet text choices, `agent-risk` (reads/changes quiet, input a red tag), `agent-dot` that
   breathes while waiting). The approval activity is the one multi-line activity; the panel lists runs through
-  `ClaudeSection`'s `agent` slot. The command window (`src/command/`) is a normal opaque window (`#141416`) in the
+  `AgentsSection`'s `agent` slot. The command window (`src/command/`) is a normal opaque window (`#141416`) in the
   same tokens; it's sized in physical px by Rust, so Text size shrinks its CSS viewport (480×373 at 150%): check it
   there too.
 - **Approval previews** (2.8b): `PreviewBlock` renders Rust's `ApprovalPreview` as-is: Cascadia Mono 11.5 px on
@@ -60,7 +60,7 @@ Read `CLAUDE.md` first (architecture rules and Windows gotchas apply to you too)
 - **Ambient loops** (the working wave, orbiting light, equalizers) are CSS keyframes, not JS. Animate `transform` and
   `opacity` where possible; animate a registered custom property (`@property`, e.g. an `<angle>` or `<color>`)
   when a gradient must move. Keep loops slow and linear (2–3 s per cycle reads as "alive", faster reads as "busy").
-- **Agent edge glow:** `data-claude="done"` (and acting) holds a steady amber ring (inset 1.5 px at 0.8, inner 14 px at
+- **Agent edge glow:** `data-agent="done"` (and acting) holds a steady amber ring (inset 1.5 px at 0.8, inner 14 px at
   0.2, halo 22 px at 0.28); `"needsInput"` (also approvals) breathes it, opacity 1 → 0.5 → 1 over 2 s ease-in-out, after
   a 400 ms fade-in. Reduced motion: steady.
 - **Enter/exit:** 150–400 ms, ease-out in, faster out. Values that step (volume, brightness) get a ~120 ms
@@ -76,7 +76,7 @@ Read `CLAUDE.md` first (architecture rules and Windows gotchas apply to you too)
   hold; acting wins over looking and switching repaints at once, no crossfade. You write its spec as constants; the
   main session implements it. If `--agent` changes, its `COLOR` changes too.
 - **Desktop actions in the island (2.7d):** a pointer glyph (`PointerGlyph`) leads the `input` risk badge (the eye
-  stays for looks); `agentActing` is a calm, non-interactive activity with the steady amber edge (`data-claude`
+  stays for looks); `agentActing` is a calm, non-interactive activity with the steady amber edge (`data-agent`
   "done"), no loops.
 
 ## Contracts you must keep

@@ -4,7 +4,7 @@ import type { AgentRun, AgentStatus } from "../../lib/types";
 
 /**
  * Agent runs as tracked by Rust (most recently started first). Lives at the Island level (like
- * `useClaudeSessions`) so state survives the panel remounting; the command window uses it too.
+ * `useSessions`) so state survives the panel remounting; the command window uses it too.
  */
 export function useAgentRuns(): AgentRun[] {
   const [runs, setRuns] = useState<AgentRun[]>([]);

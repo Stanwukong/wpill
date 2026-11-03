@@ -1,8 +1,8 @@
 //! Terminal sessions' permission requests, answered in the island (Phase 2.8a, D34).
 //!
 //! `cay.exe hook` sends each `PermissionRequest` (`ask.rs`) to `\\.\pipe\cay-claude-ask-<user SID>` and waits. The
-//! `claude-asks` thread accepts each on its own `duplex` instance and hands it to a thread that shows a
-//! `claudeApproval` card and waits for the first of: your answer (`decide`), the hand-back after `HOLD`, the forwarder
+//! `session-asks` thread accepts each on its own `duplex` instance and hands it to a thread that shows a
+//! `sessionApproval` card and waits for the first of: your answer (`decide`), the hand-back after `HOLD`, the forwarder
 //! going away (answered in the terminal, or Claude Code stopped waiting), the session moving on, or shutdown. Only
 //! your click allows or denies; everything else replies `Pass`, so Claude Code's own prompt decides. Requests from
 //! Cay's own agent runs pass at once (`agent/` answers those through its prompt tool).
@@ -17,14 +17,14 @@ use windows::core::{Error, HSTRING};
 use windows::Win32::System::Threading::SetEvent;
 
 use super::ask::{self, Decision, Reply};
-use super::{process, sessions, Claude};
-use crate::activity::{claude_approval_key, Signal, Watcher};
+use super::{process, table, Sessions};
+use crate::activity::{session_approval_key, Signal, Watcher};
 use crate::agent::interact;
 use crate::duplex::{Pipe, Read};
 use crate::error::{AppError, AppResult};
 use crate::ipc::{
-    events, Activity, ApprovalPreview, ClaudeApprovalActivity, ClaudeAsksPayload,
-    ClaudeNeedsInputActivity,
+    events, Activity, ApprovalPreview, SessionApprovalActivity, SessionAsksPayload,
+    SessionNeedsInputActivity,
 };
 use crate::win32::{self, Handle};
 
@@ -56,7 +56,7 @@ pub fn name() -> Option<HSTRING> {
     )))
 }
 
-/// Tauri-managed: the requests being held, for `claude_decide` and the listener.
+/// Tauri-managed: the requests being held, for `session_decide` and the listener.
 #[derive(Default)]
 pub struct Asks(Mutex<Inner>);
 
@@ -75,7 +75,7 @@ struct Held {
     /// A question's answers so far (question text → answer); sent once every question has one.
     answers: BTreeMap<String, String>,
     /// The card, for the command window's list; set once it's shown.
-    card: Option<ClaudeApprovalActivity>,
+    card: Option<SessionApprovalActivity>,
     /// The command window's copy of the preview (2.8b).
     full: Option<ApprovalPreview>,
     /// Set once: your answer, or `Pass` when the session moved on.
@@ -125,15 +125,15 @@ impl Asks {
         Some((id, wake))
     }
 
-    fn show(&self, id: u32, card: ClaudeApprovalActivity, full: Option<ApprovalPreview>) {
+    fn show(&self, id: u32, card: SessionApprovalActivity, full: Option<ApprovalPreview>) {
         if let Some(held) = self.lock().held.get_mut(&id) {
             held.card = Some(card);
             held.full = full;
         }
     }
 
-    /// The cards being held, oldest first (`claude:asks`).
-    pub fn list(&self) -> Vec<ClaudeApprovalActivity> {
+    /// The cards being held, oldest first (`sessions:asks`).
+    pub fn list(&self) -> Vec<SessionApprovalActivity> {
         let inner = self.lock();
         let mut ids: Vec<&u32> = inner.held.keys().collect();
         ids.sort_by_key(|id| **id);
@@ -173,7 +173,7 @@ impl Asks {
         question: &str,
         labels: &[String],
         other: Option<&str>,
-    ) -> Result<Option<ClaudeApprovalActivity>, AppError> {
+    ) -> Result<Option<SessionApprovalActivity>, AppError> {
         let mut inner = self.lock();
         let held = inner
             .held
@@ -243,7 +243,7 @@ pub fn start(app: AppHandle, out: Sender<Signal>) -> AppResult<Watcher> {
     let stop = Arc::new(Handle::event()?);
     let signal = stop.clone();
     Watcher::spawn(
-        "claude-asks",
+        "session-asks",
         move || {
             log::info!("listening for Claude Code permission requests");
             let mut next = Some(first);
@@ -259,7 +259,7 @@ pub fn start(app: AppHandle, out: Sender<Signal>) -> AppResult<Watcher> {
                     Ok(true) => {
                         let (app, out, stop) = (app.clone(), out.clone(), stop.clone());
                         let spawned = std::thread::Builder::new()
-                            .name("claude-ask".into())
+                            .name("session-ask".into())
                             .spawn(move || serve(&app, &out, &instance, &stop));
                         if let Err(e) = spawned {
                             log::warn!("permission request thread: {e}");
@@ -297,8 +297,8 @@ fn serve(app: &AppHandle, out: &Sender<Signal>, pipe: &Pipe, stop: &Handle) {
         reply(pipe, Decision::Pass);
         return;
     };
-    let project = sessions::project(&request.cwd);
-    let session_id = app.state::<Claude>().row_of(&request.session_id);
+    let project = table::project(&request.cwd);
+    let session_id = app.state::<Sessions>().row_of(&request.session_id);
     let (tool, summary, risk) =
         crate::agent::describe_tool(&request.tool_name, &request.tool_input, &request.cwd);
     let previews = crate::agent::preview_tool(
@@ -308,7 +308,7 @@ fn serve(app: &AppHandle, out: &Sender<Signal>, pipe: &Pipe, stop: &Handle) {
         &request.cut,
     );
     log::debug!("permission request {id}: {tool} ({project})");
-    let card = ClaudeApprovalActivity {
+    let card = SessionApprovalActivity {
         request_id: id,
         session_id,
         project: project.clone(),
@@ -325,7 +325,7 @@ fn serve(app: &AppHandle, out: &Sender<Signal>, pipe: &Pipe, stop: &Handle) {
     };
     asks.show(id, card.clone(), previews.map(|p| p.1));
     emit(app, &asks);
-    let _ = out.send(Signal::Offer(Activity::ClaudeApproval(card)));
+    let _ = out.send(Signal::Offer(Activity::SessionApproval(card)));
 
     let waited = pipe.read(
         &[wake.0, stop.0],
@@ -334,7 +334,7 @@ fn serve(app: &AppHandle, out: &Sender<Signal>, pipe: &Pipe, stop: &Handle) {
     // An answer that landed as the wait ended still counts.
     let decision = asks.release(id);
     emit(app, &asks);
-    let _ = out.send(Signal::Retract(claude_approval_key(id)));
+    let _ = out.send(Signal::Retract(session_approval_key(id)));
     match (decision, waited) {
         (Some(decision), _) => {
             log::debug!("permission request {id}: {decision:?}");
@@ -348,8 +348,8 @@ fn serve(app: &AppHandle, out: &Sender<Signal>, pipe: &Pipe, stop: &Handle) {
             reply(pipe, Decision::Pass);
             // The terminal is asking now; say so like any other prompt.
             if let Some(session_id) = session_id {
-                let _ = out.send(Signal::Offer(Activity::ClaudeNeedsInput(
-                    ClaudeNeedsInputActivity {
+                let _ = out.send(Signal::Offer(Activity::SessionNeedsInput(
+                    SessionNeedsInputActivity {
                         session_id,
                         project,
                     },
@@ -360,9 +360,12 @@ fn serve(app: &AppHandle, out: &Sender<Signal>, pipe: &Pipe, stop: &Handle) {
     }
 }
 
-/// `claude:asks`, for the command window.
+/// `sessions:asks`, for the command window.
 fn emit(app: &AppHandle, asks: &Asks) {
-    let _ = app.emit(events::CLAUDE_ASKS, ClaudeAsksPayload { asks: asks.list() });
+    let _ = app.emit(
+        events::SESSION_ASKS,
+        SessionAsksPayload { asks: asks.list() },
+    );
 }
 
 fn reply(pipe: &Pipe, decision: Decision) {
@@ -374,7 +377,7 @@ fn reply(pipe: &Pipe, decision: Decision) {
     }
 }
 
-/// `claude_answer`: a question's card shows the answers so far until every question has one.
+/// `session_answer`: a question's card shows the answers so far until every question has one.
 pub fn answer(
     app: &AppHandle,
     request_id: u32,
@@ -387,18 +390,18 @@ pub fn answer(
         let _ = app
             .state::<crate::activity::Activities>()
             .sender()
-            .send(Signal::Offer(Activity::ClaudeApproval(card)));
+            .send(Signal::Offer(Activity::SessionApproval(card)));
         emit(app, &asks);
     }
     Ok(())
 }
 
-/// `claude_plan`.
+/// `session_plan`.
 pub fn plan(app: &AppHandle, request_id: u32, approve: bool, feedback: &str) -> AppResult<()> {
     app.state::<Asks>().plan(request_id, approve, feedback)
 }
 
-/// `claude_decide` and `agent-test session-decide`.
+/// `session_decide` and `agent-test session-decide`.
 pub fn decide(app: &AppHandle, request_id: u32, allow: bool) -> AppResult<()> {
     if app.state::<Asks>().decide(request_id, allow) {
         Ok(())

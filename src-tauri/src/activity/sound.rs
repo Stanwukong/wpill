@@ -37,7 +37,7 @@ impl Chime {
 fn needs_you(activity: &Activity) -> bool {
     matches!(
         activity,
-        Activity::ClaudeNeedsInput(_) | Activity::ClaudeApproval(_) | Activity::AgentApproval(_)
+        Activity::SessionNeedsInput(_) | Activity::SessionApproval(_) | Activity::AgentApproval(_)
     )
 }
 
@@ -60,12 +60,12 @@ pub fn play() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ipc::{CapsLockActivity, ClaudeNeedsInputActivity};
+    use crate::ipc::{CapsLockActivity, SessionNeedsInputActivity};
 
     #[test]
     fn once_per_activity_and_only_when_you_are_needed() {
         let mut chime = Chime::default();
-        let needs = Activity::ClaudeNeedsInput(ClaudeNeedsInputActivity {
+        let needs = Activity::SessionNeedsInput(SessionNeedsInputActivity {
             session_id: 1,
             project: "wpill".into(),
         });

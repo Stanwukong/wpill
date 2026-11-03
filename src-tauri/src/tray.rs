@@ -6,7 +6,7 @@ use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem}
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Wry};
 
-use crate::{agent, autostart, claude, google};
+use crate::{agent, autostart, google, sessions};
 
 const TRAY_ID: &str = "main";
 const ID_AUTOSTART: &str = "autostart";
@@ -38,7 +38,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         autostart::is_enabled(),
         None::<&str>,
     )?;
-    let claude = MenuItem::with_id(app, ID_CLAUDE, claude::tray_label(), true, None::<&str>)?;
+    let claude = MenuItem::with_id(app, ID_CLAUDE, sessions::tray_label(), true, None::<&str>)?;
     let google = MenuItem::with_id(app, ID_GOOGLE, google::tray_label(app), true, None::<&str>)?;
     let _ = GOOGLE.set(google.clone());
     let pause = CheckMenuItem::with_id(
@@ -62,7 +62,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(true)
         .on_menu_event(move |app, event| match event.id().as_ref() {
             ID_AUTOSTART => toggle_autostart(&autostart),
-            ID_CLAUDE => claude::toggle_from_tray(claude.clone()),
+            ID_CLAUDE => sessions::toggle_from_tray(claude.clone()),
             ID_GOOGLE => google::toggle_from_tray(app),
             ID_PAUSE_ROUTINES => agent::set_routines_paused(app, !agent::routines_paused(app)),
             ID_QUIT => app.exit(0),

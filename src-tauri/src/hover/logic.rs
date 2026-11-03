@@ -323,7 +323,7 @@ pub fn in_panel(geo: &Geometry, panel: PanelRect, x: i32, y: i32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::activity::claude_key;
+    use crate::activity::session_key;
     use crate::activity::test_activities::{needs_input, screenshot, volume};
 
     fn sample(now: Instant, in_hot_zone: bool, in_panel: bool) -> Sample {
@@ -539,7 +539,7 @@ mod tests {
         tick(&mut m, on_activity(t0 + ms(62_000)));
         assert!(m.accepts_clicks());
         let mut out = Vec::new();
-        m.retract(&claude_key(1), &mut out);
+        m.retract(&session_key(1), &mut out);
         assert_eq!(out, vec![Output::Hide(back)]);
         assert!(!m.showing());
     }

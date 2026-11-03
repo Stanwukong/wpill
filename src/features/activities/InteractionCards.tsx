@@ -3,7 +3,7 @@ import { commands } from "../../lib/ipc";
 import type {
   AgentApprovalActivity,
   AgentRun,
-  ClaudeApprovalActivity,
+  SessionApprovalActivity,
   Interaction,
   QuestionAnswer,
   QuestionView,
@@ -11,7 +11,7 @@ import type {
 import { ChevronGlyph } from "../agent/AgentGlyphs";
 import { ModeChip } from "../agent/ModeChip";
 import { decide, openRun } from "../agent/useAgentRuns";
-import { decideClaude, focusClaudeSession } from "../claude/useClaudeSessions";
+import { decideSession, focusSession } from "../sessions/useSessions";
 import { ApprovalHead } from "./AgentApproval";
 
 type Question = Extract<Interaction, { kind: "question" }>;
@@ -46,11 +46,11 @@ export function AgentInteraction({
 }
 
 /** A terminal session's question or plan: the same cards with "session", and the title showing the terminal. */
-export function ClaudeInteraction({
+export function SessionInteraction({
   approval,
   interaction,
 }: {
-  approval: ClaudeApprovalActivity;
+  approval: SessionApprovalActivity;
   interaction: Interaction;
 }) {
   const { requestId, sessionId, project, risk } = approval;
@@ -59,7 +59,7 @@ export function ClaudeInteraction({
   const head = {
     title: project,
     titleHint: "Show session",
-    onTitle: sessionId === null ? undefined : () => focusClaudeSession(sessionId),
+    onTitle: sessionId === null ? undefined : () => focusSession(sessionId),
     origin: "session",
     risk,
   };
@@ -67,9 +67,9 @@ export function ClaudeInteraction({
     <QuestionCard
       head={{ ...head, tool: approval.tool }}
       interaction={interaction}
-      onAnswer={(answer) => commands.claudeAnswer(requestId, answer)}
+      onAnswer={(answer) => commands.sessionAnswer(requestId, answer)}
       onType={open}
-      onSkip={() => decideClaude(requestId, "deny")}
+      onSkip={() => decideSession(requestId, "deny")}
     />
   ) : (
     <PlanCard head={head} plan={interaction} onOpen={open} />

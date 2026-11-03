@@ -6,10 +6,10 @@ import { endLabel, RISK_LABEL, runLabel } from "../features/agent/labels";
 import { changePreview, PreviewBlock } from "../features/agent/PreviewBlock";
 import { ModeChip } from "../features/agent/ModeChip";
 import { decide, isLive, stopRun } from "../features/agent/useAgentRuns";
-import { StepLabel } from "../features/claude/StepLabel";
+import { StepLabel } from "../features/sessions/StepLabel";
 import { PlanView, QuestionForm } from "./InteractionViews";
 import type { RoutineSeed } from "./routineLabels";
-import { useWholePreview } from "./useClaudeAsks";
+import { useWholePreview } from "./useSessionAsks";
 import type { Transcript } from "./useTranscripts";
 
 type Decision = Extract<AgentEvent, { kind: "decision" }>;
