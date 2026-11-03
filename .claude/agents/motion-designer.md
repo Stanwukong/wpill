@@ -30,6 +30,7 @@ Read `CLAUDE.md` first (architecture rules and Windows gotchas apply to you too)
   right through a window with faded ends, one wavelength per 1.6 s, linear, `translateX` only; pill 22×10 (λ 8, 1.6 px
   stroke), `small` 14×6 (λ 6, 1.5 px) for rows and lists; absent when nothing works; reduced motion holds it still. The
   static mark is `AgentMark`: the wave at rest (two periods, 1.8 px) in the 22 px icon slot, 18 px in the command bar.
+- **Agent tag (2.9a, D47):** sessions name their agent with `AgentTag` (`src/features/sessions/AgentTag.tsx`): a lowercase word (`claude`, `codex`) after the project, `--font-agent` 11 px, `--agent-status` grey, no glyph, monogram or per-agent colour. It shows when the agent isn't Claude or the list mixes agents (`mixedAgents`), never in the pill; the name ellipsizes before it.
 - **Claude content uses `--font-agent`** (Cascadia Mono → Consolas fallback): project names (13.5 px, weight 500;
   Cascadia's 600 reads heavy), statuses (11 px, 400, `--agent-status`), commands, prompts and transcripts. Headings,
   buttons and other chrome stay Segoe (so do the command window's sidebar names and prompt snippets, D45); the wave and the mark are SVG. Cascadia's glyphs touch the

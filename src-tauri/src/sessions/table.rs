@@ -1,9 +1,10 @@
-//! Claude Code sessions keyed by Claude's `session_id`: status, and which activities to offer or withdraw.
+//! Terminal sessions of coding agents, keyed by agent and the agent's own `session_id`: status, and which activities
+//! to offer or withdraw.
 //! Pure; unit-tested. The listener thread owns the only instance.
 
 use crate::ipc::{
-    Activity, AgentSession, SessionDoneActivity, SessionNeedsInputActivity, SessionStatus,
-    TodoCount,
+    Activity, AgentKind, AgentSession, SessionDoneActivity, SessionNeedsInputActivity,
+    SessionStatus, TodoCount,
 };
 
 use super::protocol::{Event, Message, Proc};
@@ -20,6 +21,7 @@ const MAX_PROJECT_CHARS: usize = 64;
 pub struct Session {
     /// Ours, for IPC and activity keys.
     pub id: u32,
+    pub agent: AgentKind,
     native_id: String,
     pub project: String,
     pub status: SessionStatus,
@@ -35,7 +37,7 @@ pub struct Session {
 }
 
 impl Session {
-    /// Claude Code's session id.
+    /// The agent's own session id.
     pub fn native_id(&self) -> &str {
         &self.native_id
     }
@@ -43,6 +45,7 @@ impl Session {
     pub fn ipc(&self) -> AgentSession {
         AgentSession {
             session_id: self.id,
+            agent: self.agent,
             project: self.project.clone(),
             status: self.status,
             updated_at_ms: self.updated_at_ms,
@@ -52,11 +55,16 @@ impl Session {
         }
     }
 
-    /// The Claude Code process itself (nearest `claude.exe`, or `node.exe` for older npm installs).
+    /// The agent's own process: the nearest `claude.exe` (or `node.exe` for older npm installs of Claude Code), or
+    /// `codex.exe` (npm's shim starts the native exe, which runs the hooks).
     pub fn process(&self) -> Option<&Proc> {
-        self.chain.iter().find(|p| {
-            p.exe.eq_ignore_ascii_case("claude.exe") || p.exe.eq_ignore_ascii_case("node.exe")
-        })
+        let names: &[&str] = match self.agent {
+            AgentKind::Claude => &["claude.exe", "node.exe"],
+            AgentKind::Codex => &["codex.exe"],
+        };
+        self.chain
+            .iter()
+            .find(|p| names.iter().any(|n| p.exe.eq_ignore_ascii_case(n)))
     }
 }
 
@@ -81,7 +89,10 @@ impl Table {
     /// Applies one hook. Returns whether the session list changed (to emit `sessions:changed`) and what to
     /// tell the activity queue.
     pub fn apply(&mut self, msg: Message) -> (bool, Vec<Effect>) {
-        let found = self.list.iter().position(|s| s.native_id == msg.session);
+        let found = self
+            .list
+            .iter()
+            .position(|s| s.agent == msg.agent && s.native_id == msg.session);
         if msg.event == Event::SessionEnd {
             return match found {
                 Some(i) if msg.at_ms >= self.list[i].last_event_ms => {
@@ -91,7 +102,7 @@ impl Table {
                 _ => (false, vec![]),
             };
         }
-        // Table that started before the hooks were installed show up on their first event.
+        // Sessions that started before the hooks were installed show up on their first event.
         let (i, created) = match found {
             Some(i) => (i, false),
             None => (self.create(&msg), true),
@@ -123,12 +134,14 @@ impl Table {
         let needs_input = || {
             Effect::Offer(Activity::SessionNeedsInput(SessionNeedsInputActivity {
                 session_id: s.id,
+                agent: s.agent,
                 project: s.project.clone(),
             }))
         };
         let done = |failed| {
             Effect::Offer(Activity::SessionDone(SessionDoneActivity {
                 session_id: s.id,
+                agent: s.agent,
                 project: s.project.clone(),
                 failed,
             }))
@@ -153,6 +166,7 @@ impl Table {
             Event::NeedsInput => (SessionStatus::NeedsInput, Some(needs_input())),
             Event::Idle if before == SessionStatus::Working => (SessionStatus::Done, None),
             Event::Idle => (before, None),
+            Event::Interrupted => (SessionStatus::Idle, Some(Effect::Retract(s.id))),
             Event::Stop => (SessionStatus::Done, Some(done(false))),
             Event::StopFailure => (SessionStatus::Done, Some(done(true))),
             Event::SessionEnd => unreachable!("handled above"),
@@ -190,6 +204,7 @@ impl Table {
         self.next_id = self.next_id.wrapping_add(1).max(1);
         self.list.push(Session {
             id: self.next_id,
+            agent: msg.agent,
             native_id: msg.session.clone(),
             project: project(&msg.cwd),
             status: SessionStatus::Idle,
@@ -231,6 +246,7 @@ mod tests {
     fn msg(session: &str, at_ms: i64, event: Event) -> Message {
         Message {
             at_ms,
+            agent: AgentKind::Claude,
             session: session.into(),
             cwd: r"C:\Users\me\GitHub\wpill".into(),
             event,
@@ -439,5 +455,57 @@ mod tests {
         assert_eq!(project(r"C:\"), FALLBACK_PROJECT);
         assert_eq!(project(""), FALLBACK_PROJECT);
         assert_eq!(project(&"x".repeat(100)).len(), MAX_PROJECT_CHARS);
+    }
+
+    fn codex(session: &str, at_ms: i64, event: Event) -> Message {
+        let mut m = msg(session, at_ms, event);
+        m.agent = AgentKind::Codex;
+        m.chain = vec![
+            Proc {
+                pid: 11,
+                exe: "powershell.exe".into(),
+                created: 2,
+            },
+            Proc {
+                pid: 12,
+                exe: "codex.exe".into(),
+                created: 3,
+            },
+            Proc {
+                pid: 13,
+                exe: "node.exe".into(),
+                created: 4,
+            },
+        ];
+        m
+    }
+
+    #[test]
+    fn agents_keep_their_own_sessions() {
+        let mut s = Table::default();
+        s.apply(msg("same-id", 1, Event::Prompt));
+        s.apply(codex("same-id", 2, Event::Prompt));
+        assert_eq!(s.list().len(), 2);
+        s.apply(codex("same-id", 3, Event::Stop));
+        let by = |agent| s.list().iter().find(|x| x.agent == agent).unwrap();
+        assert_eq!(by(AgentKind::Claude).status, SessionStatus::Working);
+        assert_eq!(by(AgentKind::Codex).status, SessionStatus::Done);
+        assert_eq!(by(AgentKind::Codex).ipc().agent, AgentKind::Codex);
+        // Codex's own exe, not the npm shim's node.exe further up.
+        assert_eq!(by(AgentKind::Codex).process().unwrap().pid, 12);
+    }
+
+    #[test]
+    fn an_interrupt_makes_a_codex_session_idle() {
+        let mut s = Table::default();
+        s.apply(codex("c", 1, Event::Prompt));
+        let mut start = codex("c", 2, Event::ToolStart);
+        start.step = Some("Bash · cargo test".into());
+        s.apply(start);
+        let (changed, effects) = s.apply(codex("c", 3, Event::Interrupted));
+        assert!(changed);
+        assert_eq!(effects, vec![Effect::Retract(s.list()[0].id)]);
+        assert_eq!(s.list()[0].status, SessionStatus::Idle);
+        assert_eq!(s.list()[0].ipc().step, None);
     }
 }

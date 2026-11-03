@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 
-use super::{actions, google_tools, interact, tools};
+use super::{actions, google_tools, interact, patch, tools};
 use crate::desktop::plan;
 use crate::google::tools::{
     CALENDAR_LIST_EVENTS, GMAIL_DRAFT, GMAIL_READ, GMAIL_SEARCH, TASKS_LIST,
@@ -243,6 +243,8 @@ pub fn display_tool(tool: &str) -> String {
     match tool {
         interact::QUESTION_TOOL => return "Question".into(),
         interact::PLAN_TOOL => return "Plan".into(),
+        // Codex's file edits (2.9a).
+        "apply_patch" => return "Edit".into(),
         _ => {}
     }
     if let Some(name) = tools::short_name(tool).or_else(|| actions::short_name(tool)) {
@@ -262,7 +264,9 @@ pub fn display_tool(tool: &str) -> String {
 
 /// The approval's one line: the command, the file, the host, the query.
 pub fn summary(tool: &str, input: &Value, cwd: &str) -> String {
-    let text = if SHELL_TOOLS.contains(&tool) {
+    let text = if let Some(files) = patch_files(input, cwd) {
+        files
+    } else if SHELL_TOOLS.contains(&tool) {
         one_line(str_field(input, "command"))
     } else if let Some(path) = path_field(input) {
         relative(path, cwd)
@@ -294,6 +298,9 @@ pub fn step_label(tool: &str, input: &Value, cwd: &str) -> String {
             .map(|p| file_name(p).to_string())
             .unwrap_or_default()
     };
+    if let Some(files) = patch_files(input, cwd) {
+        return truncate(&format!("Editing {files}"), MAX_LABEL);
+    }
     let label = match tool {
         "Bash" | "PowerShell" => format!("Running {}", one_line(str_field(input, "command"))),
         "Edit" | "MultiEdit" | "NotebookEdit" => format!("Editing {}", file()),
@@ -328,6 +335,9 @@ pub fn step_label(tool: &str, input: &Value, cwd: &str) -> String {
 /// The live step line (2.8d): the tool and what it works on, "Edit · hover/logic.rs", "Bash · git status",
 /// "WebFetch · docs.rs". Paths are relative to the folder when inside it, else just the file name.
 pub fn step_line(tool: &str, input: &Value, cwd: &str) -> String {
+    if let Some(files) = patch_files(input, cwd) {
+        return truncate(&format!("Edit · {files}"), MAX_LABEL);
+    }
     let name = display_tool(tool);
     let target = if SHELL_TOOLS.contains(&tool) {
         one_line(str_field(input, "command"))
@@ -435,6 +445,18 @@ pub fn remember_scope(key: &str) -> String {
         _ if key == "edit" => "edits".to_string(),
         _ => display_tool(key),
     }
+}
+
+/// A Codex patch's files (2.9a): "main.rs", or "main.rs +2" for three.
+fn patch_files(input: &Value, cwd: &str) -> Option<String> {
+    let p = patch::of_input(input)?;
+    let first = relative(&p.files.first()?.path, cwd);
+    let others = p.files.len() - 1 + p.more_files as usize;
+    Some(if others == 0 {
+        first
+    } else {
+        format!("{first} +{others}")
+    })
 }
 
 fn str_field<'a>(input: &'a Value, key: &str) -> &'a str {

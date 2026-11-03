@@ -11,6 +11,8 @@
 mod ask;
 mod asks;
 mod claude;
+mod codex;
+mod files;
 mod focus;
 mod forward;
 mod pipe;
@@ -37,7 +39,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use crate::activity::{session_key, Activities, Signal, Watcher};
 use crate::error::{AppError, AppResult};
 use crate::hover::Island;
-use crate::ipc::{events, ClaudeHooksStatus, SessionsPayload, UsageLimits};
+use crate::ipc::{events, AgentKind, ClaudeHooksStatus, SessionsPayload, UsageLimits};
 use crate::win32::Handle;
 use crate::{apps, win32, window};
 pub use asks::Asks;
@@ -81,12 +83,12 @@ impl Sessions {
         self.lock().sessions.iter().find(|s| s.id == id).cloned()
     }
 
-    /// Our id for Claude Code's session id, if the listener has seen that session.
-    fn row_of(&self, native_id: &str) -> Option<u32> {
+    /// Our id for `agent`'s own session id, if the listener has seen that session.
+    fn row_of(&self, agent: AgentKind, native_id: &str) -> Option<u32> {
         self.lock()
             .sessions
             .iter()
-            .find(|s| s.native_id() == native_id)
+            .find(|s| s.agent == agent && s.native_id() == native_id)
             .map(|s| s.id)
     }
 
@@ -152,7 +154,11 @@ fn listen(app: &AppHandle, out: &Sender<Signal>, server: &pipe::Server, stop: &H
             pipe::Next::Message(bytes) => match protocol::decode(&bytes) {
                 // Agent runs started by Cay fire the same hooks; `agent/` shows those itself.
                 Some(msg) if msg.chain.iter().any(process::is_self) => {
-                    log::debug!("claude hook {:?} from an agent run; ignored", msg.event);
+                    log::debug!(
+                        "{} hook {:?} from an agent run; ignored",
+                        msg.agent.display(),
+                        msg.event
+                    );
                 }
                 // The status line (2.8f): account-wide limits, not a session's status.
                 Some(msg) if msg.event == Event::Limits => {
@@ -164,7 +170,15 @@ fn listen(app: &AppHandle, out: &Sender<Signal>, server: &pipe::Server, stop: &H
                     }
                 }
                 Some(msg) => {
-                    log::debug!("claude hook {:?} ({})", msg.event, table::project(&msg.cwd));
+                    log::debug!(
+                        "{} hook {:?} ({})",
+                        msg.agent.display(),
+                        msg.event,
+                        table::project(&msg.cwd)
+                    );
+                    if msg.agent == AgentKind::Codex {
+                        codex::saw_hook();
+                    }
                     let asks = app.state::<Asks>();
                     let held = asks.holds_for(&msg.session);
                     let event = msg.event;
@@ -351,6 +365,19 @@ fn hook_state() -> hooks::State {
         .map_or(hooks::State::NotConnected, |settings| {
             hooks::state(&settings)
         })
+}
+
+/// Tray "Connect Codex…" (2.9a).
+pub fn codex_tray_label() -> &'static str {
+    codex::tray_label()
+}
+
+pub fn codex_toggle_from_tray(item: MenuItem<Wry>) {
+    codex::toggle_from_tray(item);
+}
+
+pub fn codex_keep_tray_item(item: MenuItem<Wry>) {
+    codex::keep_tray_item(item);
 }
 
 pub fn tray_label() -> &'static str {

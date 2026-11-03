@@ -11,6 +11,7 @@ use serde_json::{json, Map, Value};
 
 use super::protocol::{origin_ok, Proc};
 use crate::agent::interact::{self, PLAN_TOOL, QUESTION_TOOL};
+use crate::ipc::AgentKind;
 
 pub const VERSION: u32 = 1;
 /// Largest request the forwarder sends and Cay reads.
@@ -39,6 +40,9 @@ const PLAN_REJECTED_MESSAGE: &str =
 #[serde(rename_all = "camelCase")]
 pub struct Request {
     pub v: u32,
+    /// Which agent asks (2.9a); left out for Claude Code.
+    #[serde(default, skip_serializing_if = "AgentKind::is_claude")]
+    pub agent: AgentKind,
     pub at_ms: i64,
     pub session_id: String,
     pub cwd: String,
@@ -103,7 +107,7 @@ impl Reply {
 }
 
 /// Forwarder side: the request for a hook's stdin, or `None` if it isn't a `PermissionRequest` the island can answer.
-pub fn request(stdin: &[u8], at_ms: i64, chain: Vec<Proc>) -> Option<Request> {
+pub fn request(stdin: &[u8], agent: AgentKind, at_ms: i64, chain: Vec<Proc>) -> Option<Request> {
     let input: HookInput = serde_json::from_slice(stdin).ok()?;
     if input.hook_event_name != "PermissionRequest" {
         return None;
@@ -111,6 +115,7 @@ pub fn request(stdin: &[u8], at_ms: i64, chain: Vec<Proc>) -> Option<Request> {
     let (tool_input, cut) = trim_input(input.tool_input);
     let request = Request {
         v: VERSION,
+        agent,
         at_ms,
         session_id: input.session_id,
         cwd: input.cwd,
@@ -290,6 +295,7 @@ mod tests {
                 r#"{"command":"rm -rf node_modules","description":"d"}"#,
             )
             .as_bytes(),
+            AgentKind::Claude,
             AT,
             vec![],
         )
@@ -307,11 +313,27 @@ mod tests {
     fn only_permission_requests_the_island_can_answer() {
         let other =
             r#"{"session_id":"s","cwd":"C:\\p","hook_event_name":"PreToolUse","tool_name":"Bash"}"#;
-        assert_eq!(request(other.as_bytes(), AT, vec![]), None);
-        assert!(request(stdin("AskUserQuestion", "{}").as_bytes(), AT, vec![]).is_some());
-        assert!(request(stdin("ExitPlanMode", "{}").as_bytes(), AT, vec![]).is_some());
+        assert_eq!(
+            request(other.as_bytes(), AgentKind::Claude, AT, vec![]),
+            None
+        );
+        assert!(request(
+            stdin("AskUserQuestion", "{}").as_bytes(),
+            AgentKind::Claude,
+            AT,
+            vec![]
+        )
+        .is_some());
+        assert!(request(
+            stdin("ExitPlanMode", "{}").as_bytes(),
+            AgentKind::Claude,
+            AT,
+            vec![]
+        )
+        .is_some());
         assert!(request(
             stdin("mcp__github__create_issue", "{}").as_bytes(),
+            AgentKind::Claude,
             AT,
             vec![]
         )
@@ -323,7 +345,13 @@ mod tests {
         let long = "é".repeat(MAX_STRING);
         let big: Vec<u32> = (0..10_000).collect();
         let input = json!({ "file_path": "C:\\a.txt", "content": long, "lines": big });
-        let r = request(stdin("Write", &input.to_string()).as_bytes(), AT, vec![]).unwrap();
+        let r = request(
+            stdin("Write", &input.to_string()).as_bytes(),
+            AgentKind::Claude,
+            AT,
+            vec![],
+        )
+        .unwrap();
         let content = r.tool_input["content"].as_str().unwrap();
         assert!(content.len() <= MAX_STRING && content.ends_with('é'));
         assert_eq!(r.tool_input["lines"].as_array().unwrap().len(), MAX_ITEMS);
@@ -337,6 +365,7 @@ mod tests {
         let input = json!({ "file_path": "C:\\a.txt", "edits": edits });
         let r = request(
             stdin("MultiEdit", &input.to_string()).as_bytes(),
+            AgentKind::Claude,
             AT,
             vec![],
         )
@@ -356,13 +385,25 @@ mod tests {
         );
         assert!(serde_json::to_vec(&r).unwrap().len() < MAX_REQUEST);
 
-        let small = request(stdin("Bash", r#"{"command":"ls"}"#).as_bytes(), AT, vec![]).unwrap();
+        let small = request(
+            stdin("Bash", r#"{"command":"ls"}"#).as_bytes(),
+            AgentKind::Claude,
+            AT,
+            vec![],
+        )
+        .unwrap();
         assert!(small.cut.is_empty());
     }
 
     #[test]
     fn rejects_malformed_and_hostile_requests() {
-        let good = request(stdin("Bash", r#"{"command":"ls"}"#).as_bytes(), AT, vec![]).unwrap();
+        let good = request(
+            stdin("Bash", r#"{"command":"ls"}"#).as_bytes(),
+            AgentKind::Claude,
+            AT,
+            vec![],
+        )
+        .unwrap();
         let wire = |r: &Request| serde_json::to_vec(r).unwrap();
         assert!(decode(&wire(&good)).is_some());
         let bad = [

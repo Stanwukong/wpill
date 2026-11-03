@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { sessionCheckDraw, sessionDotsOut, sessionStatusIn } from "../../island/motion";
 import { AgentMark } from "../sessions/WorkingGlyphs";
@@ -15,12 +16,15 @@ export function SessionActivity({
   project,
   state,
   label,
+  tag,
   onOpen,
 }: {
   project: string;
   state: SessionActivityState;
   /** Overrides the "Done" / "Stopped" status text (e.g. "Turn limit reached"). */
   label?: string;
+  /** After the project: which agent's session it is (`AgentTag`, 2.9a). */
+  tag?: ReactNode;
   onOpen: () => void;
 }) {
   // Reduced motion: status and check appear in their end state (initial={false}); the dots stop in CSS.
@@ -32,6 +36,7 @@ export function SessionActivity({
       <AgentMark />
       <span className="session-activity__line">
         <span className="activity__title">{project}</span>
+        {tag}
         {status && (
           // The clip makes the text emerge from behind the name rather than fly in.
           <span className="session-activity__status">

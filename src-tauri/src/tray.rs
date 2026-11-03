@@ -1,4 +1,4 @@
-//! Tray icon: version label, launch-at-startup toggle, Claude Code and Google connections, pause routines, quit.
+//! Tray icon: version label, launch-at-startup toggle, Claude Code, Codex and Google connections, pause routines, quit.
 
 use std::sync::OnceLock;
 
@@ -11,6 +11,7 @@ use crate::{agent, autostart, google, sessions};
 const TRAY_ID: &str = "main";
 const ID_AUTOSTART: &str = "autostart";
 const ID_CLAUDE: &str = "claude";
+const ID_CODEX: &str = "codex";
 const ID_GOOGLE: &str = "google";
 const ID_QUIT: &str = "quit";
 const ID_PAUSE_ROUTINES: &str = "pause-routines";
@@ -39,6 +40,14 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         None::<&str>,
     )?;
     let claude = MenuItem::with_id(app, ID_CLAUDE, sessions::tray_label(), true, None::<&str>)?;
+    let codex = MenuItem::with_id(
+        app,
+        ID_CODEX,
+        sessions::codex_tray_label(),
+        true,
+        None::<&str>,
+    )?;
+    sessions::codex_keep_tray_item(codex.clone());
     let google = MenuItem::with_id(app, ID_GOOGLE, google::tray_label(app), true, None::<&str>)?;
     let _ = GOOGLE.set(google.clone());
     let pause = CheckMenuItem::with_id(
@@ -51,8 +60,8 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     )?;
     let _ = PAUSE_ROUTINES.set(pause.clone());
     let quit = MenuItem::with_id(app, ID_QUIT, "Quit Cay", true, None::<&str>)?;
-    let items: [&dyn IsMenuItem<Wry>; 7] = [
-        &version, &separator, &autostart, &claude, &google, &pause, &quit,
+    let items: [&dyn IsMenuItem<Wry>; 8] = [
+        &version, &separator, &autostart, &claude, &codex, &google, &pause, &quit,
     ];
     let menu = Menu::with_items(app, &items)?;
 
@@ -63,6 +72,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(move |app, event| match event.id().as_ref() {
             ID_AUTOSTART => toggle_autostart(&autostart),
             ID_CLAUDE => sessions::toggle_from_tray(claude.clone()),
+            ID_CODEX => sessions::codex_toggle_from_tray(codex.clone()),
             ID_GOOGLE => google::toggle_from_tray(app),
             ID_PAUSE_ROUTINES => agent::set_routines_paused(app, !agent::routines_paused(app)),
             ID_QUIT => app.exit(0),

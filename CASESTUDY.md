@@ -779,8 +779,8 @@ back to Codex's own prompt, so Cay's `pass` costs nothing. `updatedInput`/`updat
 are never sent. `Interrupt` gives the Esc signal Claude Code lacks. Two catches: Codex skips a new or changed hook until
 you trust it once with `/hooks` (Connect says so; status reads "waiting for trust" until a Codex hook arrives), and the
 shell running a hook on Windows has changed between versions (cmd at 0.142, PowerShell in reports up to 0.164), with a
-quoted path running nothing under PowerShell. So `commandWindows` is the exe's 8.3 short path, unquoted, and Connect
-refuses on a volume without 8.3 names. A minimum Codex version is required (the author's call), checked by Connect.
+quoted path running nothing under PowerShell. So `commandWindows` is the exe's 8.3 short path, unquoted (on a volume
+without 8.3 names, PowerShell's `& '…'`, which 0.166 runs; amended after the check below). A minimum Codex version is required (the author's call), checked by Connect.
 `codex exec` has no approval channel, so Codex runs, if any, go through ACP (`codex-acp`). *OpenCode sessions:* a spike
 of a plugin file piping into the same forwarder; attaching to the TUI's server was rejected (random port, no auth by
 default). *Marks (D30 holds):* one amber wave for every agent; the agent is named by a small lowercase text tag
@@ -801,6 +801,16 @@ backend also has a unit test that its launch forces asking and an ignored live t
 each ask first. *Local models:* agent work needs ~32 GB RAM or a 24 GB GPU (Qwen3-Coder 30B-A3B, Devstral Small);
 16 GB runs gpt-oss-20b slowly; the 8 GB dev machine can't, so the live Goose test runs on another machine (the
 author's). *Gemini CLI:* no sessions in 2.9; later as an ACP backend if it passes the same check.
+*Checked on Codex 0.166.0 (2026-11-03, scratch `CODEX_HOME`, a logging hook exe in a folder with a space):* hooks run
+through `powershell.exe -NoProfile -Command "<command>"`. The unquoted 8.3 path and `& '<long path>'` both run; a quoted
+long path runs nothing and the TUI shows "Hook failed · exited with code 1" on every session start. In the TUI a
+`PermissionRequest` arrives as `{tool_name: "Bash", tool_input: {command}, permission_mode: "default", turn_id}`, with
+no `description` and no `tool_use_id`, and its commands are PowerShell (`Set-Content -LiteralPath …`). Deny shows
+"Blocked by hook · <message>" and the step doesn't run; allow runs it without Codex's prompt. `codex exec` never fires
+`PermissionRequest` (it reports `bypassPermissions` and turns down what it can't ask about), so Codex is tested in the
+TUI. 0.166 dropped `approval_policy = "untrusted"` (only `on-request` and `never`). `SessionEnd` has a 1 s default
+timeout (3 s at most), so the forwarder must answer it well within that. The minimum Codex version is 0.166.0, the
+one checked.
 *Alternatives:* keeping `claude/` and the IPC names (cheaper now, misleading forever); `config.toml` hooks (needs a
 TOML writer); a quoted or PowerShell-only `commandWindows` (breaks on the other shell); `codex exec --json` runs (no
 approvals); per-agent native run paths (more code for the same events); Goose's `smart_approve` or `auto` (the model

@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::ipc::{LimitWindow, TodoCount, UsageLimits};
+use crate::ipc::{AgentKind, LimitWindow, TodoCount, UsageLimits};
 
 pub const VERSION: u32 = 1;
 /// Largest message the listener reads; anything longer is dropped whole.
@@ -34,6 +34,9 @@ pub struct Proc {
 #[serde(rename_all = "camelCase")]
 pub struct Envelope {
     pub v: u32,
+    /// Which agent ran the hook (`cay.exe hook --agent codex`, 2.9a); left out for Claude Code.
+    #[serde(default, skip_serializing_if = "AgentKind::is_claude")]
+    pub agent: AgentKind,
     /// When the forwarder started (Unix ms). Async hooks can arrive out of order.
     pub at_ms: i64,
     pub event: String,
@@ -96,6 +99,8 @@ pub enum Event {
     NeedsInput,
     /// `Notification` `idle_prompt`: Claude finished a while ago (also after an Esc, where `Stop` never fires).
     Idle,
+    /// Codex's `Interrupt`: you stopped the turn (Esc), so the session is idle again.
+    Interrupted,
     Stop,
     /// The turn ended on an API error.
     StopFailure,
@@ -123,6 +128,7 @@ fn event_of(name: &str, notification_type: Option<&str>, source: Option<&str>) -
         },
         "Stop" => Event::Stop,
         "StopFailure" => Event::StopFailure,
+        "Interrupt" => Event::Interrupted,
         "SessionEnd" => Event::SessionEnd,
         STATUS_LINE => Event::Limits,
         _ => return None,
@@ -132,7 +138,8 @@ fn event_of(name: &str, notification_type: Option<&str>, source: Option<&str>) -
 #[derive(Debug, Clone, PartialEq)]
 pub struct Message {
     pub at_ms: i64,
-    /// Claude Code's session id.
+    pub agent: AgentKind,
+    /// The agent's own session id.
     pub session: String,
     pub cwd: String,
     pub event: Event,
@@ -181,6 +188,7 @@ pub fn limits_envelope(stdin: &[u8], at_ms: i64, chain: Vec<Proc>) -> Option<Env
     };
     let envelope = Envelope {
         v: VERSION,
+        agent: AgentKind::Claude,
         at_ms,
         event: STATUS_LINE.into(),
         session_id: text("session_id"),
@@ -206,8 +214,8 @@ fn limits_ok(l: &UsageLimits, at_ms: i64) -> bool {
     }) && l.at_ms == at_ms
 }
 
-/// Forwarder side: the envelope for a hook's stdin, or `None` if it isn't one we track.
-pub fn envelope(stdin: &[u8], at_ms: i64, chain: Vec<Proc>) -> Option<Envelope> {
+/// Forwarder side: the envelope for `agent`'s hook stdin, or `None` if it isn't one we track.
+pub fn envelope(stdin: &[u8], agent: AgentKind, at_ms: i64, chain: Vec<Proc>) -> Option<Envelope> {
     let input: HookInput = serde_json::from_slice(stdin).ok()?;
     let (step, todos) = match input.tool_name.as_deref() {
         Some(tool) if input.hook_event_name == "PreToolUse" => {
@@ -218,6 +226,7 @@ pub fn envelope(stdin: &[u8], at_ms: i64, chain: Vec<Proc>) -> Option<Envelope> 
     };
     let envelope = Envelope {
         v: VERSION,
+        agent,
         at_ms,
         event: input.hook_event_name,
         session_id: input.session_id,
@@ -242,6 +251,7 @@ pub fn decode(bytes: &[u8]) -> Option<Message> {
     let event = check(&envelope)?;
     Some(Message {
         at_ms: envelope.at_ms,
+        agent: envelope.agent,
         session: envelope.session_id,
         cwd: envelope.cwd,
         event,
@@ -314,7 +324,7 @@ mod tests {
     }
 
     fn round_trip(stdin: &str) -> Option<Message> {
-        let e = envelope(stdin.as_bytes(), AT, chain())?;
+        let e = envelope(stdin.as_bytes(), AgentKind::Claude, AT, chain())?;
         decode(&serde_json::to_vec(&e).unwrap())
     }
 
@@ -322,7 +332,7 @@ mod tests {
     fn keeps_only_the_fields_it_needs() {
         let stdin = r#"{"session_id":"abc-123","transcript_path":"C:\\t.jsonl","cwd":"C:\\Users\\me\\wpill",
             "hook_event_name":"Stop","stop_hook_active":false,"last_assistant_message":"secret text"}"#;
-        let e = envelope(stdin.as_bytes(), AT, chain()).unwrap();
+        let e = envelope(stdin.as_bytes(), AgentKind::Claude, AT, chain()).unwrap();
         let wire = String::from_utf8(serde_json::to_vec(&e).unwrap()).unwrap();
         assert!(!wire.contains("secret"));
         assert!(!wire.contains("t.jsonl"));
@@ -447,7 +457,7 @@ mod tests {
     fn tool_starts_carry_a_step_and_never_the_input() {
         let stdin = r#"{"session_id":"s","cwd":"C:\\p","hook_event_name":"PreToolUse","tool_name":"Edit",
             "tool_input":{"file_path":"C:\\p\\src\\main.rs","old_string":"secret","new_string":"x"}}"#;
-        let e = envelope(stdin.as_bytes(), AT, chain()).unwrap();
+        let e = envelope(stdin.as_bytes(), AgentKind::Claude, AT, chain()).unwrap();
         let wire = String::from_utf8(serde_json::to_vec(&e).unwrap()).unwrap();
         assert!(!wire.contains("secret"));
         let m = decode(wire.as_bytes()).unwrap();
@@ -476,15 +486,25 @@ mod tests {
 
     #[test]
     fn rejects_malformed_and_hostile_input() {
-        assert_eq!(envelope(b"not json", AT, vec![]), None);
-        assert_eq!(envelope(br#"{"cwd":"x"}"#, AT, vec![]), None);
+        assert_eq!(envelope(b"not json", AgentKind::Claude, AT, vec![]), None);
+        assert_eq!(
+            envelope(br#"{"cwd":"x"}"#, AgentKind::Claude, AT, vec![]),
+            None
+        );
         let bad_id = r#"{"session_id":"a b/../c","cwd":"C:\\p","hook_event_name":"Stop"}"#;
-        assert_eq!(envelope(bad_id.as_bytes(), AT, vec![]), None);
+        assert_eq!(
+            envelope(bad_id.as_bytes(), AgentKind::Claude, AT, vec![]),
+            None
+        );
         let newline_cwd = r#"{"session_id":"s","cwd":"C:\\p\nq","hook_event_name":"Stop"}"#;
-        assert_eq!(envelope(newline_cwd.as_bytes(), AT, vec![]), None);
+        assert_eq!(
+            envelope(newline_cwd.as_bytes(), AgentKind::Claude, AT, vec![]),
+            None
+        );
 
         let good = envelope(
             br#"{"session_id":"s","cwd":"C:\\p","hook_event_name":"Stop"}"#,
+            AgentKind::Claude,
             AT,
             vec![],
         )
@@ -514,5 +534,31 @@ mod tests {
         oversized.resize(MAX_MESSAGE + 1, b' ');
         assert_eq!(decode(&oversized), None);
         assert_eq!(decode(b"{\"v\":1"), None);
+    }
+
+    #[test]
+    fn codex_hooks_keep_their_agent() {
+        let stdin = r#"{"session_id":"01a1a185-b856","turn_id":"t","cwd":"C:\\work","hook_event_name":"Interrupt",
+            "model":"gpt","permission_mode":"default"}"#;
+        let e = envelope(stdin.as_bytes(), AgentKind::Codex, AT, chain()).unwrap();
+        let wire = String::from_utf8(serde_json::to_vec(&e).unwrap()).unwrap();
+        assert!(wire.contains(r#""agent":"codex""#));
+        let m = decode(wire.as_bytes()).unwrap();
+        assert_eq!((m.agent, m.event), (AgentKind::Codex, Event::Interrupted));
+        // Claude Code's envelopes look as they did before 2.9: no `agent` on the wire, read back as Claude.
+        let claude = envelope(stdin.as_bytes(), AgentKind::Claude, AT, chain()).unwrap();
+        let wire = serde_json::to_vec(&claude).unwrap();
+        assert!(!String::from_utf8_lossy(&wire).contains("agent"));
+        assert_eq!(decode(&wire).unwrap().agent, AgentKind::Claude);
+        // A Codex shell step reads like Claude Code's.
+        let pre = r#"{"session_id":"s","cwd":"C:\\work","hook_event_name":"PreToolUse","tool_name":"Bash",
+            "tool_input":{"command":"Set-Content -LiteralPath hello.txt -Value hi"},"tool_use_id":"exec-1"}"#;
+        let step = envelope(pre.as_bytes(), AgentKind::Codex, AT, chain())
+            .unwrap()
+            .step;
+        assert_eq!(
+            step.as_deref(),
+            Some("Bash · Set-Content -LiteralPath hello.txt -Value hi")
+        );
     }
 }

@@ -82,7 +82,11 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
   dialog. Claude Code's own parts are in `sessions/claude/`: `hooks.rs` (settings.json merge, pure and unit-tested) and
   `statusline.rs` = `cay.exe statusline` (2.8f: usage limits to the hook pipe, then the user's own status line; the
   `claude` block of Cay's `settings.json`). The pipe names (`cay-claude-…`) and the hook marker kept their names, so
-  installed entries keep working. It ignores hooks from sessions Cay itself started (`is_self`).
+  installed entries keep working. Codex's parts (2.9a) are in `sessions/codex/`: `hooks.rs` (pure: `hooks.json`
+  merge, the command, version parsing, `MIN_VERSION`) and `mod.rs` (8.3 path, version check, tray Connect/Finish/
+  Update/Disconnect Codex, `codex.hooksSeen` in Cay's `settings.json`). `files.rs` = reading, backing up and writing
+  those settings files and Cay's own blocks. Sessions carry an `AgentKind`; the forwarder takes `--agent codex`.
+  `agent/patch.rs` (pure) reads Codex's `apply_patch` format for cards, summaries and step lines. It ignores hooks from sessions Cay itself started (`is_self`).
   Permission requests (2.8a): `ask.rs` (pure: the held request, the reply, the hook output) and `asks.rs` (managed
   `Asks`, the `session-asks` pipe server, one thread per held request, `sessionApproval` cards). Questions and plans
   (2.8c): `agent/interact.rs` (pure: questions, answers, `updatedInput`, plan titles), shared by sessions and runs. They're never allowed bare:
@@ -137,7 +141,7 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
   `features/activities/` (`ActivityView` per kind, `ScreenshotActivity` with the drag/click gesture, `SessionActivity`,
   inline SVG `icons`), `features/sessions/` (`useSessions` lives in `Island`, `WorkingGlyphs.tsx` =
   `WorkingIndicator` (the amber wave while something works) and `AgentMark` (the wave at rest), `StepLabel` (the
-  live step line and `n/m`, 2.8d), the panel's `AgentsSection`; `--agent` (amber, with `--agent-rgb`/`-deep`/`-ink`) is a fixed token like `--charge`, mirrored by
+  live step line and `n/m`, 2.8d), the panel's `AgentsSection` (heading "Agents"), `AgentTag.tsx` = the lowercase agent name after a session's project (2.9a; shown when the agent isn't Claude or the list mixes agents, never in the pill; `mixedAgents`); `--agent` (amber, with `--agent-rgb`/`-deep`/`-ink`) is a fixed token like `--charge`, mirrored by
   `COLOR` in `window/glow.rs`; never reintroduce Claude Code's spinner, `✻` or orange (D30); Claude content uses
   `--font-agent`, Cascadia Mono). The equaliser uses `--media-accent`: the art's accent, or soft white with no art, `features/agent/` (`useAgentRuns` lives in `Island`, panel rows `AgentRunItems` in AgentsSection's
   `agent` slot; the `agentApproval` view is `features/activities/AgentApproval.tsx`), `command/` (the command window's
@@ -248,6 +252,14 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
 - **Testing activities from outside without side effects:** toggle Caps Lock with SendInput and toggle it back; volume
   up N then down N; brightness via WMI `WmiSetBrightness` and restore; copy an image into the Screenshots folder (then
   delete it). Read `GWL_EXSTYLE` (`WS_EX_TRANSPARENT`) to check click-through.
+- **Codex hooks (2.9a, D47).** Codex 0.166 runs a hook's command through `powershell.exe -NoProfile -Command`
+  (cmd in older versions): a quoted path runs nothing there and shows "Hook failed" on every session start, so the
+  entry is the exe's unquoted 8.3 path (`& '…'` only without 8.3 names). Codex skips new or changed hooks until you
+  trust them with `/hooks`; `--dangerously-bypass-hook-trust` is for scratch tests only (Claude Code's auto mode
+  refuses it unless you allow the exact command). `codex exec` never fires `PermissionRequest` (it reports
+  `bypassPermissions`): test permission cards in the TUI. Test with a scratch `CODEX_HOME` (its own `codex login`, so
+  test runs never share a refresh token with your real login); never write the real `~\.codex\hooks.json` in tests.
+  `SessionEnd` and `Interrupt` time out after 3 s at most.
 - **The hook forwarder must stay quiet and fast.** `cay.exe hook` runs before Tauri, never panics
   (release is `panic = "abort"`, a non-zero exit shows as a hook error in Claude Code) and bounds every wait. The only
   thing it ever prints is a `PermissionRequest` decision you made in the island (2.8a); with no decision it prints

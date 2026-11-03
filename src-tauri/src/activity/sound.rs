@@ -67,6 +67,7 @@ mod tests {
         let mut chime = Chime::default();
         let needs = Activity::SessionNeedsInput(SessionNeedsInputActivity {
             session_id: 1,
+            agent: crate::ipc::AgentKind::Claude,
             project: "wpill".into(),
         });
         assert!(chime.wants(7, &needs));

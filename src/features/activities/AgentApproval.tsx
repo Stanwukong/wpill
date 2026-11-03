@@ -50,7 +50,8 @@ export function AgentApproval({ approval, run }: { approval: AgentApprovalActivi
 
 /**
  * The approval card both kinds share (agent runs and terminal sessions, 2.8a). Presentational: the caller owns the
- * pending choice and what a click does. `origin` is a quiet word after the title that tells the kinds apart;
+ * pending choice and what a click does. `origin` is a quiet word after the title that tells the kinds apart, `tag`
+ * (sessions only, `AgentTag`) names the session's agent before it;
  * `onTitle` makes the title a quiet button; without `onSummary` the summary is plain text. With a `preview` (2.8b)
  * the well holds the diff or the wrapped command instead of the one line (the island widens for it, `data-wide`).
  */
@@ -58,6 +59,7 @@ export function ApprovalCard({
   title,
   titleHint,
   onTitle,
+  tag,
   origin,
   tool,
   risk,
@@ -74,6 +76,7 @@ export function ApprovalCard({
   title: string;
   titleHint?: string;
   onTitle?: () => void;
+  tag?: ReactNode;
   origin?: string;
   tool: string;
   risk: AgentRisk;
@@ -96,6 +99,7 @@ export function ApprovalCard({
         title={title}
         titleHint={titleHint}
         onTitle={onTitle}
+        tag={tag}
         origin={origin}
         tool={tool}
         risk={risk}
@@ -167,6 +171,7 @@ export function ApprovalHead({
   title,
   titleHint,
   onTitle,
+  tag,
   origin,
   tool,
   count,
@@ -177,6 +182,7 @@ export function ApprovalHead({
   title: string;
   titleHint?: string;
   onTitle?: () => void;
+  tag?: ReactNode;
   origin?: string;
   tool: string;
   count?: string;
@@ -195,6 +201,7 @@ export function ApprovalHead({
         ) : (
           <span className="activity__title">{title}</span>
         )}
+        {tag}
         {origin && <span className="approval__origin">{origin}</span>}
         <span className="approval__tool">{tool}</span>
         {count && <span className="approval__count">{count}</span>}

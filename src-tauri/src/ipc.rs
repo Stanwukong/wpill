@@ -166,23 +166,48 @@ pub struct ScreenshotActivity {
     pub path: std::path::PathBuf,
 }
 
-/// A Claude Code turn finished (`Stop`), or ended on an API error (`StopFailure`, `failed`).
+/// Which coding agent a terminal session belongs to (2.9a, D47). On the pipe it defaults to Claude, so forwarders and
+/// hook entries from before 2.9 keep working.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AgentKind {
+    #[default]
+    Claude,
+    Codex,
+}
+
+impl AgentKind {
+    pub fn is_claude(&self) -> bool {
+        *self == AgentKind::Claude
+    }
+
+    /// The name people know it by, for dialogs and logs.
+    pub fn display(self) -> &'static str {
+        match self {
+            AgentKind::Claude => "Claude Code",
+            AgentKind::Codex => "Codex",
+        }
+    }
+}
+
+/// A session's turn finished (`Stop`), or ended on an API error (`StopFailure`, `failed`).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionDoneActivity {
-    /// Ours (`AgentSession::session_id`), not Claude Code's id.
+    /// Ours (`AgentSession::session_id`), not the agent's id.
     pub session_id: u32,
+    pub agent: AgentKind,
     /// The session's working folder name.
     pub project: String,
     pub failed: bool,
 }
 
-/// A Claude Code session is waiting on a permission prompt or a question. Sticky: it stays until the
-/// session's next event.
+/// A session is waiting on a permission prompt or a question. Sticky: it stays until the session's next event.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionNeedsInputActivity {
     pub session_id: u32,
+    pub agent: AgentKind,
     pub project: String,
 }
 
@@ -194,6 +219,7 @@ pub struct SessionApprovalActivity {
     pub request_id: u32,
     /// The session's row, for focusing its window; `None` if Cay hasn't seen the session yet.
     pub session_id: Option<u32>,
+    pub agent: AgentKind,
     pub project: String,
     /// Display name, as for agent runs (`Bash`, `github · create_issue`).
     pub tool: String,
@@ -248,8 +274,9 @@ pub struct SessionsPayload {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentSession {
-    /// Ours, stable for the session's lifetime; Claude Code's id stays in Rust.
+    /// Ours, stable for the session's lifetime; the agent's own id stays in Rust.
     pub session_id: u32,
+    pub agent: AgentKind,
     pub project: String,
     pub status: SessionStatus,
     /// Unix epoch ms of the last status change.

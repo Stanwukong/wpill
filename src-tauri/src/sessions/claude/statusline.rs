@@ -7,7 +7,6 @@
 //! panics, never waits unbounded, and prints nothing of its own.
 
 use std::io::{Read, Write};
-use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -16,7 +15,7 @@ use serde_json::{json, Value};
 
 use super::hooks::{self, Shell};
 use crate::ipc::UsageLimits;
-use crate::sessions::{forward, pipe, process, protocol};
+use crate::sessions::{files, forward, pipe, process, protocol};
 
 /// The user's command gets this long; Claude Code cancels a slow status line on the next update anyway.
 const RUN_TIMEOUT: Duration = Duration::from_secs(10);
@@ -116,22 +115,9 @@ fn run_theirs(command: &str, shell: Shell, input: &[u8]) -> Option<Vec<u8>> {
     output
 }
 
-/// Cay's own `settings.json` (`%APPDATA%\io.github.stanwukong.cay`), the file Tauri's config dir points at. The
-/// forwarder runs without Tauri, so it's found from the environment.
-fn cay_settings_path() -> Option<PathBuf> {
-    let appdata = std::env::var_os("APPDATA")?;
-    Some(
-        PathBuf::from(appdata)
-            .join("io.github.stanwukong.cay")
-            .join("settings.json"),
-    )
-}
-
 /// What Connect kept, or `None` if Cay hasn't chained a status line.
 pub fn saved() -> Option<Saved> {
-    let text = std::fs::read_to_string(cay_settings_path()?).ok()?;
-    let file: Value = serde_json::from_str(&text).ok()?;
-    from_block(file.get("claude")?)
+    from_block(&files::cay_block("claude")?)
 }
 
 fn from_block(block: &Value) -> Option<Saved> {
@@ -145,28 +131,7 @@ fn from_block(block: &Value) -> Option<Saved> {
 
 /// Keeps (or with `None`, forgets) what Connect replaced, in Cay's `settings.json`; other keys stay.
 pub fn keep(saved: Option<&Saved>) -> Result<(), String> {
-    let path = cay_settings_path().ok_or("couldn't find Cay's settings folder")?;
-    let mut file: Value = std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .filter(Value::is_object)
-        .unwrap_or_else(|| json!({}));
-    let root = file
-        .as_object_mut()
-        .ok_or("Cay's settings.json isn't an object")?;
-    match saved {
-        Some(s) => {
-            root.insert("claude".into(), to_block(s));
-        }
-        None => {
-            root.remove("claude");
-        }
-    }
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
-    let text = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
-    std::fs::write(&path, text).map_err(|e| format!("couldn't write {}: {e}", path.display()))
+    files::set_cay_block("claude", saved.map(to_block))
 }
 
 fn to_block(s: &Saved) -> Value {

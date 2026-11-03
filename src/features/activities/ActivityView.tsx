@@ -3,6 +3,7 @@ import type { ActivityPayload, AgentRun, PowerActivity } from "../../lib/types";
 import { endLabel } from "../agent/labels";
 import { CalendarSoon } from "../calendar/CalendarSoon";
 import { openRun } from "../agent/useAgentRuns";
+import { AgentTag } from "../sessions/AgentTag";
 import { focusSession } from "../sessions/useSessions";
 import { AgentActing } from "./AgentActing";
 import { AgentApproval } from "./AgentApproval";
@@ -17,7 +18,16 @@ import "./activities.css";
  * The compact island content for one activity. Timing and hit testing live in Rust. `agentRuns` (Island's) lets an
  * agent card show its run's mode chip (2.8e).
  */
-export function ActivityView({ activity, agentRuns = [] }: { activity: ActivityPayload; agentRuns?: AgentRun[] }) {
+export function ActivityView({
+  activity,
+  agentRuns = [],
+  mixedAgents = false,
+}: {
+  activity: ActivityPayload;
+  agentRuns?: AgentRun[];
+  /** Some terminal session isn't Claude Code's: session activities name their agent (2.9a). */
+  mixedAgents?: boolean;
+}) {
   switch (activity.kind) {
     case "volume": {
       const { level, muted, device } = activity.payload;
@@ -58,26 +68,34 @@ export function ActivityView({ activity, agentRuns = [] }: { activity: ActivityP
     case "screenshot":
       return <ScreenshotActivity id={activity.id} shot={activity.payload} />;
     case "sessionDone": {
-      const { sessionId, project, failed } = activity.payload;
+      const { sessionId, agent, project, failed } = activity.payload;
       return (
         <SessionActivity
           project={project}
           state={failed ? "stopped" : "done"}
+          tag={<AgentTag agent={agent} mixed={mixedAgents} />}
           onOpen={() => focusSession(sessionId)}
         />
       );
     }
     case "sessionNeedsInput": {
-      const { sessionId, project } = activity.payload;
-      return <SessionActivity project={project} state="needsInput" onOpen={() => focusSession(sessionId)} />;
+      const { sessionId, agent, project } = activity.payload;
+      return (
+        <SessionActivity
+          project={project}
+          state="needsInput"
+          tag={<AgentTag agent={agent} mixed={mixedAgents} />}
+          onOpen={() => focusSession(sessionId)}
+        />
+      );
     }
     // A question or a plan (2.8c) has its own card; everything else asks for Allow / Deny.
     case "sessionApproval": {
       const { interaction } = activity.payload;
       return interaction ? (
-        <SessionInteraction approval={activity.payload} interaction={interaction} />
+        <SessionInteraction approval={activity.payload} interaction={interaction} mixed={mixedAgents} />
       ) : (
-        <SessionApproval approval={activity.payload} />
+        <SessionApproval approval={activity.payload} mixed={mixedAgents} />
       );
     }
     case "agentApproval": {

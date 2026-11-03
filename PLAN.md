@@ -406,6 +406,17 @@ names as history. No payload changed shape.
 | attribute | `.island[data-claude]` | `.island[data-agent]` (runs drive it too) |
 | CSS | `--font-claude`, `.claude__*`, `.claude-row*`, `.claude-activity*`, `.activity--claude` | `--font-agent`, `.agents__*`, `.session-row*`, `.session-activity*`, `.activity--session` |
 
+Added in 2.9a (Codex sessions):
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| type / field | `AgentKind` on `AgentSession`, `SessionDoneActivity`, `SessionNeedsInputActivity`, `SessionApprovalActivity` | `"claude" \| "codex"` | Which agent a session belongs to. |
+| pipe field | `Envelope.agent`, `ask::Request.agent` | `"codex"`, absent for Claude | Old forwarders and entries read as Claude. |
+| exe mode | `cay.exe hook --agent codex` | Codex hook stdin | An unknown `--agent` value sends nothing. Codex's `Interrupt` → idle. |
+| file | `$CODEX_HOME\hooks.json` (else `~\.codex\hooks.json`) | 8 events, `command` = `commandWindows` | Written by Connect Codex; backed up first; only entries ending in `cay.exe hook --agent codex` are Cay's. |
+| file | Cay `settings.json` → `codex` | `{ hooksSeen: boolean }` | False from Connect until a Codex hook arrives ("Finish connecting Codex…" in the tray). |
+| tray | Connect / Finish connecting / Update / Disconnect Codex… | | Checks Codex ≥ 0.166.0 (npm's `package.json` or `codex.exe --version`). |
+
 Unchanged, because they're Claude Code's own: `claude_hooks_status` / `_install` / `_remove`, `ClaudeHooksStatus`,
 `ClaudeInstall`, `agent.claudePath`, the `claude` block and `activities.claude` switch in `settings.json`, the pipe
 names `cay-claude-…` and the hook marker.
@@ -1294,21 +1305,41 @@ Tasks stay on for ACP runs (desktop tools and Gmail off until a scripted look-an
       `claudeDone` / `claudeNeedsInput` / `claudeApproval` → `sessionDone` / `sessionNeedsInput` / `sessionApproval`,
       `ClaudeSection` → `AgentsSection` ("Agents"), `ClaudeActivity` → `SessionActivity`, `--font-claude` →
       `--font-agent`. Pipe names and the hook marker stay; `cay.exe hook` without `--agent` means Claude.
-- [ ] `agent` field (`claude` | `codex` | `opencode`) on the pipe envelope and `AgentSession`
-- [ ] Codex Connect/Disconnect in the tray: `~/.codex/hooks.json` (`CODEX_HOME` in tests), preview, dated backup, only
-      Cay's entries removed; `commandWindows` = the exe's 8.3 short path, unquoted (refuse without 8.3 names); minimum
-      Codex version checked; the dialog says to trust the entries once with `/hooks`; "waiting for trust" until a Codex
-      hook arrives
-- [ ] Events: `SessionStart` / `UserPromptSubmit` → working, `PreToolUse` (async) → step line, `PermissionRequest`
-      (sync, 660 s) → held, `PostToolUse` → answered, `Stop` → done, `Interrupt` → idle, `SessionEnd` → gone
-- [ ] Codex permission card: `Bash` → wrapped command, `apply_patch` → diff (pure parser for Codex's patch format),
-      MCP tools by name, `tool_input.description` as the note; held 55 s then `pass`; never `updatedInput` /
-      `updatedPermissions`, no "for this run"
+- [x] `agent` field (`claude` | `codex`; `opencode` with its spike) on the pipe envelope, the held request,
+      `AgentSession` and the session activities
+- [x] Codex Connect/Disconnect in the tray: `~/.codex/hooks.json` (`CODEX_HOME` in tests), preview, dated backup, only
+      Cay's entries removed; `command` = `commandWindows` = the exe's 8.3 short path, unquoted (without 8.3 names,
+      PowerShell's `& '…'`, which 0.166 runs); minimum Codex 0.166.0 checked; the dialog says to trust the entries once
+      with `/hooks`; "Finish connecting Codex…" until a Codex hook arrives
+- [x] Events: `SessionStart` / `UserPromptSubmit` → working, `PreToolUse` (async) → step line, `PermissionRequest`
+      (sync, 660 s) → held, `PostToolUse` → answered, `Stop` → done, `Interrupt` (3 s) → idle, `SessionEnd` (3 s) → gone
+- [x] Codex permission card: `Bash` → wrapped command, `apply_patch` (also `apply_patch <<'EOF'` through the shell) →
+      diff (`agent/patch.rs`), MCP tools by name; held 55 s then `pass`; never `updatedInput` / `updatedPermissions`, no
+      "for this run". (0.166 sends no `description` and no `tool_use_id` with a `PermissionRequest`.)
 - [ ] The agent tag (lowercase text, `--font-agent`, secondary colour) on cards and panel rows once a second agent kind
       has been seen; never in the pill; through `motion-designer`
 - [ ] Spike: OpenCode sessions through a plugin file (`~/.config/opencode/plugins/`) piping into
       `cay.exe hook --agent opencode`; check `permission.ask` can really decide. Attaching to the TUI's server is out
       (random port, no auth by default)
+
+**2.9a manual checks** (installed or debug build, Codex ≥ 0.166 in a terminal)
+1. Tray shows "Connect Codex…"; the dialog shows the eight entries with an unquoted `…~1…\cay.exe hook --agent codex`
+   command, the Codex version found, and the `/hooks` trust note. Connect writes `~\.codex\hooks.json` and a backup
+   if the file existed; other hooks in it stay.
+2. Tray now reads "Finish connecting Codex…"; its dialog repeats the trust note and offers Disconnect.
+3. In a new Codex session, `/hooks`, trust Cay's entries. The first prompt makes the session appear in the panel
+   (tagged `codex`) and the tray switches to "Disconnect Codex…".
+4. While Codex works, the pill's wave runs and the panel row shows the step line ("Bash · …").
+5. In a read-only sandbox (`codex -s read-only -a on-request`), ask for a file write: a card appears in the island with
+   the PowerShell command; Deny → Codex shows "Blocked by hook" and doesn't run it.
+6. Ask again; Allow → the command runs without Codex's own prompt.
+7. Ask again and don't answer for 55 s: the card goes away, Codex shows its own prompt, and the island shows
+   "needs you" for that session.
+8. An edit that needs approval shows a diff card (`apply_patch`), with the file name and counts.
+9. Esc during a long answer: the session goes back to idle (the `Interrupt` hook; not checked before 2.9a).
+10. Turn ends: a done activity tagged `codex`; quitting Codex removes the session (or the next prune does).
+11. A Claude Code session at the same time: both rows tagged; with Codex closed, Claude-only rows show no tag.
+12. Disconnect Codex: only Cay's entries are removed (a backup is made); Claude Code's connection is untouched.
 
 **2.9b ACP run backend** (Agent Client Protocol v1: JSON-RPC to an agent subprocess over stdio)
 - [ ] `agent::backend`: launch, encode a message, decode a line (event / approval / reply to write), stop;

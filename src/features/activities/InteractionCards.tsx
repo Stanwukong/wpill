@@ -11,6 +11,7 @@ import type {
 import { ChevronGlyph } from "../agent/AgentGlyphs";
 import { ModeChip } from "../agent/ModeChip";
 import { decide, openRun } from "../agent/useAgentRuns";
+import { AgentTag } from "../sessions/AgentTag";
 import { decideSession, focusSession } from "../sessions/useSessions";
 import { ApprovalHead } from "./AgentApproval";
 
@@ -49,17 +50,21 @@ export function AgentInteraction({
 export function SessionInteraction({
   approval,
   interaction,
+  mixed,
 }: {
   approval: SessionApprovalActivity;
   interaction: Interaction;
+  /** Some session isn't Claude Code's: the head names this one's agent (2.9a). */
+  mixed: boolean;
 }) {
-  const { requestId, sessionId, project, risk } = approval;
+  const { requestId, sessionId, agent, project, risk } = approval;
   const open = () =>
     commands.commandWindowShowAsk(requestId).catch((err: unknown) => console.debug("command window", err));
   const head = {
     title: project,
     titleHint: "Show session",
     onTitle: sessionId === null ? undefined : () => focusSession(sessionId),
+    tag: <AgentTag agent={agent} mixed={mixed} />,
     origin: "session",
     risk,
   };

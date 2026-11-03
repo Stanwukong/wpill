@@ -12,6 +12,7 @@ use serde_json::Value;
 
 use super::describe;
 use super::interact::PLAN_TOOL;
+use super::patch::{self, Kind, Patch};
 use crate::ipc::{ApprovalPreview, CommandPreview, DiffLine, DiffOp, DiffPreview, PlanPreview};
 
 /// Lines on the card, after which it says "+n more lines". Keeps the card within the island's window (D2).
@@ -109,6 +110,10 @@ pub fn build(
             card: None,
             full: ApprovalPreview::Plan(PlanPreview { markdown, cut }),
         });
+    }
+    // Codex's edits (2.9a): a patch, by name or by what its command holds.
+    if let Some(p) = patch::of_input(input) {
+        return Some(patch_previews(&p, cwd, was_cut("command")));
     }
     if SHELL_TOOLS.contains(&tool) {
         let command = input.get("command").and_then(Value::as_str)?;
@@ -211,6 +216,61 @@ pub fn build(
         card: Some(diff_preview(CONTEXT_CARD, CARD_LINES)),
         full: diff_preview(CONTEXT_FULL, FULL_LINES),
     })
+}
+
+/// A Codex patch as a diff: every file's sections in order with a gap between them, and a note naming the files when
+/// there are several (the card has room for one file name).
+fn patch_previews(p: &Patch, cwd: &str, cut: bool) -> Previews {
+    let names: Vec<String> = p
+        .files
+        .iter()
+        .map(|f| describe::relative(&f.path, cwd))
+        .collect();
+    let total = p.files.len() + p.more_files as usize;
+    let note = if total > 1 {
+        Some(describe::truncate(
+            &format!("{total} files: {}", names.join(", ")),
+            MAX_LINE,
+        ))
+    } else {
+        let f = &p.files[0];
+        match (f.kind, &f.move_to) {
+            (Kind::Add, _) => Some("New file".to_string()),
+            (Kind::Delete, _) => Some("Deletes the file".to_string()),
+            (Kind::Update, Some(to)) => Some(format!("Moves to {}", describe::relative(to, cwd))),
+            (Kind::Update, None) => None,
+        }
+    };
+    let added: u32 = p.files.iter().map(|f| f.count(DiffOp::Add)).sum();
+    let removed: u32 = p.files.iter().map(|f| f.count(DiffOp::Del)).sum();
+    let diff_preview = |context: usize, cap: usize| {
+        let mut lines: Vec<DiffLine> = Vec::new();
+        for section in p.files.iter().flat_map(|f| &f.sections) {
+            let ops: Vec<(DiffOp, &str)> =
+                section.iter().map(|(op, t)| (*op, t.as_str())).collect();
+            let hunk = hunks(&ops, context);
+            if hunk.is_empty() {
+                continue;
+            }
+            if !lines.is_empty() {
+                lines.push(gap());
+            }
+            lines.extend(hunk);
+        }
+        ApprovalPreview::Diff(DiffPreview {
+            file: names[0].clone(),
+            more_lines: lines.len().saturating_sub(cap) as u32,
+            lines: lines.into_iter().take(cap).collect(),
+            added: (!cut).then_some(added),
+            removed: (!cut).then_some(removed),
+            cut,
+            note: note.clone(),
+        })
+    };
+    Previews {
+        card: Some(diff_preview(CONTEXT_CARD, CARD_LINES)),
+        full: diff_preview(CONTEXT_FULL, FULL_LINES),
+    }
 }
 
 fn gap() -> DiffLine {
@@ -688,5 +748,55 @@ mod tests {
             Existing::Unreadable
         );
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn codex_patches_show_as_a_diff() {
+        let patch = [
+            "*** Begin Patch",
+            "*** Update File: src/main.rs",
+            "@@",
+            " fn main() {",
+            "-    old();",
+            "+    new();",
+            " }",
+            "*** Add File: notes.txt",
+            "+hi",
+            "*** End Patch",
+        ]
+        .join("\n");
+        let input = json!({ "command": patch });
+        let p = build("apply_patch", &input, CWD, &Existing::NotRead, &[]).unwrap();
+        let card = diff_of(p.card.as_ref().unwrap());
+        assert_eq!(card.file, "src/main.rs");
+        assert_eq!((card.added, card.removed), (Some(2), Some(1)));
+        assert_eq!(
+            card.note.as_deref(),
+            Some("2 files: src/main.rs, notes.txt")
+        );
+        assert_eq!(
+            lines(p.card.as_ref().unwrap()),
+            vec![
+                " fn main() {",
+                "-    old();",
+                "+    new();",
+                " }",
+                "…",
+                "+hi"
+            ]
+        );
+        // Through the shell, as Codex sometimes sends it; a cut command has no counts.
+        let shell = json!({ "command": format!("apply_patch <<'EOF'\n{patch}\nEOF") });
+        let p = build("Bash", &shell, CWD, &Existing::NotRead, &["command".into()]).unwrap();
+        let card = diff_of(p.card.as_ref().unwrap());
+        assert_eq!((card.added, card.removed, card.cut), (None, None, true));
+        assert_eq!(
+            describe::summary("apply_patch", &input, CWD),
+            "src/main.rs +1"
+        );
+        assert_eq!(
+            describe::step_line("apply_patch", &input, CWD),
+            "Edit · src/main.rs +1"
+        );
     }
 }

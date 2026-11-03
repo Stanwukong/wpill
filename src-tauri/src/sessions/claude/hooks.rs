@@ -13,7 +13,6 @@
 //! (Cay's `settings.json`, `claude.statusLine`) and put back exactly, in place, on Disconnect.
 
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Map, Value};
 
@@ -384,44 +383,7 @@ pub fn bash_path() -> Option<PathBuf> {
         .find(|bash| bash.is_file())
 }
 
-/// The parsed file, `Ok(None)` if it doesn't exist yet.
-pub fn read(path: &Path) -> Result<Option<Value>, String> {
-    match std::fs::read_to_string(path) {
-        Ok(text) if text.trim().is_empty() => Ok(Some(json!({}))),
-        Ok(text) => serde_json::from_str(&text).map(Some).map_err(|e| {
-            format!(
-                "{} isn't valid JSON ({e}); it was left unchanged",
-                path.display()
-            )
-        }),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(format!("couldn't read {}: {e}", path.display())),
-    }
-}
-
-/// Backs up the current file (if any) next to it, then replaces it atomically. Returns the backup path.
-pub fn write(path: &Path, settings: &Value) -> Result<Option<PathBuf>, String> {
-    let fail = |what: &str, e: std::io::Error| format!("couldn't {what} {}: {e}", path.display());
-    let backup = if path.exists() {
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |d| d.as_secs());
-        let backup = path.with_extension(format!("json.cay-{stamp}.bak"));
-        std::fs::copy(path, &backup).map_err(|e| fail("back up", e))?;
-        Some(backup)
-    } else {
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| fail("create the folder for", e))?;
-        }
-        None
-    };
-    let mut text = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-    text.push('\n');
-    let temp = path.with_extension("json.cay-tmp");
-    std::fs::write(&temp, text).map_err(|e| fail("write", e))?;
-    std::fs::rename(&temp, path).map_err(|e| fail("replace", e))?;
-    Ok(backup)
-}
+pub use crate::sessions::files::{read, write};
 
 #[cfg(test)]
 mod tests {

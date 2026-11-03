@@ -34,6 +34,7 @@ mod job;
 mod lifecycle;
 mod mcp;
 mod mode;
+mod patch;
 mod pipe;
 mod preview;
 mod routines;

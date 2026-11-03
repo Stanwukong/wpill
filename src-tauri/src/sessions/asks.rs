@@ -298,7 +298,9 @@ fn serve(app: &AppHandle, out: &Sender<Signal>, pipe: &Pipe, stop: &Handle) {
         return;
     };
     let project = table::project(&request.cwd);
-    let session_id = app.state::<Sessions>().row_of(&request.session_id);
+    let session_id = app
+        .state::<Sessions>()
+        .row_of(request.agent, &request.session_id);
     let (tool, summary, risk) =
         crate::agent::describe_tool(&request.tool_name, &request.tool_input, &request.cwd);
     let previews = crate::agent::preview_tool(
@@ -311,6 +313,7 @@ fn serve(app: &AppHandle, out: &Sender<Signal>, pipe: &Pipe, stop: &Handle) {
     let card = SessionApprovalActivity {
         request_id: id,
         session_id,
+        agent: request.agent,
         project: project.clone(),
         tool,
         summary,
@@ -351,6 +354,7 @@ fn serve(app: &AppHandle, out: &Sender<Signal>, pipe: &Pipe, stop: &Handle) {
                 let _ = out.send(Signal::Offer(Activity::SessionNeedsInput(
                     SessionNeedsInputActivity {
                         session_id,
+                        agent: request.agent,
                         project,
                     },
                 )));

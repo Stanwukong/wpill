@@ -4,6 +4,7 @@ import type { AgentOptions, AgentRun, SessionApprovalActivity, RoutineDraft, Rou
 import { ClockGlyph, RunDot } from "../features/agent/AgentGlyphs";
 import { ago, endLabel } from "../features/agent/labels";
 import { isLive, useAgentRuns } from "../features/agent/useAgentRuns";
+import { mixedAgents } from "../features/sessions/AgentTag";
 import { AgentMark, WorkingIndicator } from "../features/sessions/WorkingGlyphs";
 import { NewTask } from "./NewTask";
 import { RoutineEditor } from "./RoutineEditor";
@@ -287,6 +288,7 @@ export function CommandApp() {
                 key={askId}
                 ask={asks.asks.find((a) => a.requestId === askId)}
                 loaded={asks.loaded}
+                mixed={mixedAgents(asks.asks)}
               />
             </div>
           )}

@@ -3,6 +3,7 @@ import { commands, errorMessage } from "../lib/ipc";
 import type { SessionApprovalActivity } from "../lib/types";
 import { RISK_LABEL } from "../features/agent/labels";
 import { changePreview, PreviewBlock } from "../features/agent/PreviewBlock";
+import { AgentTag } from "../features/sessions/AgentTag";
 import { decideSession, focusSession } from "../features/sessions/useSessions";
 import { AgentMark } from "../features/sessions/WorkingGlyphs";
 import { PlanView, QuestionForm } from "./InteractionViews";
@@ -13,7 +14,16 @@ import { useWholePreview } from "./useSessionAsks";
  * question or plan (2.8c, `QuestionForm` / `PlanView`). Once it leaves Rust's list (answered here or in the terminal,
  * or handed back at 55 s) the view stays on what was asked and the buttons give way to one quiet line. Keyed by request, so the last-seen copy never crosses requests.
  */
-export function SessionAskView({ ask, loaded }: { ask: SessionApprovalActivity | undefined; loaded: boolean }) {
+export function SessionAskView({
+  ask,
+  loaded,
+  mixed,
+}: {
+  ask: SessionApprovalActivity | undefined;
+  loaded: boolean;
+  /** Some listed ask isn't Claude Code's: the head names this one's agent (2.9a). */
+  mixed: boolean;
+}) {
   // The last copy Rust listed: kept so the view can still say what was asked after it's gone.
   const [known, setKnown] = useState(ask);
   if (ask && ask !== known) setKnown(ask);
@@ -27,11 +37,11 @@ export function SessionAskView({ ask, loaded }: { ask: SessionApprovalActivity |
       </div>
     );
   }
-  return <AskBody ask={known} waiting={waiting} />;
+  return <AskBody ask={known} waiting={waiting} mixed={mixed} />;
 }
 
-function AskBody({ ask, waiting }: { ask: SessionApprovalActivity; waiting: boolean }) {
-  const { requestId, sessionId, project, tool, summary, risk } = ask;
+function AskBody({ ask, waiting, mixed }: { ask: SessionApprovalActivity; waiting: boolean; mixed: boolean }) {
+  const { requestId, sessionId, agent, project, tool, summary, risk } = ask;
   const preview = changePreview(useWholePreview(requestId, ask.preview, commands.sessionAskPreview));
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +68,7 @@ function AskBody({ ask, waiting }: { ask: SessionApprovalActivity; waiting: bool
         <span className="run__project" title={project}>
           {project}
         </span>
+        <AgentTag agent={agent} mixed={mixed} />
         <span className="ask__origin">session</span>
         <span className="ask__tool" title={tool}>
           {tool}

@@ -136,6 +136,32 @@
   font-weight: 500;
 }
 
+/*
+ * Which agent a session is (2.9a, D47): one lowercase word right after the project name, Cascadia at 11 px in the
+ * status grey, never a per-agent colour (D30). It keeps its width; the name ellipsizes first.
+ */
+.agent-tag {
+  flex: none;
+  font-family: var(--font-agent);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--agent-status);
+}
+
+/*
+ * In a row the name stops growing so the tag sits right after it (6 px), and the tag takes the free space instead.
+ * The name's 6ch floor would leave a gap after a short name, so it becomes "6ch or the name, whichever is shorter".
+ */
+.session-row__project:has(+ .agent-tag) {
+  flex: 0 1 auto;
+  min-width: calc-size(max-content, min(size, 6ch));
+}
+
+.session-row__project + .agent-tag {
+  margin-left: -4px;
+  margin-right: auto;
+}
+
 .session-row__status {
   flex: none;
   font-size: 11px;

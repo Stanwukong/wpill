@@ -2,17 +2,19 @@ import { useState } from "react";
 import { commands } from "../../lib/ipc";
 import type { SessionApprovalActivity } from "../../lib/types";
 import { changePreview } from "../agent/PreviewBlock";
+import { AgentTag } from "../sessions/AgentTag";
 import { decideSession, focusSession } from "../sessions/useSessions";
 import { ApprovalCard, type ApprovalChoice } from "./AgentApproval";
 
 /**
- * A terminal Claude Code session asks to use a tool (2.8a): the agent card with a quiet "session" after the project,
+ * A terminal session asks to use a tool (2.8a): the agent card with a quiet "session" after the project (and its agent
+ * before that word while `mixed`, 2.9a),
  * no "for this run" (a terminal session isn't Cay's to widen). The well (one line, or the diff / command, 2.8b) opens
  * the request in the command window; the project title focuses the session's window when Cay knows it.
  * Sticky: Rust withdraws it when answered here or in the terminal, or when it hands back at 55 s.
  */
-export function SessionApproval({ approval }: { approval: SessionApprovalActivity }) {
-  const { requestId, sessionId, project, tool, summary, risk, preview } = approval;
+export function SessionApproval({ approval, mixed }: { approval: SessionApprovalActivity; mixed: boolean }) {
+  const { requestId, sessionId, agent, project, tool, summary, risk, preview } = approval;
   const [chosen, setChosen] = useState<ApprovalChoice | null>(null);
 
   const answer = (choice: ApprovalChoice) => {
@@ -29,6 +31,7 @@ export function SessionApproval({ approval }: { approval: SessionApprovalActivit
       title={project}
       titleHint="Show session"
       onTitle={sessionId === null ? undefined : () => focusSession(sessionId)}
+      tag={<AgentTag agent={agent} mixed={mixed} />}
       origin="session"
       tool={tool}
       risk={risk}

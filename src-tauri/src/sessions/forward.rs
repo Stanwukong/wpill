@@ -1,5 +1,6 @@
-//! `cay.exe hook`: run by Claude Code as a hook command. Reads the hook's JSON from stdin, keeps the few
-//! fields Cay uses, adds its ancestor chain, writes one message to the pipe and exits.
+//! `cay.exe hook [--agent codex]`: run by Claude Code (or Codex, 2.9a) as a hook command. Reads the hook's JSON from
+//! stdin, keeps the few fields Cay uses, adds its ancestor chain, writes one message to the pipe and exits. Without
+//! `--agent` the hook is Claude Code's (entries written before 2.9 have none).
 //!
 //! A `PermissionRequest` (2.8a) goes to the approval pipe instead and waits there for your answer in the island; the
 //! only thing the forwarder ever prints is that answer as hook output. With no answer (Cay closed, the request handed
@@ -22,6 +23,7 @@ use windows::Win32::System::Pipes::WaitNamedPipeW;
 
 use super::{ask, asks, pipe, process, protocol};
 use crate::duplex;
+use crate::ipc::AgentKind;
 use crate::win32::Handle;
 
 /// Hook input can carry Claude's whole last message; keep up to this much and discard the rest.
@@ -38,7 +40,24 @@ fn answer_timeout_ms(tool: &str) -> u32 {
     hold + 5_000
 }
 
+/// The agent named after `--agent`; anything unknown is ignored (no message at all), so a newer entry can't be
+/// mistaken for Claude Code's.
+fn agent_arg(args: &[String]) -> Option<AgentKind> {
+    match args.iter().position(|a| a == "--agent") {
+        None => Some(AgentKind::Claude),
+        Some(i) => match args.get(i + 1).map(String::as_str) {
+            Some("claude") => Some(AgentKind::Claude),
+            Some("codex") => Some(AgentKind::Codex),
+            _ => None,
+        },
+    }
+}
+
 pub fn run() {
+    let args: Vec<String> = std::env::args().skip(2).collect();
+    let Some(agent) = agent_arg(&args) else {
+        return;
+    };
     let at_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_millis() as i64);
@@ -46,8 +65,8 @@ pub fn run() {
         return;
     };
     let chain = process::ancestors();
-    if let Some(request) = ask::request(&stdin, at_ms, chain.clone()) {
-        // The answer is built from the input as Claude Code sent it, not Cay's trimmed copy.
+    if let Some(request) = ask::request(&stdin, agent, at_ms, chain.clone()) {
+        // The answer is built from the input as the agent sent it, not Cay's trimmed copy.
         let original = serde_json::from_slice::<serde_json::Value>(&stdin)
             .ok()
             .and_then(|v| v.get("tool_input").cloned())
@@ -61,7 +80,7 @@ pub fn run() {
         }
         return;
     }
-    let Some(envelope) = protocol::envelope(&stdin, at_ms, chain) else {
+    let Some(envelope) = protocol::envelope(&stdin, agent, at_ms, chain) else {
         return;
     };
     let Ok(bytes) = serde_json::to_vec(&envelope) else {
@@ -141,5 +160,29 @@ pub(super) fn send(name: &HSTRING, bytes: &[u8]) -> Result<()> {
             // Not found: Cay isn't running.
             Err(e) => return Err(e),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|a| a.to_string()).collect()
+    }
+
+    #[test]
+    fn the_agent_comes_from_its_argument() {
+        assert_eq!(agent_arg(&args(&[])), Some(AgentKind::Claude));
+        assert_eq!(
+            agent_arg(&args(&["--agent", "codex"])),
+            Some(AgentKind::Codex)
+        );
+        assert_eq!(
+            agent_arg(&args(&["--agent", "claude"])),
+            Some(AgentKind::Claude)
+        );
+        assert_eq!(agent_arg(&args(&["--agent", "gemini"])), None);
+        assert_eq!(agent_arg(&args(&["--agent"])), None);
     }
 }

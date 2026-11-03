@@ -10,6 +10,7 @@ import { CalendarSection } from "../features/calendar/CalendarSection";
 import { useCalendar } from "../features/calendar/useCalendar";
 import { latestStep, StepLabel } from "../features/sessions/StepLabel";
 import { WorkingIndicator } from "../features/sessions/WorkingGlyphs";
+import { mixedAgents } from "../features/sessions/AgentTag";
 import { AgentsSection } from "../features/sessions/AgentsSection";
 import { useSessions } from "../features/sessions/useSessions";
 import { useArtTheme } from "../features/media/artTheme";
@@ -48,6 +49,8 @@ export function Island() {
   usePanelSizeReporter(ref, mode === "pill" ? null : mode);
   const media = useMedia();
   const { sessions: agentSessions, limits: usageLimits } = useSessions();
+  // Another agent than Claude Code has a session: every session (row, activity, card) names its agent (2.9a).
+  const mixed = mixedAgents(agentSessions);
   const agentRuns = useAgentRuns();
   const calendar = useCalendar();
   const calendarListed =
@@ -101,7 +104,7 @@ export function Island() {
               exit={{ opacity: 0 }}
               transition={contentFade}
             >
-              <ActivityView activity={activity} agentRuns={agentRuns} />
+              <ActivityView activity={activity} agentRuns={agentRuns} mixedAgents={mixed} />
             </motion.div>
           ) : expanded ? (
             <motion.div
@@ -123,6 +126,7 @@ export function Island() {
                 <AgentsSection
                   sessions={agentSessions}
                   limits={usageLimits}
+                  mixed={mixed}
                   agent={panelRuns.length > 0 ? <AgentRunItems runs={panelRuns} /> : null}
                 />
                 <AppsList />

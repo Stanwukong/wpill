@@ -381,6 +381,7 @@ pub mod tests {
     pub fn needs_input(session_id: u32) -> Activity {
         Activity::SessionNeedsInput(SessionNeedsInputActivity {
             session_id,
+            agent: crate::ipc::AgentKind::Claude,
             project: "wpill".into(),
         })
     }
@@ -388,6 +389,7 @@ pub mod tests {
     pub fn done(session_id: u32) -> Activity {
         Activity::SessionDone(SessionDoneActivity {
             session_id,
+            agent: crate::ipc::AgentKind::Claude,
             project: "wpill".into(),
             failed: false,
         })

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { AgentSession, SessionStatus, UsageLimits } from "../../lib/types";
 import { SessionModeTag } from "../agent/ModeChip";
+import { AgentTag } from "./AgentTag";
 import { StepLabel } from "./StepLabel";
 import { hasLimits, UsageLine } from "./UsageLine";
 import { WorkingIndicator } from "./WorkingGlyphs";
@@ -25,8 +26,9 @@ function ago(updatedAtMs: number): string {
 }
 
 /**
- * Panel section: one row per local Claude Code session; a click focuses its terminal or editor. A session's mode
- * shows as a read-only tag unless it's plain `default` (2.8e). `agent` holds the
+ * Panel section "Agents": one row per local coding-agent session; a click focuses its terminal or editor. A session's
+ * mode shows as a read-only tag unless it's plain `default` (2.8e); its agent shows after the name while `mixed`
+ * (some session isn't Claude Code's, 2.9a). `agent` holds the
  * agent runs' rows (`<li>`s, features/agent), listed first; null when there are none. `limits` (2.8f) shows
  * beside the heading; with no rows the section still shows for a live (not stale) reading, as just the heading line.
  */
@@ -34,17 +36,20 @@ export function AgentsSection({
   sessions,
   agent,
   limits,
+  mixed,
 }: {
   sessions: AgentSession[];
   agent?: ReactNode;
   limits: UsageLimits | null;
+  /** Some session belongs to another agent than Claude Code: every row names its agent (`mixedAgents`). */
+  mixed: boolean;
 }) {
   const rows = sessions.length > 0 || !!agent;
   if (!rows && !hasLimits(limits, true)) return null;
   return (
-    <section className="agents" aria-label="Claude Code">
+    <section className="agents" aria-label="Agents">
       <div className="agents__head">
-        <h2 className="agents__heading">Claude Code</h2>
+        <h2 className="agents__heading">Agents</h2>
         {hasLimits(limits) && <UsageLine limits={limits} />}
       </div>
       {rows && (
@@ -57,6 +62,7 @@ export function AgentsSection({
                 {s.status === "working" ? <WorkingIndicator small /> : <span className="session-row__dot" />}
               </span>
               <span className="session-row__project">{s.project}</span>
+              <AgentTag agent={s.agent} mixed={mixed} />
               {s.status === "working" && (s.step || s.todos) ? (
                 <StepLabel className="session-row__status session-row__step" text={s.step ?? STATUS.working} todos={s.todos} />
               ) : (

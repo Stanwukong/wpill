@@ -44,9 +44,13 @@ export interface ScreenshotActivity {
   height: number;
 }
 
+/** Which coding agent a terminal session belongs to (2.9a, D47). Mirrors Rust's `AgentKind`. */
+export type AgentKind = "claude" | "codex";
+
 export interface SessionDoneActivity {
   /** Ours (matches `AgentSession.sessionId`). */
   sessionId: number;
+  agent: AgentKind;
   /** The session's working folder name. */
   project: string;
   /** The turn ended on an API error. */
@@ -55,6 +59,7 @@ export interface SessionDoneActivity {
 
 export interface SessionNeedsInputActivity {
   sessionId: number;
+  agent: AgentKind;
   project: string;
 }
 
@@ -68,6 +73,7 @@ export interface SessionApprovalActivity {
   requestId: number;
   /** The session's row (click to focus its window); `null` if Cay hasn't seen the session yet. */
   sessionId: number | null;
+  agent: AgentKind;
   project: string;
   /** Display name, e.g. `Bash` or `github · create_issue`. */
   tool: string;
@@ -290,6 +296,7 @@ export type SessionStatus = "idle" | "working" | "done" | "needsInput";
 export interface AgentSession {
   /** Assigned by Rust, stable for the session's lifetime. */
   sessionId: number;
+  agent: AgentKind;
   project: string;
   status: SessionStatus;
   /** Unix epoch ms of the last status change. */
