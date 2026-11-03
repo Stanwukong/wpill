@@ -1319,9 +1319,14 @@ Tasks stay on for ACP runs (desktop tools and Gmail off until a scripted look-an
       "for this run". (0.166 sends no `description` and no `tool_use_id` with a `PermissionRequest`.)
 - [ ] The agent tag (lowercase text, `--font-agent`, secondary colour) on cards and panel rows once a second agent kind
       has been seen; never in the pill; through `motion-designer`
-- [ ] Spike: OpenCode sessions through a plugin file (`~/.config/opencode/plugins/`) piping into
+- [x] Spike: OpenCode sessions through a plugin file (`~/.config/opencode/plugins/`) piping into
       `cay.exe hook --agent opencode`; check `permission.ask` can really decide. Attaching to the TUI's server is out
-      (random port, no auth by default)
+      (random port, no auth by default). **Result (1.19.5):** `permission.ask` is never called; a plugin answers through its own
+      client (`postSessionIdPermissionsPermissionId`, `once` / `reject`), checked for allow and deny (D47)
+- [ ] OpenCode sessions: Connect writes `cay.js` into OpenCode's `plugins/` folder; it pipes Claude-shaped hook JSON
+      into `cay.exe hook --agent opencode` (`session.status` busy → working, `tool.execute.before` → step line,
+      `session.idle` → done, `permission.asked` → held card, answered through the plugin's client), fails open, and
+      needs OpenCode ≥ 1.19.5
 
 **2.9a manual checks** (installed or debug build, Codex ≥ 0.166 in a terminal): **all 12 passed (2026-11-03)**
 1. Tray shows "Connect Codex…"; the dialog shows the eight entries with an unquoted `…~1…\cay.exe hook --agent codex`

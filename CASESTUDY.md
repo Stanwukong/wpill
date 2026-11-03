@@ -811,6 +811,18 @@ no `description` and no `tool_use_id`, and its commands are PowerShell (`Set-Con
 TUI. 0.166 dropped `approval_policy = "untrusted"` (only `on-request` and `never`). `SessionEnd` has a 1 s default
 timeout (3 s at most), so the forwarder must answer it well within that. The minimum Codex version is 0.166.0, the
 one checked.
+*OpenCode spike (1.19.5, 2026-11-03, scratch `OPENCODE_CONFIG_DIR`, a free `opencode/…` model):* a plugin file in
+`plugins/` loads and gets every bus event (`session.status` busy/idle, `session.idle`, `permission.asked` with the
+command or file, `permission.replied`) plus `tool.execute.before` with the tool's arguments. The `permission.ask` hook
+is declared in `@opencode-ai/plugin`'s types but **never called** (the request went straight to `permission.asked`),
+so a plugin can't decide through it. It can answer through its own in-process client:
+`client.postSessionIdPermissionsPermissionId({ path: { id, permissionID }, body: { response: "once" | "reject" } })`
+was accepted (HTTP 200, `permission.replied`) and the command ran or didn't. `opencode run` rejects every request
+within ~10 ms, so the TUI and `opencode serve` are where approvals matter. OpenCode's defaults allow edits and shell
+commands, so without the user's own `"ask"` rules there's nothing to approve and the island only shows status.
+*Verdict:* OpenCode sessions are worth doing as a plugin that pipes Claude-shaped hook JSON into the same forwarder
+(`cay.exe hook --agent opencode`) and, for `permission.asked`, waits for the forwarder's decision and replies through
+its client; attaching Cay to OpenCode's server stays out (random port, no auth by default).
 *Alternatives:* keeping `claude/` and the IPC names (cheaper now, misleading forever); `config.toml` hooks (needs a
 TOML writer); a quoted or PowerShell-only `commandWindows` (breaks on the other shell); `codex exec --json` runs (no
 approvals); per-agent native run paths (more code for the same events); Goose's `smart_approve` or `auto` (the model
