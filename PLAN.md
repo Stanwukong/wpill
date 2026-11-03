@@ -42,7 +42,8 @@ permission modes, Auto by default, D40) is signed off (2026-11-02). 2.8f (Connec
 through a chained status line, the optional sound, D41) is signed off (2026-11-02).
 **Now: [2.9 other agents and open models](#phase-29-other-agents-and-open-models-design-agreed-2026-11-03-d47)**
 (kick-off prompt: [prompts/phase-2.9-other-agents.md](prompts/phase-2.9-other-agents.md)): research and design agreed
-(2026-11-03, D47); stage 2.9a (agent-neutral sessions, Codex) in progress. Then 3, 5, the spikes, and
+(2026-11-03, D47); stage 2.9a (agent-neutral sessions, Codex) built, all 12 manual checks passed; the OpenCode spike
+remains before its sign-off. Then 3, 5, the spikes, and
 last 4a-5 (release).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
@@ -1322,7 +1323,7 @@ Tasks stay on for ACP runs (desktop tools and Gmail off until a scripted look-an
       `cay.exe hook --agent opencode`; check `permission.ask` can really decide. Attaching to the TUI's server is out
       (random port, no auth by default)
 
-**2.9a manual checks** (installed or debug build, Codex ≥ 0.166 in a terminal)
+**2.9a manual checks** (installed or debug build, Codex ≥ 0.166 in a terminal): **all 12 passed (2026-11-03)**
 1. Tray shows "Connect Codex…"; the dialog shows the eight entries with an unquoted `…~1…\cay.exe hook --agent codex`
    command, the Codex version found, and the `/hooks` trust note. Connect writes `~\.codex\hooks.json` and a backup
    if the file existed; other hooks in it stay.

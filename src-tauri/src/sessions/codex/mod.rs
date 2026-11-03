@@ -225,8 +225,17 @@ fn run_dialog() -> Result<(), String> {
         ),
     };
     let change = hooks::preview(&command);
+    // A CODEX_HOME left over from a test points Connect elsewhere; say so (it happened in 2.9a's manual check).
+    let home = match std::env::var_os("CODEX_HOME").filter(|d| !d.is_empty()) {
+        Some(dir) => format!(
+            "\n\nCODEX_HOME is set to {}, so this is that folder, not your usual .codex. Codex sessions started \
+             without it won't see these hooks.",
+            PathBuf::from(dir).display()
+        ),
+        None => String::new(),
+    };
     let tail = format!(
-        "Your other hooks stay. A backup of the file is saved next to it first.\n\n{TRUST}\n\n{checked}"
+        "Your other hooks stay. A backup of the file is saved next to it first.\n\n{TRUST}\n\n{checked}{home}"
     );
     if state == State::OutOfDate {
         let text = format!(

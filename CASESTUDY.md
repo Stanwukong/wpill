@@ -962,6 +962,17 @@ vanished (its rebuild died the same way). *Diagnosis:* `target\debug` had grown 
 keeping the third-party crates (no full rebuild): 6.4 GB free, and Cay rebuilt in about 20 s. *Lesson:* after a rename,
 the old crate's artifacts are never reused or cleaned by cargo; remove them by hand.
 
+### C15: Testing Codex hooks: a blocked flag, an expired login, a leftover CODEX_HOME (2.9a)
+*Symptom:* checking Codex 0.166's hooks took four tries. Claude Code's auto mode refused
+`--dangerously-bypass-hook-trust` (a safety-bypass flag) and refused writing its own allow rule (self-modification);
+the author added the rule. Then the copied `auth.json` was five months stale (`invalid_jwt`), `gpt-5.5` from the
+author's config isn't offered to ChatGPT accounts on 0.166, and `codex exec` never fired `PermissionRequest`. In the
+manual check, `/hooks` listed nothing: Connect had written Cay's entries into the scratch `CODEX_HOME`, still set in the
+window that started the dev build. *Fix:* a scratch `CODEX_HOME` with its own `codex login` (never a shared refresh
+token), a logging hook exe built into a folder with a space, the TUI for permission requests, and Connect's dialog now
+says when `CODEX_HOME` sends it away from `~\.codex`. *Lesson:* agent CLIs read their home from the environment,
+so tests and Connect must both say which folder they touch; and a hook only proves itself in the mode that uses it.
+
 ### Still open
 - **Foreground-lock rules** in practice: the fallback chain is implemented but not yet exercised
   against elevated or minimized targets (manual test 7).
@@ -1025,6 +1036,7 @@ the old crate's artifacts are never reused or cleaned by cargo; remove them by h
 | 2026-11-03 | Stage 6c built (D46): Calendar, Tasks and Gmail tools in Cay's MCP server, Gmail asked in Cay and opt-in, mail marked untrusted, desktop actions asked again after mail; `claudeConnectors` dropped after testing. The drive filled twice mid-build (C14 again): 4.5 GB of `.rcgu.o` leftovers from crashed builds in `target\debug\deps`. Manual checklist pending. |
 | 2026-11-03 | Stage 6c signed off by the author (all 11 manual checks passed). Phase 6 is complete; next is 2.9 (other agents and open models). |
 | 2026-11-03 | Phase 2.9 research and design agreed (D47): the full `claude/` → `sessions/` rename, Codex sessions through hooks with a minimum version, ACP runs (Goose first, tested on another machine), Ask only plus a watchdog, Calendar and Tasks kept on for ACP runs. |
+| 2026-11-03 | Stage 2.9a built: Codex sessions through the same forwarder (`--agent codex`), Codex Connect in the tray (unquoted 8.3 path, Codex ≥ 0.166.0, `/hooks` trust), `apply_patch` diffs, the agent tag and the "Agents" heading (motion-designer). Codex 0.166's hooks checked in a scratch `CODEX_HOME` and its TUI (C15). All 12 manual checks passed (the author). OpenCode spike next. |
 | 2026-11-03 | Stage 2.9a, step 1: the rename (`claude/` → `sessions/`, session IPC names, `features/sessions/`, `--font-agent`, `data-agent`), no behaviour change; 230 Rust tests, clippy and typecheck clean. Codex updated to 0.166.0. |
 
 ## 7. Results & metrics
