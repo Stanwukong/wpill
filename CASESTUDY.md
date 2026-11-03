@@ -970,6 +970,7 @@ the old crate's artifacts are never reused or cleaned by cargo; remove them by h
 | 2026-11-02 | Command window restyled as Cay (D45): ended runs removable from the sidebar (`agent_remove`, "Clear ended"), lighter controls. |
 | 2026-11-03 | Stage 6b signed off by the author. |
 | 2026-11-03 | Stage 6c built (D46): Calendar, Tasks and Gmail tools in Cay's MCP server, Gmail asked in Cay and opt-in, mail marked untrusted, desktop actions asked again after mail; `claudeConnectors` dropped after testing. The drive filled twice mid-build (C14 again): 4.5 GB of `.rcgu.o` leftovers from crashed builds in `target\debug\deps`. Manual checklist pending. |
+| 2026-11-03 | Stage 6c signed off by the author (all 11 manual checks passed). Phase 6 is complete; next is 2.9 (other agents and open models). |
 
 ## 7. Results & metrics
 

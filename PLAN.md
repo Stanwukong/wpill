@@ -27,21 +27,22 @@ Cay runs), with all 12 manual checks passed. Phase 2.7 is complete.**
 decided (v0.2 unsigned, D33) (2026-11-01). **4a-5 (release v0.2) and the dock check are deferred to the end of all
 phases** (the author's call, 2026-11-02).
 **Phase 2.8 is complete (2026-11-02): agent UX, stages 2.8a–f (D34, D36–D41), with 2.8a, 2.8e and 2.8f signed off by
-hand.** **Now: [Phase 6 Google Calendar and Gmail](#phase-6-google-calendar-and-gmail-started-2026-11-02)
-(D35, D42).** Research and the design were agreed with the author (2026-11-02): Cay's own OAuth client, unverified
+hand.** **Phase 6 is complete (2026-11-03): [Google Calendar and Gmail](#phase-6-google-calendar-and-gmail-complete-2026-11-03)
+(D35, D42–D46), stages 6a–6c, with all manual checks passed.** Research and the design were agreed with the author (2026-11-02): Cay's own OAuth client, unverified
 "In Production" for now, no iCal fallback. **6a (the Rust watcher: sign-in, Calendar and Tasks, `google:state` /
 `calendar:upcoming`, tray Connect) is signed off (2026-11-02). Now: 6b (the island).** The Cloud project runs in
 Testing with the author as a test user until a home page and privacy policy exist (Google won't publish without them).
 **6b (the calendar icon in the pill, "starting soon" with Join, the panel's Calendar section) is signed off
-(2026-11-03). 6c (Calendar, Tasks and Gmail tools for agent runs, D46) is built; manual check pending.** Gmail is
-opt-in (`google.gmail`), and its scopes must be added to the Cloud project's Data Access page first. The mark is Cay's own line calendar (the author's call; no Google artwork ships). Kick-off prompt: [prompts/phase-6-google.md](prompts/phase-6-google.md).
+(2026-11-03). 6c (Calendar, Tasks and Gmail tools for agent runs, D46) is signed off (2026-11-03), all 11 manual
+checks passed.** Gmail is opt-in (`google.gmail`), and its scopes must be added to the Cloud project's Data Access page first. The mark is Cay's own line calendar (the author's call; no Google artwork ships). Kick-off prompt: [prompts/phase-6-google.md](prompts/phase-6-google.md).
 History of 2.8: 2.8a (approve terminal sessions from the
 island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the card, D37), 2.8c (questions and
 plans, D38) and 2.8d (live step line, D39) are built with their manual checks pending, and 2.8e (Claude Code's
 permission modes, Auto by default, D40) is signed off (2026-11-02). 2.8f (Connect's three states, usage limits
 through a chained status line, the optional sound, D41) is signed off (2026-11-02).
-Then, per the roadmap: [2.9 other agents and open models](#phase-29-other-agents-and-open-models-proposed-2026-11-01-not-started),
-3, 5, the spikes, and last 4a-5 (release).
+**Next, per the roadmap: [2.9 other agents and open models](#phase-29-other-agents-and-open-models-proposed-2026-11-01-not-started)**
+(kick-off prompt: [prompts/phase-2.9-other-agents.md](prompts/phase-2.9-other-agents.md)), then 3, 5, the spikes, and
+last 4a-5 (release).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -444,8 +445,8 @@ meaning; new phases slot in between.
 | 5 | **2.7 Local automation agent** | Type an instruction; Cay runs a headless Claude Code session, shows progress in the island, asks for approvals there, and gives Claude desktop tools through its own MCP server | Added 2026-10-30 (D21). Builds directly on 2.6's pipe, sessions and activities. Staged so each stage is useful on its own. |
 | 6 | **4a Release readiness** (4a-1 to 4a-4 done; **4a-5 release and the dock check deferred to the end**, 2026-11-02) | Multi-monitor + per-monitor DPI, code signing, v0.2 release | Docking/undocking breaks placement today; unsigned installers trigger SmartScreen. |
 | 7 | **2.8 Agent UX** (complete 2026-11-02) | Approve terminal sessions from the island, see what you approve, questions and plans, a live step line, permission modes, trustworthy Connect | Proposed 2026-11-01 after a competitor survey (D34). Approving terminal sessions is the core of every rival; Cay only focuses the window. |
-| 8 | **6 Google Calendar and Gmail** (started 2026-11-02; prompt [phase-6-google.md](prompts/phase-6-google.md)) | Upcoming events and tasks in the pill and panel; Gmail and Calendar tools for agent runs | Proposed 2026-11-01 (D35). Replaces the "calendar peek" spike. |
-| 9 | **2.9 Other agents and open models** (proposed) | Codex / OpenCode sessions in the island; agent runs through ACP (Goose + Ollama first) beside the native Claude Code path | Proposed 2026-11-01 after a competitor survey. Every rival watches several CLIs; none runs agents. Keeps Cay's lead (runs, routines, desktop tools) while closing the coverage gap. |
+| 8 | **6 Google Calendar and Gmail** (complete 2026-11-03; prompt [phase-6-google.md](prompts/phase-6-google.md)) | Upcoming events and tasks in the pill and panel; Gmail and Calendar tools for agent runs | Proposed 2026-11-01 (D35). Replaces the "calendar peek" spike. |
+| 9 | **2.9 Other agents and open models** (proposed; next, prompt [phase-2.9-other-agents.md](prompts/phase-2.9-other-agents.md)) | Codex / OpenCode sessions in the island; agent runs through ACP (Goose + Ollama first) beside the native Claude Code path | Proposed 2026-11-01 after a competitor survey. Every rival watches several CLIs; none runs agents. Keeps Cay's lead (runs, routines, desktop tools) while closing the coverage gap. |
 | 10 | **3 Memory-heavy apps** | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
 | 11 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
 | 12 | **Spikes** | Notifications mirror, live window previews (calendar peek moved to Phase 6) | Uncertain feasibility or needs sign-in; prototype before committing. |
@@ -1247,7 +1248,8 @@ Cay talks to Claude Code in two ways, and "other agents" means something differe
 a terminal (2.6, hooks → `claude/`) and **runs** Cay starts itself (2.7, `agent/`). Comparable tools (Nook on Windows;
 Vibe Island, Open Island, Agent Notch, Notch, Vibe Notch on macOS) all watch and approve terminal sessions of
 several CLIs; none starts runs, has routines or gives the agent desktop tools. This phase closes the coverage gap
-without giving up that lead. Not scheduled until 4a-5 ships.
+without giving up that lead. ~~Not scheduled until 4a-5 ships~~: 4a-5 moved to the end (2026-11-02), so 2.9 follows
+Phase 6. Kick-off prompt: [prompts/phase-2.9-other-agents.md](prompts/phase-2.9-other-agents.md).
 
 **Principles (carried over, not relaxed)**
 - Runs never weaken permissions. Each backend has a documented way to force "ask for everything that isn't
@@ -1296,7 +1298,7 @@ without giving up that lead. Not scheduled until 4a-5 ships.
 - One ACP backend or per-agent native paths for the big ones (Codex `exec --json`)? ACP first; revisit if a gap shows.
 - How to name the "agent" UI (`ClaudeSection`, `ClaudeActivity`, `--font-claude`) once it isn't only Claude.
 
-### Phase 6: Google Calendar and Gmail (started 2026-11-02)
+### Phase 6: Google Calendar and Gmail (complete 2026-11-03)
 Kick-off prompt: [prompts/phase-6-google.md](prompts/phase-6-google.md). Design agreed 2026-11-02 (D42).
 Upcoming events and tasks in the island, and Gmail and Calendar for agent runs, without the user creating a Google
 Cloud project (D35). Replaces the "calendar peek" spike.
@@ -1415,7 +1417,7 @@ Cloud project (D35). Replaces the "calendar peek" spike.
 9. **Disconnect:** the icon and section disappear.
 10. **Text size 120 / 150 %:** the activity fits; the panel keeps at least one calendar row and scrolls.
 
-**6c Gmail and Calendar for agent runs** (built 2026-11-03, D46)
+**6c Gmail and Calendar for agent runs** (signed off 2026-11-03, D46)
 - [x] Tools in Cay's own MCP server (`cay.exe mcp`), so every backend gets them (2.9): `calendar_list_events`,
       `tasks_list`, `gmail_search`, `gmail_read`, `gmail_draft` (creates a draft; you send it yourself). Rust:
       `google/tools.rs` (arguments, ranges, events and tasks for Claude), `google/mail.rs` (messages, HTML → text,
@@ -1434,7 +1436,7 @@ Cloud project (D35). Replaces the "calendar peek" spike.
       Google has no drafts-only scope; Cay has no send call
 - [x] Checked: Rust 230 tests (synthetic message fixtures: plain, HTML-only; drafts and address checks; ranges; tool
       arguments; summaries, redaction, untrusted replies; the connector taint; launch flags), clippy, fmt, typecheck
-- [ ] Manual check (below)
+- [x] Manual check (below): all 11 passed (2026-11-03)
 - [ ] Later: Google's official Workspace MCP servers (`gmailmcp.googleapis.com`, `calendarmcp.googleapis.com`) are
       in developer preview and need your own Cloud project; revisit once they're generally available
 
@@ -1489,7 +1491,7 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
 ### Spikes (prototype before committing)
 - **Notifications mirror:** `UserNotificationListener` needs user consent and is unreliable for some apps.
   Decide go/no-go after a prototype.
-- ~~**Calendar peek**~~: moved to [Phase 6](#phase-6-google-calendar-and-gmail-started-2026-11-02).
+- ~~**Calendar peek**~~: moved to [Phase 6](#phase-6-google-calendar-and-gmail-complete-2026-11-03).
 - **Live window previews:** `DwmRegisterThumbnail` drawn into our HWND at rects reported by React
   (the original Phase 4 item).
 
