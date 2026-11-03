@@ -973,6 +973,16 @@ token), a logging hook exe built into a folder with a space, the TUI for permiss
 says when `CODEX_HOME` sends it away from `~\.codex`. *Lesson:* agent CLIs read their home from the environment,
 so tests and Connect must both say which folder they touch; and a hook only proves itself in the mode that uses it.
 
+### C16: One core at 100% whenever Google isn't connected
+*Symptom:* on a machine that had never signed in to Google, Cay kept one core 85-99% busy at idle (Windows 10 19045
+and Windows Server 2025). Turning each part off in turn at launch isolated it: only with the Google part off did idle
+CPU drop (0.4%). *Cause:* the `google-watcher` loop waits `next_fetch.min(boundary) - now` with `recv_timeout`; while
+disconnected it set `next_fetch = now`, so every next wait was 0 and the loop republished and re-announced without
+sleeping. *Fix:* while disconnected, `next_fetch = now + MAX_SLEEP` (60 s). Signing in still fetches at once
+(`Wake::SignedIn`), and an account restored at launch is Connected before the watcher starts. Idle is now 0.1% of a
+core on both machines. *Lesson:* a loop whose sleep is computed must never compute zero in a steady state; the
+"nothing to do" branch needs a floor as much as the busy one.
+
 ### Still open
 - **Foreground-lock rules** in practice: the fallback chain is implemented but not yet exercised
   against elevated or minimized targets (manual test 7).

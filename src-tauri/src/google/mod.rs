@@ -360,7 +360,9 @@ fn run(app: &AppHandle, rx: Receiver<Wake>) {
                 }
             }
         } else if !connected {
-            next_fetch = now;
+            // Not `now`: that makes the next wait 0 and the loop spins a core until Google is
+            // connected. A sign-in wakes the watcher (and forces a fetch) anyway.
+            next_fetch = now + MAX_SLEEP.as_millis() as i64;
         }
         publish(app, now);
         announce(app, now, lead, &mut announced);
