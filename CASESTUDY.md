@@ -945,6 +945,7 @@ the old crate's artifacts are never reused or cleaned by cargo; remove them by h
 | 2026-11-02 | Stage 6a signed off by the author. Google wouldn't publish the External project without a home page and privacy policy, so it runs in Testing with the author as a test user (7-day sign-ins) until those exist before release. |
 | 2026-11-02 | Stage 6b built (D43): the calendar mark in the pill (Google's icon once the author adds it), "starting soon" with Join, the panel's Calendar section (motion-designer, renders at 100/120/150 %). Manual checklist pending. |
 | 2026-11-02 | Command window restyled as Cay (D45): ended runs removable from the sidebar (`agent_remove`, "Clear ended"), lighter controls. |
+| 2026-11-03 | Stage 6b signed off by the author. |
 
 ## 7. Results & metrics
 

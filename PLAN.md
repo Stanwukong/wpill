@@ -32,8 +32,8 @@ hand.** **Now: [Phase 6 Google Calendar and Gmail](#phase-6-google-calendar-and-
 "In Production" for now, no iCal fallback. **6a (the Rust watcher: sign-in, Calendar and Tasks, `google:state` /
 `calendar:upcoming`, tray Connect) is signed off (2026-11-02). Now: 6b (the island).** The Cloud project runs in
 Testing with the author as a test user until a home page and privacy policy exist (Google won't publish without them).
-**6b (the calendar icon in the pill, "starting soon" with Join, the panel's Calendar section) is built; manual check
-pending.** The mark is Cay's own line calendar (the author's call; no Google artwork ships). Kick-off prompt: [prompts/phase-6-google.md](prompts/phase-6-google.md).
+**6b (the calendar icon in the pill, "starting soon" with Join, the panel's Calendar section) is signed off
+(2026-11-03). Now: 6c (Gmail and Calendar tools for agent runs).** The mark is Cay's own line calendar (the author's call; no Google artwork ships). Kick-off prompt: [prompts/phase-6-google.md](prompts/phase-6-google.md).
 History of 2.8: 2.8a (approve terminal sessions from the
 island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the card, D37), 2.8c (questions and
 plans, D38) and 2.8d (live step line, D39) are built with their manual checks pending, and 2.8e (Claude Code's
@@ -1380,9 +1380,9 @@ Cloud project (D35). Replaces the "calendar peek" spike.
 - [x] Checked: Rust 212 tests (announcements once inside the lead time, the lead boundary), clippy, typecheck,
       `pnpm build`; headless-Edge renders of the pill, activity and panel at 100/120/150 %, plain and tinted
       (motion-designer). The full pill is 375 px (351 px before the mark: the 180 px step line), not the ≈330 estimated
-- [ ] Manual check (below)
+- [x] Manual check (below): passed, signed off by the author (2026-11-03)
 
-**Manual check (Phase 6b)** (`pnpm tauri dev`, connected; add test events in Google Calendar, then
+**Manual check (Phase 6b, passed 2026-11-03)** (`pnpm tauri dev`, connected; add test events in Google Calendar, then
 `cay.exe google-test refresh` so you don't wait for the 5-minute poll)
 1. **Icon:** with nothing pending the pill is unchanged. Add an event 10 min ahead (or a task due today): the mark
    appears right of the clock; it goes when the event ends and nothing else is pending.
