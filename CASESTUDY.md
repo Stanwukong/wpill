@@ -764,6 +764,49 @@ classifier can't know a mail is someone else's instructions); switching a run to
 changes your mode behind your back; noted as a limitation instead); HTML replies for drafts (plain text is what Cay
 can show you exactly on the card).
 
+### D47: Other agents: Codex sessions through hooks, other runs through ACP, Ask only, and a watchdog (Phase 2.9)
+*What (agreed with the author 2026-11-03, after research):* **sessions** of other CLIs reach the island like Claude
+Code's, through the same forwarder (`cay.exe hook --agent codex`); **runs** of other agents go through one second
+backend, the Agent Client Protocol (JSON-RPC over stdio, protocol version 1), first with Goose on a local Ollama model.
+The native Claude Code path is untouched. *The rename:* `claude/` becomes `sessions/` (Claude-only parts in
+`sessions/claude/`, Codex's in `sessions/codex/`), and the IPC names follow (`claude:sessions` → `sessions:changed`,
+`claude_*` → `session_*`, `claudeDone` → `sessionDone`, `ClaudeSession` → `AgentSession`, `ClaudeSection` →
+`AgentsSection`, `--font-claude` → `--font-agent`), in a commit of its own with no behaviour change. The pipe names and
+the hook marker stay, so installed entries keep working and `hook` without `--agent` still means Claude. *Codex:*
+hooks in `~/.codex/hooks.json` (`CODEX_HOME` for tests; no TOML crate). Its input uses Claude Code's field names; a
+`PermissionRequest` is answered with `hookSpecificOutput.decision.behavior` allow/deny, and printing nothing hands it
+back to Codex's own prompt, so Cay's `pass` costs nothing. `updatedInput`/`updatedPermissions` fail closed in Codex and
+are never sent. `Interrupt` gives the Esc signal Claude Code lacks. Two catches: Codex skips a new or changed hook until
+you trust it once with `/hooks` (Connect says so; status reads "waiting for trust" until a Codex hook arrives), and the
+shell running a hook on Windows has changed between versions (cmd at 0.142, PowerShell in reports up to 0.164), with a
+quoted path running nothing under PowerShell. So `commandWindows` is the exe's 8.3 short path, unquoted, and Connect
+refuses on a volume without 8.3 names. A minimum Codex version is required (the author's call), checked by Connect.
+`codex exec` has no approval channel, so Codex runs, if any, go through ACP (`codex-acp`). *OpenCode sessions:* a spike
+of a plugin file piping into the same forwarder; attaching to the TUI's server was rejected (random port, no auth by
+default). *Marks (D30 holds):* one amber wave for every agent; the agent is named by a small lowercase text tag
+(`codex`, `goose`, …) in `--font-agent` and the secondary text colour, on cards and panel rows, never in the pill, and
+only once a second agent kind has been seen. No glyphs, monograms or vendor colours (Vibe Island uses brand colours).
+*ACP runs:* `agent::backend` over launch, encode, decode and stop, with `ClaudeCode` wrapping today's code unchanged;
+`agent::acp` is a pure state machine. `session/request_permission` arrives on Cay's own stdio and becomes an
+`agentApproval` card; Allow/Deny pick `allow_once`/`reject_once`, never `allow_always`. Cay's MCP server is handed over
+in `session/new.mcpServers` (stdio `cay.exe mcp`, the run's id and token in `env`), verified per agent, since the spec
+only says SHOULD; an allowed card for one of Cay's tools leaves the one-time grant (D25), so it isn't asked twice.
+Calendar and Tasks stay on (the author's call); desktop tools and Gmail are off for non-Claude backends until a
+scripted look-and-act test passes. *Ask only:* Goose's `auto` has no classifier at all (bypass in all but name), so
+every non-Claude backend runs in its asking mode (`GOOSE_MODE=approve`, which the environment forces over the config;
+OpenCode `"*": "ask"`). *The watchdog:* Goose's own docs call its write classification best-effort and model-made, so
+a test alone isn't enough: a `tool_call` of kind edit, delete, move, execute or fetch that reaches `in_progress`
+without a permission request for its id stops the run, is audited and is shown as "ran a step without asking". Each
+backend also has a unit test that its launch forces asking and an ignored live test that a write and a shell command
+each ask first. *Local models:* agent work needs ~32 GB RAM or a 24 GB GPU (Qwen3-Coder 30B-A3B, Devstral Small);
+16 GB runs gpt-oss-20b slowly; the 8 GB dev machine can't, so the live Goose test runs on another machine (the
+author's). *Gemini CLI:* no sessions in 2.9; later as an ACP backend if it passes the same check.
+*Alternatives:* keeping `claude/` and the IPC names (cheaper now, misleading forever); `config.toml` hooks (needs a
+TOML writer); a quoted or PowerShell-only `commandWindows` (breaks on the other shell); `codex exec --json` runs (no
+approvals); per-agent native run paths (more code for the same events); Goose's `smart_approve` or `auto` (the model
+decides what asks); brand colours or monograms per agent (vendor look, D30); Gmail and desktop tools for local models
+from day one (the worst prompt-injection case).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -971,6 +1014,7 @@ the old crate's artifacts are never reused or cleaned by cargo; remove them by h
 | 2026-11-03 | Stage 6b signed off by the author. |
 | 2026-11-03 | Stage 6c built (D46): Calendar, Tasks and Gmail tools in Cay's MCP server, Gmail asked in Cay and opt-in, mail marked untrusted, desktop actions asked again after mail; `claudeConnectors` dropped after testing. The drive filled twice mid-build (C14 again): 4.5 GB of `.rcgu.o` leftovers from crashed builds in `target\debug\deps`. Manual checklist pending. |
 | 2026-11-03 | Stage 6c signed off by the author (all 11 manual checks passed). Phase 6 is complete; next is 2.9 (other agents and open models). |
+| 2026-11-03 | Phase 2.9 research and design agreed (D47): the full `claude/` → `sessions/` rename, Codex sessions through hooks with a minimum version, ACP runs (Goose first, tested on another machine), Ask only plus a watchdog, Calendar and Tasks kept on for ACP runs. |
 
 ## 7. Results & metrics
 

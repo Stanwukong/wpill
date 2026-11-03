@@ -40,8 +40,9 @@ island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the c
 plans, D38) and 2.8d (live step line, D39) are built with their manual checks pending, and 2.8e (Claude Code's
 permission modes, Auto by default, D40) is signed off (2026-11-02). 2.8f (Connect's three states, usage limits
 through a chained status line, the optional sound, D41) is signed off (2026-11-02).
-**Next, per the roadmap: [2.9 other agents and open models](#phase-29-other-agents-and-open-models-proposed-2026-11-01-not-started)**
-(kick-off prompt: [prompts/phase-2.9-other-agents.md](prompts/phase-2.9-other-agents.md)), then 3, 5, the spikes, and
+**Now: [2.9 other agents and open models](#phase-29-other-agents-and-open-models-design-agreed-2026-11-03-d47)**
+(kick-off prompt: [prompts/phase-2.9-other-agents.md](prompts/phase-2.9-other-agents.md)): research and design agreed
+(2026-11-03, D47); stage 2.9a (agent-neutral sessions, Codex) in progress. Then 3, 5, the spikes, and
 last 4a-5 (release).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
@@ -446,7 +447,7 @@ meaning; new phases slot in between.
 | 6 | **4a Release readiness** (4a-1 to 4a-4 done; **4a-5 release and the dock check deferred to the end**, 2026-11-02) | Multi-monitor + per-monitor DPI, code signing, v0.2 release | Docking/undocking breaks placement today; unsigned installers trigger SmartScreen. |
 | 7 | **2.8 Agent UX** (complete 2026-11-02) | Approve terminal sessions from the island, see what you approve, questions and plans, a live step line, permission modes, trustworthy Connect | Proposed 2026-11-01 after a competitor survey (D34). Approving terminal sessions is the core of every rival; Cay only focuses the window. |
 | 8 | **6 Google Calendar and Gmail** (complete 2026-11-03; prompt [phase-6-google.md](prompts/phase-6-google.md)) | Upcoming events and tasks in the pill and panel; Gmail and Calendar tools for agent runs | Proposed 2026-11-01 (D35). Replaces the "calendar peek" spike. |
-| 9 | **2.9 Other agents and open models** (proposed; next, prompt [phase-2.9-other-agents.md](prompts/phase-2.9-other-agents.md)) | Codex / OpenCode sessions in the island; agent runs through ACP (Goose + Ollama first) beside the native Claude Code path | Proposed 2026-11-01 after a competitor survey. Every rival watches several CLIs; none runs agents. Keeps Cay's lead (runs, routines, desktop tools) while closing the coverage gap. |
+| 9 | **2.9 Other agents and open models** (design agreed 2026-11-03, D47; in progress, prompt [phase-2.9-other-agents.md](prompts/phase-2.9-other-agents.md)) | Codex / OpenCode sessions in the island; agent runs through ACP (Goose + Ollama first) beside the native Claude Code path | Proposed 2026-11-01 after a competitor survey. Every rival watches several CLIs; none runs agents. Keeps Cay's lead (runs, routines, desktop tools) while closing the coverage gap. |
 | 10 | **3 Memory-heavy apps** | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
 | 11 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
 | 12 | **Spikes** | Notifications mirror, live window previews (calendar peek moved to Phase 6) | Uncertain feasibility or needs sign-in; prototype before committing. |
@@ -1243,7 +1244,7 @@ restart open sessions)
    question and an agent approval each chime once; nothing chimes during a fullscreen video, and it chimes when the card
    shows after you leave fullscreen. Off by default.
 
-### Phase 2.9: other agents and open models (proposed 2026-11-01, not started)
+### Phase 2.9: other agents and open models (design agreed 2026-11-03, D47)
 Cay talks to Claude Code in two ways, and "other agents" means something different for each: **sessions** you run in
 a terminal (2.6, hooks → `claude/`) and **runs** Cay starts itself (2.7, `agent/`). Comparable tools (Nook on Windows;
 Vibe Island, Open Island, Agent Notch, Notch, Vibe Notch on macOS) all watch and approve terminal sessions of
@@ -1260,43 +1261,64 @@ Phase 6. Kick-off prompt: [prompts/phase-2.9-other-agents.md](prompts/phase-2.9-
 - Don't write an agent loop on raw model APIs (Ollama, OpenAI-compatible). An existing harness (Goose, OpenCode, …)
   runs the model; Cay is the client.
 
+**Agreed design (D47, 2026-11-03).** The author's calls: the full rename (IPC names included); update Codex and
+require a minimum version; the live Goose/Ollama test runs on another machine (the dev PC has 8 GB RAM); Calendar and
+Tasks stay on for ACP runs (desktop tools and Gmail off until a scripted look-and-act test passes).
+
 **2.9a Agent-neutral sessions** (smallest step, matches Nook)
-- [ ] `claude::protocol` / `sessions` take an `agent` field (`claude` | `codex` | `opencode` | …); the island and
-      panel show which agent a session belongs to (mark per agent, no vendor logos or colours; D30 still holds)
-- [ ] Codex CLI: hook entries in `~/.codex/hooks.json` (SessionStart/End, PreToolUse, PermissionRequest (v0.122+),
-      Stop, Interrupt) through the same `cay.exe hook --agent codex` forwarder; Connect/Disconnect per agent in the tray,
-      with a preview of the change, a dated backup and removal of only Cay's entries
-- [ ] Approve Codex permission requests from the island, as for Claude Code (the agent's own prompt takes over on timeout)
-- [ ] Spike: OpenCode sessions by attaching to `opencode serve` (`GET /event` SSE, `POST /session/:id/permissions/:id`)
-      instead of hooks; decide whether it's worth a watcher thread
-- [ ] Spike: transcript fallback (status only, no settings change) for agents without hooks
+- [ ] Rename, no behaviour change, own commit: `claude/` → `sessions/` (`sessions/claude/` for `hooks.rs`,
+      `statusline.rs`; `sessions/codex/` next), `ClaudeSession` → `AgentSession`, `claude:sessions` →
+      `sessions:changed`, `claude:asks` → `sessions:asks`, `claude_*` commands → `session_*`, activity kinds
+      `claudeDone` / `claudeNeedsInput` / `claudeApproval` → `sessionDone` / `sessionNeedsInput` / `sessionApproval`,
+      `ClaudeSection` → `AgentsSection` ("Agents"), `ClaudeActivity` → `SessionActivity`, `--font-claude` →
+      `--font-agent`. Pipe names and the hook marker stay; `cay.exe hook` without `--agent` means Claude.
+- [ ] `agent` field (`claude` | `codex` | `opencode`) on the pipe envelope and `AgentSession`
+- [ ] Codex Connect/Disconnect in the tray: `~/.codex/hooks.json` (`CODEX_HOME` in tests), preview, dated backup, only
+      Cay's entries removed; `commandWindows` = the exe's 8.3 short path, unquoted (refuse without 8.3 names); minimum
+      Codex version checked; the dialog says to trust the entries once with `/hooks`; "waiting for trust" until a Codex
+      hook arrives
+- [ ] Events: `SessionStart` / `UserPromptSubmit` → working, `PreToolUse` (async) → step line, `PermissionRequest`
+      (sync, 660 s) → held, `PostToolUse` → answered, `Stop` → done, `Interrupt` → idle, `SessionEnd` → gone
+- [ ] Codex permission card: `Bash` → wrapped command, `apply_patch` → diff (pure parser for Codex's patch format),
+      MCP tools by name, `tool_input.description` as the note; held 55 s then `pass`; never `updatedInput` /
+      `updatedPermissions`, no "for this run"
+- [ ] The agent tag (lowercase text, `--font-agent`, secondary colour) on cards and panel rows once a second agent kind
+      has been seen; never in the pill; through `motion-designer`
+- [ ] Spike: OpenCode sessions through a plugin file (`~/.config/opencode/plugins/`) piping into
+      `cay.exe hook --agent opencode`; check `permission.ask` can really decide. Attaching to the TUI's server is out
+      (random port, no auth by default)
 
-**2.9b ACP run backend** (Agent Client Protocol: JSON-RPC to an agent subprocess)
-- [ ] `agent::backend`: a trait over what `run.rs` / `stream.rs` / `lifecycle.rs` do today (spawn, prompt, follow-up,
-      stop, events, approvals); `ClaudeCode` is the first implementation, unchanged in behaviour
-- [ ] `agent::acp` (pure, unit-tested like `stream.rs`): `initialize`, `session/new` (cwd; hand Cay's MCP server to the
-      agent if the spec's MCP-servers field does what we need: check first), `session/prompt`, `session/update` →
-      the run's events, `session/cancel`, `session/request_permission` → the island's Allow / Deny. Client fs/terminal
-      capabilities off at first (the agent uses its own tools; fewer surfaces to secure)
-- [ ] Spawn ACP agents through the same suspended start + Job Object (`job.rs`), long paths and per-run folder
-- [ ] First target: **Goose** with an Ollama model; force its approval mode, verify a write and a shell command reach
-      the island. Then OpenCode and Codex via ACP if they pass the same check
-- [ ] Command window: pick the agent and model per task and per routine (default stays Claude Code); runs list and
-      audit record which agent ran
-- [ ] Desktop tools are off for non-Claude backends until a model has passed a scripted look-and-act test; even then
-      each action is approved on its own (as today)
-
-- [ ] Permission modes (2.8e) map to each backend's own modes, or the backend offers Ask only
+**2.9b ACP run backend** (Agent Client Protocol v1: JSON-RPC to an agent subprocess over stdio)
+- [ ] `agent::backend`: launch, encode a message, decode a line (event / approval / reply to write), stop;
+      `ClaudeCode` wraps today's `run.rs` / `stream.rs` unchanged; `StreamEvent` + `lifecycle.rs` stay the core
+- [ ] `agent::acp` (pure, unit-tested): `initialize`, `session/new` (cwd, `mcpServers` = stdio `cay.exe mcp` with the
+      run's id and token in `env`), `session/prompt`, `session/update` → events, `session/cancel`,
+      `session/request_permission` → `agentApproval` (Allow → `allow_once`, Deny → `reject_once`, never
+      `allow_always`); `session/load` for follow-ups when advertised, else the process stays with an idle timeout.
+      Client fs/terminal capabilities off
+- [ ] Watchdog: a `tool_call` of kind edit / delete / move / execute / fetch reaching `in_progress` without a permission
+      request for its id stops the run, is audited, and shows "ran a step without asking"
+- [ ] Same suspended start + Job Object (`job.rs`), long paths and per-run folder
+- [ ] Goose first (`goose acp`, `GOOSE_MODE=approve` in the environment, Ollama); verify it connects to Cay's MCP
+      server; then OpenCode (`opencode acp`, per-run `"*": "ask"`) and Codex (`codex-acp`) if they pass the same check
+- [ ] Ask only for non-Claude backends. Each backend: a unit test that its launch forces asking, and an ignored live
+      test that a write and a shell command each ask first (run on the author's other machine)
+- [ ] Cay's MCP tools for ACP runs: Calendar and Tasks on (asked in Cay; an allowed card leaves the D25 one-time
+      grant); desktop tools and Gmail off until a scripted look-and-act test passes
 
 **2.9c Settings and docs**
-- [ ] `agent.backends` block in settings.json (exe path, args, model, enabled); found automatically where possible
-      (like `installs.rs`); edited by hand until Phase 4b
-- [ ] README: which agents are supported, what each Connect writes, and that local models need ~30B+ for agent work
+- [ ] `agent.backends` block in settings.json (`{ "<id>": { enabled, path, args, provider, model } }`) and
+      `agent.defaultBackend: "claude"`; found automatically where possible (like `installs.rs`, real exe behind npm
+      shims); Ollama models from `ollama list`; edited by hand until Phase 4b
+- [ ] Command window: agent and model picker per task and per routine (routines saved before 2.9 read as Claude); runs
+      list and audit record backend, agent version, model and mode
+- [ ] README: supported agents, what each Connect writes, and what local models need (~32 GB RAM or a 24 GB GPU for
+      agent work; 16 GB runs gpt-oss-20b slowly)
 
-**Open questions**
-- Is Gemini CLI worth supporting (hooks since v0.26, `BeforeTool`), given the reported move to Antigravity CLI?
-- One ACP backend or per-agent native paths for the big ones (Codex `exec --json`)? ACP first; revisit if a gap shows.
-- How to name the "agent" UI (`ClaudeSection`, `ClaudeActivity`, `--font-claude`) once it isn't only Claude.
+**Open questions (answered in D47)**
+- Gemini CLI: no sessions in 2.9; later as an ACP backend if it passes the same check.
+- One ACP backend or native paths: ACP only (`codex exec` has no approval channel).
+- UI naming: the rename above.
 
 ### Phase 6: Google Calendar and Gmail (complete 2026-11-03)
 Kick-off prompt: [prompts/phase-6-google.md](prompts/phase-6-google.md). Design agreed 2026-11-02 (D42).
