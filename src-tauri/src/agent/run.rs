@@ -161,16 +161,39 @@ impl Process {
     }
 }
 
+/// Claude Code with this run's command line.
 pub fn spawn(
     launch: &Launch,
     mcp_config: &Path,
+    on_line: impl FnMut(&[u8]) + Send + 'static,
+    on_exit: impl FnOnce(Option<i32>, String) + Send + 'static,
+) -> std::io::Result<Process> {
+    spawn_command(
+        &launch.exe,
+        &args(launch, mcp_config),
+        &[],
+        &launch.cwd,
+        on_line,
+        on_exit,
+    )
+}
+
+/// Any agent (Claude Code, or an ACP agent, 2.9b): started suspended and without a window, put in its own Job
+/// Object before it runs (so nothing it starts escapes Stop), then resumed; `env` is added to Cay's environment.
+/// Stdout is read line by line on its own thread, stderr's tail kept for the exit message.
+pub fn spawn_command(
+    exe: &str,
+    args: &[String],
+    env: &[(String, String)],
+    cwd: &str,
     mut on_line: impl FnMut(&[u8]) + Send + 'static,
     on_exit: impl FnOnce(Option<i32>, String) + Send + 'static,
 ) -> std::io::Result<Process> {
     let job = Job::new().map_err(std::io::Error::other)?;
-    let mut child = Command::new(&launch.exe)
-        .args(args(launch, mcp_config))
-        .current_dir(&launch.cwd)
+    let mut child = Command::new(exe)
+        .args(args)
+        .envs(env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+        .current_dir(cwd)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

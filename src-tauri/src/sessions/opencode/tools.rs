@@ -38,7 +38,8 @@ fn key(name: &str) -> &str {
     }
 }
 
-fn rename_keys(input: Value) -> Value {
+/// An agent's arguments under Claude Code's names; also used for ACP runs' tool calls (2.9b).
+pub fn rename_keys(input: Value) -> Value {
     match input {
         Value::Object(map) => Value::Object(
             map.into_iter()

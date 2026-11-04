@@ -20,9 +20,11 @@
 //!
 //! Rust owns runs, approvals and timeouts; React only renders `agent:runs`, `agent:output` and the activities.
 
+mod acp;
 mod actions;
 mod approvals;
 mod audit;
+mod backend;
 mod bridge;
 mod describe;
 mod folder;
@@ -61,6 +63,7 @@ use windows::Win32::System::Threading::{
 use crate::activity::{approval_key, Activities, Signal, Watcher, ACTING_KEY};
 use crate::desktop::{self, refs::Refs};
 use crate::error::{AppError, AppResult};
+use crate::ipc::AgentBackend;
 use crate::ipc::{
     events, Activity, AgentActingActivity, AgentActingPhase, AgentEntry, AgentEvent,
     AgentFinishedActivity, AgentMode, AgentOptions, AgentOutputPayload, AgentRisk, AgentRunRoutine,
@@ -75,6 +78,7 @@ use lifecycle::Run;
 use routines::RoutineDraft;
 use schedule::{Check, Times, Verdict};
 use settings::AgentSettings;
+use stream::StreamEvent;
 
 /// A bridge gets this long to say hello after connecting.
 const HELLO_TIMEOUT_MS: u32 = 2000;
@@ -132,6 +136,8 @@ struct Slot {
     token: String,
     launch: run::Launch,
     process: Option<run::Process>,
+    /// An ACP agent's protocol state for the current process (2.9b); `None` for Claude Code.
+    acp: Option<acp::Client>,
     /// Bumped per process, so a late line or exit from an earlier process is ignored.
     generation: u32,
     dir: PathBuf,
@@ -365,9 +371,13 @@ impl Inner {
                     "The user denied this in Cay. Don't retry it; adapt or explain what you needed."
                 }
             };
-            if let Some(conn) = self.conns.get(&p.reply.conn) {
+            if p.purpose == Purpose::Agent {
+                let run_id = p.activity.run_id.clone();
+                self.answer_acp(&run_id, &p.reply.rpc_id, allow);
+            } else if let Some(conn) = self.conns.get(&p.reply.conn) {
                 let rpc_id = p.reply.rpc_id.clone();
                 match p.purpose {
+                    Purpose::Agent => {}
                     Purpose::Prompt => {
                         // A plan sent back carries your feedback instead (2.8c).
                         let message = p.message.as_deref().unwrap_or(message);
@@ -627,6 +637,13 @@ fn serve(app: &AppHandle, pipe: Arc<pipe::Pipe>, stop: &Handle) {
             return;
         }
         let run_id = hello.map(|h| h.run).unwrap_or_default();
+        let offer = inner
+            .slots
+            .iter()
+            .find(|s| s.run.id == run_id)
+            .map_or(mcp::Offer::ALL, |s| {
+                backend::offer(s.run.backend, s.launch.desktop_tools, s.launch.google_tools)
+            });
         inner.next_conn += 1;
         let id = inner.next_conn;
         inner.conns.insert(
@@ -636,8 +653,9 @@ fn serve(app: &AppHandle, pipe: Arc<pipe::Pipe>, stop: &Handle) {
                 run_id,
             },
         );
-        id
+        (id, offer)
     };
+    let (conn, offer) = conn;
     loop {
         let message = match pipe.read(&[stop.0], INFINITE) {
             Ok(pipe::Read::Message(m)) => m,
@@ -647,7 +665,7 @@ fn serve(app: &AppHandle, pipe: Arc<pipe::Pipe>, stop: &Handle) {
         let Ok(message) = serde_json::from_slice::<Value>(&message) else {
             continue;
         };
-        match mcp::handle(&message) {
+        match mcp::handle(&message, offer) {
             mcp::Action::Reply(reply) => {
                 let _ = pipe.write(reply.to_string().as_bytes());
             }
@@ -1077,6 +1095,20 @@ fn is_connector_mail(tool: &str) -> bool {
 }
 
 impl Inner {
+    /// Your answer to an ACP agent's permission request, on its stdin (2.9b).
+    fn answer_acp(&mut self, run_id: &str, rpc_id: &Value, allow: bool) {
+        let Some(slot) = self.slot(run_id) else {
+            return;
+        };
+        if let (Some(client), Some(process)) = (slot.acp.as_mut(), slot.process.as_mut()) {
+            if let Some(bytes) = client.answer(rpc_id, allow) {
+                if let Err(e) = process.write(&bytes) {
+                    log::debug!("agent run {run_id}: permission answer not delivered: {e}");
+                }
+            }
+        }
+    }
+
     /// How the message a Gmail read or reply names is called in this run (from its searches), for the approval.
     fn mail_label(&self, run_id: &str, input: &Value) -> Option<String> {
         let id = input
@@ -1149,10 +1181,10 @@ fn ask(
         }
         Asked::Waiting(p) => {
             let activity = p.activity.clone();
-            let by = if a.purpose == Purpose::Look {
-                "cay"
-            } else {
-                "claudeCode"
+            let by = match a.purpose {
+                Purpose::Look => "cay",
+                Purpose::Prompt => "claudeCode",
+                Purpose::Agent => "agent",
             };
             inner.audit(
                 a.run_id,
@@ -1513,6 +1545,8 @@ fn run_routine(app: &AppHandle, id: &str, trigger: RoutineTrigger) -> AppResult<
         max_budget_usd: Some(r.max_budget_usd),
         claude_path: r.claude_path,
         mode: Some(r.mode),
+        // A routine's agent comes with the picker (2.9c); until then routines run on Claude Code.
+        backend: None,
     };
     let routine = RoutineStart {
         tag: AgentRunRoutine {
@@ -1544,6 +1578,9 @@ fn start_process(
     slot.generation += 1;
     let generation = slot.generation;
     std::fs::create_dir_all(&slot.dir).map_err(|e| AppError::AgentStart(e.to_string()))?;
+    if slot.run.backend != AgentBackend::Claude {
+        return start_acp(app, inner, run_id, text, &exe_path, after);
+    }
     let config = slot.dir.join("mcp.json");
     let mcp = json!({ "mcpServers": { mcp::SERVER_NAME: {
         "type": "stdio",
@@ -1578,19 +1615,181 @@ fn start_process(
     Ok(())
 }
 
-fn on_line(app: &AppHandle, run_id: &str, generation: u32, line: &[u8]) {
-    let events = stream::parse(line);
-    if events.is_empty() {
-        return;
+/// An ACP agent's process for a run (2.9b): `initialize`, the session (new, or resumed for a follow-up), then the
+/// message. The agent's mode rules go in its environment for this process only (`backend.rs`).
+fn start_acp(
+    app: &AppHandle,
+    inner: &mut Inner,
+    run_id: &str,
+    text: &str,
+    cay_exe: &std::path::Path,
+    after: &mut After,
+) -> AppResult<()> {
+    let slot = inner.slot(run_id).ok_or(AppError::AgentRunGone)?;
+    let generation = slot.generation;
+    let kind = slot.run.backend;
+    let mode = slot.run.take_mode();
+    slot.launch.mode = mode;
+    let launch = match kind {
+        AgentBackend::Opencode => {
+            backend::opencode(&slot.launch.exe, mode, slot.launch.model.as_deref())
+        }
+        AgentBackend::Claude => return Err(AppError::AgentStart("not an ACP agent".into())),
+    };
+    let mcp_servers = json!([{
+        "name": mcp::SERVER_NAME,
+        "command": cay_exe.to_string_lossy(),
+        "args": ["mcp"],
+        "env": [
+            { "name": bridge::TOKEN_ENV, "value": slot.token },
+            { "name": bridge::RUN_ENV, "value": slot.run.id },
+        ],
+    }]);
+    let (mut client, first) = acp::Client::new(acp::Setup {
+        cwd: slot.launch.cwd.clone(),
+        mcp_servers,
+        resume: slot.run.session.clone().filter(|_| generation > 1),
+        config: launch.config.clone(),
+        // The watchdog (D48): the modes that promise to ask about every edit and command.
+        ask_mode: matches!(mode, AgentMode::Default | AgentMode::Plan),
+    });
+    let (line_app, exit_app) = (app.clone(), app.clone());
+    let (line_id, exit_id) = (run_id.to_string(), run_id.to_string());
+    let mut process = run::spawn_command(
+        &launch.exe,
+        &launch.args,
+        &launch.env,
+        &slot.launch.cwd,
+        move |line| on_line(&line_app, &line_id, generation, line),
+        move |code, stderr| on_exit(&exit_app, &exit_id, generation, code, &stderr),
+    )
+    .map_err(|e| AppError::AgentStart(format!("Couldn't start {}: {e}", kind.display())))?;
+    process
+        .write(&first)
+        .map_err(|e| AppError::AgentStart(e.to_string()))?;
+    let entry = slot.run.send(text, now_ms());
+    // ACP has no system prompt: the first message carries what Claude Code gets with `--append-system-prompt`.
+    let message = if generation == 1 {
+        format!("{}\n\n{text}", backend::ACP_GUIDANCE)
+    } else {
+        text.to_string()
+    };
+    let outs = client.prompt(&message);
+    slot.acp = Some(client);
+    slot.process = Some(process);
+    after.outputs.push(AgentOutputPayload {
+        run_id: run_id.to_string(),
+        entry,
+    });
+    after.runs_changed = true;
+    acp_outs(inner, run_id, outs, after);
+    Ok(())
+}
+
+/// What an ACP client produced, carried out under the lock: lines to the agent, events into the run, permission
+/// requests to the island, the watchdog's stop.
+fn acp_outs(inner: &mut Inner, run_id: &str, outs: Vec<acp::Out>, after: &mut After) {
+    for out in outs {
+        match out {
+            acp::Out::Write(bytes) => {
+                let written = inner
+                    .slot(run_id)
+                    .and_then(|s| s.process.as_mut())
+                    .map(|p| p.write(&bytes));
+                if let Some(Err(e)) = written {
+                    log::debug!("agent run {run_id}: line not delivered: {e}");
+                }
+            }
+            acp::Out::Event(event) => apply_events(inner, run_id, vec![event], after),
+            acp::Out::Permission {
+                rpc_id,
+                tool,
+                input,
+                ..
+            } => {
+                inner.audit(
+                    run_id,
+                    "approval",
+                    json!({ "tool": tool, "input": audit::input_for_log(&redact(&tool, &input)) }),
+                );
+                let asked = Ask {
+                    run_id,
+                    tool: &tool,
+                    purpose: Purpose::Agent,
+                    target: desktop_target(&tool, &input),
+                    element: None,
+                };
+                let reply = ReplyTo { conn: 0, rpc_id };
+                if let Some((reply, _, _)) = ask(inner, asked, input, reply, after) {
+                    inner.answer_acp(run_id, &reply.rpc_id, true);
+                }
+            }
+            acp::Out::Unasked { tool, summary } => {
+                log::warn!("agent run {run_id}: {tool} ran without asking; stopping the run");
+                inner.audit(
+                    run_id,
+                    "unasked",
+                    json!({ "tool": tool, "summary": audit::input_for_log(&json!(summary)) }),
+                );
+                note_error(
+                    inner,
+                    run_id,
+                    format!(
+                        "The agent ran a step without asking, although this run asks first ({tool}: {summary}). \
+                         Cay stopped it."
+                    ),
+                    after,
+                );
+                stop_run(inner, run_id, after);
+            }
+            acp::Out::Notice(message) => note_error(inner, run_id, message, after),
+        }
     }
+}
+
+fn note_error(inner: &mut Inner, run_id: &str, message: String, after: &mut After) {
+    if let Some(slot) = inner.slot(run_id) {
+        let entry = slot.run.note(AgentEvent::Error { message }, now_ms());
+        after.outputs.push(AgentOutputPayload {
+            run_id: run_id.to_string(),
+            entry,
+        });
+        after.runs_changed = true;
+    }
+}
+
+fn on_line(app: &AppHandle, run_id: &str, generation: u32, line: &[u8]) {
     let agents = app.state::<Agents>();
     let mut after = After::default();
     {
         let mut inner = agents.lock();
+        let Some(slot) = inner.slot(run_id).filter(|s| s.generation == generation) else {
+            return;
+        };
+        match slot.acp.as_mut() {
+            Some(client) => {
+                let outs = client.on_line(line);
+                acp_outs(&mut inner, run_id, outs, &mut after);
+            }
+            None => {
+                let events = stream::parse(line);
+                if events.is_empty() {
+                    return;
+                }
+                apply_events(&mut inner, run_id, events, &mut after);
+            }
+        }
+    }
+    after.run(app, &agents);
+}
+
+/// A run's events (from stream-json or ACP) into its lifecycle, the audit and the transcript.
+fn apply_events(inner: &mut Inner, run_id: &str, events: Vec<StreamEvent>, after: &mut After) {
+    {
         let mut finished = false;
         let mut tools = Vec::new();
         let mut mail_read_now = false;
-        let Some(slot) = inner.slot(run_id).filter(|s| s.generation == generation) else {
+        let Some(slot) = inner.slot(run_id) else {
             return;
         };
         for event in events {
@@ -1627,11 +1826,10 @@ fn on_line(app: &AppHandle, run_id: &str, generation: u32, line: &[u8]) {
             inner.audit(run_id, "readMail", json!({ "by": "connector" }));
         }
         if finished {
-            inner.finished(run_id, &mut after);
+            inner.finished(run_id, after);
         }
         after.runs_changed = true;
     }
-    after.run(app, &agents);
 }
 
 fn on_exit(app: &AppHandle, run_id: &str, generation: u32, code: Option<i32>, stderr: &str) {
@@ -1643,6 +1841,7 @@ fn on_exit(app: &AppHandle, run_id: &str, generation: u32, code: Option<i32>, st
             return;
         };
         slot.process = None;
+        slot.acp = None;
         let _ = std::fs::remove_dir_all(&slot.dir);
         let applied = slot.run.exited(code, stderr, now_ms());
         for entry in applied.entries {
@@ -1673,6 +1872,12 @@ fn stop_run(inner: &mut Inner, run_id: &str, after: &mut After) {
     };
     if let Some(process) = &mut slot.process {
         slot.run.stop();
+        // An ACP agent hears that its open permission requests are cancelled before it's ended (2.9b).
+        if let Some(client) = slot.acp.as_mut() {
+            for line in client.cancel_all() {
+                let _ = process.write(&line);
+            }
+        }
         process.stdin = None;
         process.job.kill();
         log::info!("agent run {run_id} stopped");
@@ -1726,6 +1931,9 @@ pub struct AgentStartRequest {
     /// The permission mode (2.8e); `None` uses `agent.defaultMode` (Auto).
     #[serde(default)]
     mode: Option<AgentMode>,
+    /// The agent (2.9b); `None` is Claude Code.
+    #[serde(default)]
+    backend: Option<AgentBackend>,
 }
 
 #[tauri::command]
@@ -1870,16 +2078,31 @@ fn start_run(
         cwd: folder::long_path(&request.cwd),
         ..request
     };
-    let found = installs(&agents);
     let settings = agents.lock().settings.clone();
-    let configured = request.claude_path.or(settings.claude_path.clone());
-    let exe = installs::pick(&found, configured.as_deref()).ok_or(AppError::AgentNoClaude)?;
+    let kind = request.backend.unwrap_or_default();
+    let exe = match kind {
+        AgentBackend::Claude => {
+            let found = installs(&agents);
+            let configured = request.claude_path.clone().or(settings.claude_path.clone());
+            installs::pick(&found, configured.as_deref()).ok_or(AppError::AgentNoClaude)?
+        }
+        AgentBackend::Opencode => backend::opencode_exe()
+            .map(|p| p.to_string_lossy().into_owned())
+            .ok_or_else(|| {
+                AppError::AgentInvalid(
+                    "OpenCode isn't installed (npm install -g opencode-ai), so it can't run this."
+                        .into(),
+                )
+            })?,
+    };
     let at = now_ms();
     let run_id = audit::run_id(at);
-    let model = request
-        .model
-        .or(settings.model.clone())
-        .filter(|m| !m.is_empty());
+    // `agent.model` is Claude Code's; other agents use their own default unless the task names one.
+    let model = match kind {
+        AgentBackend::Claude => request.model.clone().or(settings.model.clone()),
+        _ => request.model.clone(),
+    }
+    .filter(|m| !m.is_empty());
     let launch = run::Launch {
         exe: exe.clone(),
         cwd: request.cwd.clone(),
@@ -1906,7 +2129,7 @@ fn start_run(
             &run_id,
             "start",
             json!({
-                "prompt": prompt, "cwd": request.cwd, "exe": exe, "model": model,
+                "prompt": prompt, "cwd": request.cwd, "exe": exe, "model": model, "backend": kind,
                 "maxTurns": launch.max_turns, "maxBudgetUsd": launch.max_budget_usd,
                 "routine": routine.as_ref().map(|r| json!({ "id": r.tag.id, "name": r.tag.name })),
                 "trigger": routine.as_ref().map(|r| r.tag.trigger),
@@ -1916,6 +2139,7 @@ fn start_run(
             }),
         );
         let mut run = Run::new(run_id.clone(), request.cwd, model, at);
+        run.backend = kind;
         run.start_in(launch.mode);
         run.routine = routine.as_ref().map(|r| r.tag.clone());
         let patient = routine
@@ -1926,6 +2150,7 @@ fn start_run(
             token: audit::random_hex(16),
             launch,
             process: None,
+            acp: None,
             generation: 0,
             dir,
             patient,
@@ -1988,7 +2213,21 @@ pub async fn agent_send(
         let slot = inner.slot(&run_id).ok_or(AppError::AgentRunGone)?;
         let writable =
             slot.run.is_live() && slot.process.as_ref().is_some_and(|p| p.stdin.is_some());
-        if writable {
+        if writable && slot.acp.is_some() {
+            let entry = slot.run.send(&text, now_ms());
+            let outs = slot
+                .acp
+                .as_mut()
+                .map(|c| c.prompt(&text))
+                .unwrap_or_default();
+            after.outputs.push(AgentOutputPayload {
+                run_id: run_id.clone(),
+                entry,
+            });
+            after.runs_changed = true;
+            acp_outs(&mut inner, &run_id, outs, &mut after);
+            Ok(())
+        } else if writable {
             let entry = slot.run.send(&text, now_ms());
             let written = slot
                 .process
@@ -2029,8 +2268,10 @@ pub fn agent_set_mode(
         let mut inner = agents.lock();
         let slot = inner.slot(&run_id).ok_or(AppError::AgentRunGone)?;
         let from = slot.run.mode();
-        let writable =
-            slot.run.is_live() && slot.process.as_ref().is_some_and(|p| p.stdin.is_some());
+        // An ACP agent's rules are set when its process starts, so its mode changes with your next message.
+        let writable = slot.run.backend == AgentBackend::Claude
+            && slot.run.is_live()
+            && slot.process.as_ref().is_some_and(|p| p.stdin.is_some());
         let at = now_ms();
         let applies = if writable {
             let request_id = format!("mode-{at}");
@@ -2347,6 +2588,10 @@ pub fn debug_command(app: &AppHandle, args: &[String]) {
                             .and_then(|m| mode::parse(m))
                             .unwrap_or(AgentMode::Default),
                     ),
+                    backend: match args.get(6).map(String::as_str) {
+                        Some("opencode") => Some(AgentBackend::Opencode),
+                        _ => None,
+                    },
                 },
             )
             .await

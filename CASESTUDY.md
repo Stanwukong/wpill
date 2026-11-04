@@ -856,6 +856,19 @@ than on Claude Code (a classifier) or Codex (an OS sandbox); the command window 
 the README says what each Auto means. *Alternatives:* Ask only (D47; the author found it defeats automation); asking in
 Cay for desktop actions on agents without a classifier (recommended, declined); OpenCode Auto allowing all shell with
 a risky-pattern list (a list can't catch everything) or edits only (too many cards).
+*Built (2.9b, OpenCode 1.19.5, 2026-11-04):* a run records its `AgentBackend`; Claude Code keeps its code path
+(`run::spawn`, `stream.rs`), and ACP agents get an `acp::Client` per process whose `StreamEvent`s feed the same
+`lifecycle.rs` (an enum on the run, not the trait PLAN once named: two shapes, and the lifecycle is already shared).
+Both start through `run::spawn_command` (suspended, Job Object). Checked against `opencode acp` before writing the
+parser: `initialize` offers `loadSession`, `session/new` returns `configOptions` (model, effort, `mode` build/plan,
+set with `session/set_config_option`), and a shell step goes `tool_call` → `in_progress` → `session/request_permission`.
+So the watchdog fires on a risky step that *completes* unasked (in Ask and Plan), not on `in_progress`. Per-run rules
+go in `OPENCODE_CONFIG_CONTENT` (checked: it beats the user's own `"ask"`), so no OpenCode file is written. Mode changes
+for ACP runs apply from the next message (the rules are fixed per process). Cay's MCP server now offers each connection
+only its tools (`mcp::Offer`): no `approve` for ACP agents, and a routine's desktop/Google switches enforced by Cay.
+OpenCode names MCP tools `cay_<tool>`; they read as `mcp__cay__<tool>` so grants and cards match. ACP has no system
+prompt, so the first message carries Cay's guidance. *Checked live through Cay:* Ask (your Allow from the island, a
+Deny, a follow-up resuming the session in a new process), Auto (a write and `git status` with no card), Stop.
 
 ## 5. Challenges & resolutions
 
@@ -1080,6 +1093,7 @@ so tests and Connect must both say which folder they touch; and a hook only prov
 | 2026-11-03 | OpenCode spike (1.19.5): `permission.ask` is never called, but a plugin can answer through OpenCode's own client. The author chose to build OpenCode sessions in 2.9a: Cay's `cay.js` plugin feeds the same forwarder (`--agent opencode`, tools renamed in Rust), answers permissions through the client, fails open (checked with Cay closed). Manual checks pending. |
 | 2026-11-04 | OpenCode's manual checks passed (the author): **stage 2.9a signed off**, Codex and OpenCode sessions in the island. Next: 2.9b (ACP runs). |
 | 2026-11-04 | 2.9b started. The author reversed D47's "Ask only": other agents' runs get Claude Code's four modes, Auto by default, desktop actions following the mode (D48); OpenCode first, then Codex, then Goose. |
+| 2026-11-04 | 2.9b step 1: ACP runs on OpenCode (`acp.rs`, `backend.rs`, `run::spawn_command`, `mcp::Offer`), checked live through Cay in Ask and Auto; 265 Rust tests. A free model stalled one run until Stop (no inactivity limit yet). |
 | 2026-11-03 | Stage 2.9a, step 1: the rename (`claude/` → `sessions/`, session IPC names, `features/sessions/`, `--font-agent`, `data-agent`), no behaviour change; 230 Rust tests, clippy and typecheck clean. Codex updated to 0.166.0. |
 
 ## 7. Results & metrics

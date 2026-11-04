@@ -355,8 +355,13 @@ export interface ClaudeHooksStatus {
   outOfDate: boolean;
 }
 
+/** The agent a run uses (2.9b). Mirrors Rust's `AgentBackend`. */
+export type AgentBackend = "claude" | "opencode";
+
 export interface AgentRun {
   runId: string;
+  /** Which agent runs it. */
+  backend: AgentBackend;
   /** Folder name of `cwd`. */
   project: string;
   cwd: string;
@@ -509,6 +514,8 @@ export interface AgentStartRequest {
   claudePath?: string | null;
   /** The permission mode (2.8e); omitted uses the default (`auto`). */
   mode?: AgentMode | null;
+  /** The agent (2.9b); omitted is Claude Code. */
+  backend?: AgentBackend | null;
 }
 
 export interface ClaudeInstall {

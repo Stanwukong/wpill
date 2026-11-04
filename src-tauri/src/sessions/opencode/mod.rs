@@ -14,7 +14,7 @@ use windows::Win32::UI::WindowsAndMessaging::{MB_ICONINFORMATION, MB_ICONWARNING
 
 use super::{confirm, message, this_exe, version};
 use plugin::State;
-pub use tools::claude_shaped;
+pub use tools::{claude_shaped, rename_keys};
 
 static DIALOG_OPEN: AtomicBool = AtomicBool::new(false);
 

@@ -56,7 +56,24 @@ pub enum Action {
     Ignore,
 }
 
-pub fn handle(msg: &Value) -> Action {
+/// Which of Cay's tools a connection's run gets (2.9b): `approve` is Claude Code's prompt tool only, and a routine
+/// can switch off the desktop or Google tools. Tools a run doesn't get are neither listed nor callable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Offer {
+    pub approve: bool,
+    pub desktop: bool,
+    pub google: bool,
+}
+
+impl Offer {
+    pub const ALL: Offer = Offer {
+        approve: true,
+        desktop: true,
+        google: true,
+    };
+}
+
+pub fn handle(msg: &Value, offer: Offer) -> Action {
     let Some(method) = msg.get("method").and_then(Value::as_str) else {
         return Action::Ignore;
     };
@@ -90,10 +107,17 @@ pub fn handle(msg: &Value) -> Action {
         }
         "ping" => Action::Reply(result(id, json!({}))),
         "tools/list" => {
-            let mut tools = vec![approve_tool()];
-            tools.extend(super::tools::definitions());
-            tools.extend(super::actions::definitions());
-            tools.extend(super::google_tools::definitions());
+            let mut tools = Vec::new();
+            if offer.approve {
+                tools.push(approve_tool());
+            }
+            if offer.desktop {
+                tools.extend(super::tools::definitions());
+                tools.extend(super::actions::definitions());
+            }
+            if offer.google {
+                tools.extend(super::google_tools::definitions());
+            }
             Action::Reply(result(id, json!({ "tools": tools })))
         }
         "tools/call" => {
@@ -103,7 +127,7 @@ pub fn handle(msg: &Value) -> Action {
                 .and_then(|a| a.get("tool_name"))
                 .and_then(Value::as_str);
             match (name, tool_name) {
-                (Some(APPROVE_TOOL), Some(tool_name)) => Action::Approve {
+                (Some(APPROVE_TOOL), Some(tool_name)) if offer.approve => Action::Approve {
                     rpc_id: id,
                     tool_name: tool_name.to_string(),
                     input: args
@@ -111,29 +135,36 @@ pub fn handle(msg: &Value) -> Action {
                         .cloned()
                         .unwrap_or(json!({})),
                 },
-                (Some(APPROVE_TOOL), None) => {
+                (Some(APPROVE_TOOL), None) if offer.approve => {
                     Action::Reply(error(id, -32602, "approve needs tool_name and input"))
                 }
-                (Some(name), _) if super::tools::NAMES.contains(&name) => Action::Look {
-                    rpc_id: id,
-                    name: super::tools::NAMES
-                        .iter()
-                        .copied()
-                        .find(|n| *n == name)
-                        .unwrap_or_default(),
-                    args: args.cloned().unwrap_or(json!({})),
-                },
-                (Some(name), _) if super::actions::NAMES.contains(&name) => Action::Act {
-                    rpc_id: id,
-                    name: super::actions::NAMES
-                        .iter()
-                        .copied()
-                        .find(|n| *n == name)
-                        .unwrap_or_default(),
-                    args: args.cloned().unwrap_or(json!({})),
-                },
+                (Some(name), _) if offer.desktop && super::tools::NAMES.contains(&name) => {
+                    Action::Look {
+                        rpc_id: id,
+                        name: super::tools::NAMES
+                            .iter()
+                            .copied()
+                            .find(|n| *n == name)
+                            .unwrap_or_default(),
+                        args: args.cloned().unwrap_or(json!({})),
+                    }
+                }
+                (Some(name), _) if offer.desktop && super::actions::NAMES.contains(&name) => {
+                    Action::Act {
+                        rpc_id: id,
+                        name: super::actions::NAMES
+                            .iter()
+                            .copied()
+                            .find(|n| *n == name)
+                            .unwrap_or_default(),
+                        args: args.cloned().unwrap_or(json!({})),
+                    }
+                }
                 (Some(name), _)
-                    if super::google_tools::short_name(&format!("mcp__{SERVER_NAME}__{name}"))
+                    if offer.google
+                        && super::google_tools::short_name(&format!(
+                            "mcp__{SERVER_NAME}__{name}"
+                        ))
                         .is_some() =>
                 {
                     Action::Google {
@@ -198,7 +229,7 @@ mod tests {
     fn handshake_and_list() {
         let init = json!({ "jsonrpc": "2.0", "id": 0, "method": "initialize",
             "params": { "protocolVersion": "2025-06-18", "capabilities": {} } });
-        let Action::Reply(r) = handle(&init) else {
+        let Action::Reply(r) = handle(&init, Offer::ALL) else {
             panic!()
         };
         assert_eq!(r["id"], 0);
@@ -207,22 +238,22 @@ mod tests {
 
         let future = json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize",
             "params": { "protocolVersion": "2099-01-01" } });
-        let Action::Reply(r) = handle(&future) else {
+        let Action::Reply(r) = handle(&future, Offer::ALL) else {
             panic!()
         };
         assert_eq!(r["result"]["protocolVersion"], PROTOCOL_VERSIONS[0]);
 
         let list = json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" });
-        let Action::Reply(r) = handle(&list) else {
+        let Action::Reply(r) = handle(&list, Offer::ALL) else {
             panic!()
         };
         assert_eq!(r["result"]["tools"][0]["name"], "approve");
         assert_eq!(r["result"]["tools"][3]["name"], "screenshot");
 
         let note = json!({ "jsonrpc": "2.0", "method": "notifications/initialized" });
-        assert_eq!(handle(&note), Action::Ignore);
+        assert_eq!(handle(&note, Offer::ALL), Action::Ignore);
         let unknown = json!({ "jsonrpc": "2.0", "id": "x", "method": "resources/list" });
-        let Action::Reply(r) = handle(&unknown) else {
+        let Action::Reply(r) = handle(&unknown, Offer::ALL) else {
             panic!()
         };
         assert_eq!(r["error"]["code"], -32601);
@@ -237,7 +268,7 @@ mod tests {
                            "tool_use_id": "toolu_013" },
             "_meta": { "progressToken": 2 } } });
         assert_eq!(
-            handle(&call),
+            handle(&call, Offer::ALL),
             Action::Approve {
                 rpc_id: json!(2),
                 tool_name: "Bash".into(),
@@ -261,7 +292,7 @@ mod tests {
         let look = json!({ "jsonrpc": "2.0", "id": 4, "method": "tools/call",
             "params": { "name": "ui_tree", "arguments": { "hwnd": 5 } } });
         assert_eq!(
-            handle(&look),
+            handle(&look, Offer::ALL),
             Action::Look {
                 rpc_id: json!(4),
                 name: "ui_tree",
@@ -271,11 +302,14 @@ mod tests {
 
         let act = json!({ "jsonrpc": "2.0", "id": 5, "method": "tools/call",
             "params": { "name": "click", "arguments": { "hwnd": 5, "element": 2 } } });
-        assert!(matches!(handle(&act), Action::Act { name: "click", .. }));
+        assert!(matches!(
+            handle(&act, Offer::ALL),
+            Action::Act { name: "click", .. }
+        ));
         let google = json!({ "jsonrpc": "2.0", "id": 6, "method": "tools/call",
             "params": { "name": "gmail_search", "arguments": { "query": "invoice" } } });
         assert!(matches!(
-            handle(&google),
+            handle(&google, Offer::ALL),
             Action::Google {
                 name: "gmail_search",
                 ..
@@ -284,7 +318,7 @@ mod tests {
         let cancel = json!({ "jsonrpc": "2.0", "method": "notifications/cancelled",
             "params": { "requestId": 5, "reason": "AbortError" } });
         assert_eq!(
-            handle(&cancel),
+            handle(&cancel, Offer::ALL),
             Action::Cancel {
                 request_id: json!(5)
             }
@@ -292,9 +326,42 @@ mod tests {
 
         let other = json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call",
             "params": { "name": "shell", "arguments": {} } });
-        let Action::Reply(r) = handle(&other) else {
+        let Action::Reply(r) = handle(&other, Offer::ALL) else {
             panic!()
         };
         assert_eq!(r["error"]["code"], -32602);
+    }
+
+    #[test]
+    fn a_run_only_gets_the_tools_it_was_offered() {
+        let acp = Offer {
+            approve: false,
+            desktop: false,
+            google: true,
+        };
+        let list = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+        let Action::Reply(r) = handle(&list, acp) else {
+            panic!()
+        };
+        let names: Vec<&str> = r["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap())
+            .collect();
+        assert!(!names.contains(&APPROVE_TOOL));
+        assert!(!names.contains(&"screenshot"));
+        assert!(names.contains(&"calendar_list_events"));
+        let call = |name: &str, args: Value| json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": { "name": name, "arguments": args } });
+        let refused = |a: Action| matches!(a, Action::Reply(r) if r["error"]["message"] == json!("unknown tool"));
+        assert!(refused(handle(
+            &call(APPROVE_TOOL, json!({ "tool_name": "Bash", "input": {} })),
+            acp
+        )));
+        assert!(refused(handle(&call("click", json!({})), acp)));
+        assert!(matches!(
+            handle(&call("tasks_list", json!({})), acp),
+            Action::Google { .. }
+        ));
     }
 }

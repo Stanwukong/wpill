@@ -1363,24 +1363,29 @@ Tasks stay on for ACP runs (desktop tools and Gmail off until a scripted look-an
 20. Disconnect OpenCode deletes only `cay.js`; OpenCode still starts normally.
 
 **2.9b ACP run backend** (Agent Client Protocol v1: JSON-RPC to an agent subprocess over stdio)
-- [ ] `agent::backend`: launch, encode a message, decode a line (event / approval / reply to write), stop;
-      `ClaudeCode` wraps today's `run.rs` / `stream.rs` unchanged; `StreamEvent` + `lifecycle.rs` stay the core
-- [ ] `agent::acp` (pure, unit-tested): `initialize`, `session/new` (cwd, `mcpServers` = stdio `cay.exe mcp` with the
+- [x] Backends (as an `AgentBackend` on the run rather than a trait, D48): Claude Code unchanged (`run::spawn`,
+      `stream.rs`); ACP agents through `run::spawn_command` + `acp::Client`; `StreamEvent` + `lifecycle.rs` stay the core
+- [x] `agent::acp` (pure, unit-tested): `initialize`, `session/new` (cwd, `mcpServers` = stdio `cay.exe mcp` with the
       run's id and token in `env`), `session/prompt`, `session/update` → events, `session/cancel`,
       `session/request_permission` → `agentApproval` (Allow → `allow_once`, Deny → `reject_once`, never
       `allow_always`); `session/load` for follow-ups when advertised, else the process stays with an idle timeout.
       Client fs/terminal capabilities off
-- [ ] Watchdog (Ask mode only, D48): a `tool_call` of kind edit / delete / move / execute / fetch reaching `in_progress`
-      without a permission request for its id stops the run, is audited, and shows "ran a step without asking"
-- [ ] Same suspended start + Job Object (`job.rs`), long paths and per-run folder
-- [ ] OpenCode first (`opencode acp`, per-run config through `OPENCODE_CONFIG_CONTENT` / a per-run file), then Codex
+- [x] Watchdog (Ask and Plan, D48): a `tool_call` of kind edit / delete / move / execute / fetch that *completes*
+      without a permission request for its id stops the run, is audited, and says so (OpenCode reports `in_progress`
+      before it asks, so that can't be the trigger)
+- [x] Same suspended start + Job Object (`job.rs`), long paths and per-run folder
+- [x] OpenCode (`opencode acp`, per-run rules in `OPENCODE_CONFIG_CONTENT`), checked live through Cay
+- [ ] Then Codex
       (`codex-acp`), then Goose (`goose acp`, `GOOSE_MODE` in the environment, Ollama, on the author's other machine);
       verify each connects to Cay's MCP server
 - [ ] Modes (D48): Auto (default), Accept edits, Ask, Plan for every backend, mapped to the agent's nearest setting
       (table in D48); never an approve-everything setting. Each backend: unit tests of its launch per mode (Ask asks
       for writes and shell; nothing maps to approve-everything), and an ignored live test that Ask asks first
-- [ ] Cay's MCP tools for ACP runs: all of them (D48). Looks, actions and Calendar/Tasks follow the mode as for Claude
+- [x] Cay's MCP tools for ACP runs: all of them (D48), offered per connection (`mcp::Offer`: no `approve`). Looks, actions and Calendar/Tasks follow the mode as for Claude
       Code; Gmail asks in Cay in every mode; after reading mail, desktop actions ask in Cay (D46)
+
+- [ ] An inactivity limit for ACP runs (a free model stalled one run until Stop); Cay's turn and budget limits don't
+      reach ACP agents yet
 
 **2.9c Settings and docs**
 - [ ] `agent.backends` block in settings.json (`{ "<id>": { enabled, path, args, provider, model } }`) and

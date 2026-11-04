@@ -40,6 +40,7 @@ pnpm typecheck              # tsc --noEmit
 # Debug builds only: drive agent runs from outside (forwarded to the running Cay; results in its log)
 .\src-tauri\target\debug\cay.exe agent-test start <folder> "<prompt>" haiku 4 [auto|default|acceptEdits|plan]   # mode defaults to default (Ask) for tests
 .\src-tauri\target\debug\cay.exe agent-test mode <runId> acceptEdits   # switch a run's permission mode (2.8e)
+.\src-tauri\target\debug\cay.exe agent-test start <folder> "<prompt>" opencode/deepseek-v4.1-flash-free 6 auto opencode   # an ACP run on OpenCode (2.9b)
 .\src-tauri\target\debug\cay.exe agent-test decide <requestId> allow|deny [run]   # also: send, stop, stop-all, show, hide, quit
 .\src-tauri\target\debug\cay.exe agent-test look screenshot '{"hwnd":123}' C:\tmp\shot.png   # a desktop look without Claude (also list_windows, focused_window, ui_tree)
 .\src-tauri\target\debug\cay.exe agent-test act type_text '{"hwnd":123,"text":"hi"}'   # an action without Claude or approvals (no refs; real input: ask first)
@@ -95,9 +96,11 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
   (2.8c): `agent/interact.rs` (pure: questions, answers, `updatedInput`, plan titles), shared by sessions and runs. They're never allowed bare:
   only `Answers` / `ApprovePlan` allow them, built from the input as Claude Code sent it.
   `duplex.rs` = the duplex, multi-instance pipe shared by the agent pipe (`agent/pipe.rs` names it) and `sessions/asks.rs`.
-  `agent/` (Phase 2.7, headless Claude Code runs): `mod.rs` = managed `Agents`, pipe server + connection threads,
+  `agent/` (Phase 2.7, headless Claude Code runs; other agents through ACP since 2.9b): `mod.rs` = managed `Agents`, pipe server + connection threads,
   approval flow, commands; `run.rs` = command line + spawn (suspended, `CREATE_NO_WINDOW`, Job Object via `job.rs`);
-  `bridge.rs` = `cay.exe mcp` (run from `main.rs`, relays stdio JSON-RPC ↔ `pipe.rs`); `hotkey.rs`, `folder.rs`
+  `bridge.rs` = `cay.exe mcp` (run from `main.rs`, relays stdio JSON-RPC ↔ `pipe.rs`); `acp.rs` (pure: the Agent Client
+  Protocol client, ACP messages → `StreamEvent`s, permission answers, the Ask-mode watchdog) and `backend.rs` (finding
+  OpenCode, each mode's per-run rules, `ACP_GUIDANCE`, the MCP `Offer`) for runs on other agents (2.9b, D48); `hotkey.rs`, `folder.rs`
   (picker + long paths), `installs.rs` (find `claude.exe`, recent folders), `audit.rs` (jsonl trail, run ids),
   `settings.rs` (`agent` block in settings.json). Pure and unit-tested: `stream.rs` (stream-json), `lifecycle.rs`
   (run state), `approvals.rs`, `describe.rs` (risk, summaries, remember keys), `mcp.rs`, `mode.rs` (2.8e: the cycle,
@@ -268,6 +271,12 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
   `opencode run` rejects every request at once, so test cards in the TUI or `opencode serve`. Connect never edits the
   user's `opencode.json` (OpenCode allows edits and shell by default). Test with `OPENCODE_CONFIG_DIR` pointing at a
   scratch folder; OpenCode creates its own defaults in `~\.config\opencode` on first run, Cay doesn't.
+- **ACP runs (2.9b, D48).** An ACP agent gets its mode's rules for one process through its environment
+  (`OPENCODE_CONFIG_CONTENT`), never by writing its config; a mode change applies from the next message. OpenCode marks a
+  step `in_progress` before it asks, so the watchdog judges completed steps. A free model can stall a run with no output
+  (Stop ends it); test ACP runs with `agent-test start … opencode` in a scratch folder and decide with `agent-test
+  decide` (you may click the card first). Its `opencode.exe` is the real exe behind npm's shim
+  (`node_modules\opencode-ai\bin`).
 - **The hook forwarder must stay quiet and fast.** `cay.exe hook` runs before Tauri, never panics
   (release is `panic = "abort"`, a non-zero exit shows as a hook error in Claude Code) and bounds every wait. The only
   thing it ever prints is a `PermissionRequest` decision you made in the island (2.8a); with no decision it prints

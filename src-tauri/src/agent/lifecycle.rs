@@ -20,6 +20,7 @@ const MAX_PROMPT: usize = 200;
 #[derive(Debug)]
 pub struct Run {
     pub id: String,
+    pub backend: crate::ipc::AgentBackend,
     pub project: String,
     pub cwd: String,
     prompt: String,
@@ -65,6 +66,7 @@ impl Run {
     pub fn new(id: String, cwd: String, model: Option<String>, at_ms: i64) -> Self {
         Self {
             id,
+            backend: crate::ipc::AgentBackend::Claude,
             project: crate::sessions::project_name(&cwd),
             cwd,
             prompt: String::new(),
@@ -315,6 +317,7 @@ impl Run {
     pub fn ipc(&self, pending: Vec<crate::ipc::AgentApprovalActivity>) -> AgentRun {
         AgentRun {
             run_id: self.id.clone(),
+            backend: self.backend,
             project: self.project.clone(),
             cwd: self.cwd.clone(),
             prompt: self.prompt.clone(),

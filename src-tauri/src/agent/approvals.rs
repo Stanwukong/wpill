@@ -29,11 +29,13 @@ pub struct ReplyTo {
     pub rpc_id: Value,
 }
 
-/// What an approval answers: Claude Code's permission prompt, or Cay's own check before a desktop look.
+/// What an approval answers: Claude Code's permission prompt, Cay's own check before a desktop look, or an ACP
+/// agent's `session/request_permission` (2.9b), answered on the agent's stdin.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Purpose {
     Prompt,
     Look,
+    Agent,
 }
 
 #[derive(Debug, Clone)]
@@ -134,7 +136,7 @@ impl Approvals {
                 .get(&req.run_id)
                 .is_some_and(|keys| keys.contains(key))
             {
-                if req.purpose == Purpose::Prompt {
+                if req.purpose != Purpose::Look {
                     self.add_grant(&req.run_id, &req.tool, &req.input, req.target_pid);
                 }
                 return Asked::Remembered {
@@ -213,7 +215,7 @@ impl Approvals {
                     .insert(key.clone());
             }
         }
-        if allow && p.purpose == Purpose::Prompt {
+        if allow && p.purpose != Purpose::Look {
             let (run, tool, input) = (p.activity.run_id.clone(), p.tool.clone(), p.input.clone());
             self.add_grant(&run, &tool, &input, p.target_pid);
         }

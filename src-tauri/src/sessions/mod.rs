@@ -61,6 +61,11 @@ pub fn forward_statusline() {
     statusline::run();
 }
 
+/// OpenCode's argument names (`filePath`, `oldString`, …) as Claude Code's, for ACP runs' tool calls (2.9b).
+pub fn claude_keys(input: serde_json::Value) -> serde_json::Value {
+    opencode::rename_keys(input)
+}
+
 /// The island's name for a working folder (its last component, shortened), shared with agent runs.
 pub fn project_name(cwd: &str) -> String {
     table::project(cwd)

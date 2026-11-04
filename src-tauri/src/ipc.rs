@@ -293,6 +293,25 @@ pub struct AgentSession {
 }
 
 /// An agent run's permission mode (2.8e, D40): Claude Code's own names. Auto by default; `bypassPermissions` and
+/// The agent a run uses (2.9b, D47/D48). Claude Code is native (stream-json); the others speak the Agent Client
+/// Protocol. Missing in requests and routines means Claude Code.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AgentBackend {
+    #[default]
+    Claude,
+    Opencode,
+}
+
+impl AgentBackend {
+    pub fn display(self) -> &'static str {
+        match self {
+            AgentBackend::Claude => "Claude Code",
+            AgentBackend::Opencode => "OpenCode",
+        }
+    }
+}
+
 /// `dontAsk` are never offered (they don't deserialize).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -532,6 +551,8 @@ pub struct AgentRunsPayload {
 #[serde(rename_all = "camelCase")]
 pub struct AgentRun {
     pub run_id: String,
+    /// Which agent runs it (2.9b): Claude Code, or an ACP agent.
+    pub backend: AgentBackend,
     /// Folder name of `cwd`.
     pub project: String,
     pub cwd: String,
