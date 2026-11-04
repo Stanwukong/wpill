@@ -43,7 +43,8 @@ through a chained status line, the optional sound, D41) is signed off (2026-11-0
 **Now: [2.9 other agents and open models](#phase-29-other-agents-and-open-models-design-agreed-2026-11-03-d47)**
 (kick-off prompt: [prompts/phase-2.9-other-agents.md](prompts/phase-2.9-other-agents.md)): research and design agreed
 (2026-11-03, D47); **stage 2.9a (agent-neutral sessions: Codex and OpenCode) is signed off (2026-11-04), all 20 manual checks
-passed.** Next: 2.9b (ACP runs, Goose first; its live test runs on the author's other machine). Then 3, 5, the spikes, and
+passed.** **Stage 2.9b (ACP runs on OpenCode and Codex, D48) is signed off (2026-11-04)**; Goose waits for the
+author's other machine. Now: 2.9c (settings, the agent and model picker, README). Then 3, 5, the spikes, and
 last 4a-5 (release).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
@@ -1377,7 +1378,8 @@ Tasks stay on for ACP runs (desktop tools and Gmail off until a scripted look-an
 - [x] OpenCode (`opencode acp`, per-run rules in `OPENCODE_CONFIG_CONTENT`), checked live through Cay
 - [x] Codex (`@agentclientprotocol/codex-acp` 2.5.0 through Node: Auto = its "Auto review", Accept edits =
       `workspace-write`, Ask and Plan = `read-only`; never `agent-full-access`), checked live through Cay
-- [ ] Goose (`goose acp`, `GOOSE_MODE` in the environment, Ollama, on the author's other machine)
+- [ ] Goose (`goose acp`, `GOOSE_MODE` in the environment, Ollama), deferred to the author's other machine (2.9b was
+      signed off without it, 2026-11-04)
 - [x] Each ACP agent connects to Cay's MCP server and calls a Cay tool: `list_windows` from OpenCode and Codex in
       Auto (no card, glow). Codex reports MCP calls as `{server, tool, arguments}` and its Auto review as a call with a
       `reviewId`: shown as `mcp__cay__<tool>` and "Review", neither counted by the watchdog
