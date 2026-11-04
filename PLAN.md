@@ -49,6 +49,8 @@ checks passed.** Next, per the roadmap: [Phase 3, memory-heavy apps](#phase-3-me
 (kick-off prompt: [prompts/phase-3-memory-heavy.md](prompts/phase-3-memory-heavy.md)), then 5, the spikes, and last
 4a-5 (release). Then 3, 5, the spikes, and
 last 4a-5 (release).
+**Phase 3: research done and a design drafted (2026-11-04, daily routine), DRAFT – needs Femi's OK** before any code;
+see [Phase 3 design](#phase-3-design-draft--needs-femis-ok-drafted-by-the-daily-routine-2026-11-04).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -1612,6 +1614,78 @@ wininit, winlogon, services, lsass, smss, svchost, dwm, explorer, System, Regist
 our own pid) is refused in Rust, not just hidden in the UI. Access-denied (elevated targets)
 gets a clear message explaining the app can't close elevated processes unless run as admin.
 Off by default.
+
+#### Phase 3 design: DRAFT – needs Femi's OK (drafted by the daily routine, 2026-11-04)
+Not to be executed until the author agrees. Research per [prompts/phase-3-memory-heavy.md](prompts/phase-3-memory-heavy.md);
+open choices are marked **(choose)** with a recommendation.
+
+**Findings**
+- **Measured on the dev PC (7.9 GB RAM, 339 processes):** one `NtQuerySystemInformation(SystemProcessInformation)`
+  call plus walking the buffer takes **3.5 ms** (best of 20). It needs no process handles, so it also reads elevated
+  and protected processes. `Get-Process` plus each exe path took ~3 s (opening every process), so exe paths must be
+  cached by `(pid, creation time)`, not re-read every refresh.
+- **Which number:** Task Manager's Processes tab "Memory" column is the *active private working set*. `sysinfo`
+  (not a dependency today) reports `WorkingSetSize` as `memory()` and `PagefileUsage` as `virtual_memory()`, neither of
+  which matches. `SYSTEM_PROCESS_INFORMATION` carries the private working set at offset 8 (in the windows crate's
+  `Reserved1[0..8]`; named `WorkingSetPrivateSize` in phnt), the creation time at offset 32 (`Reserved1[24..32]`) and
+  the parent pid (`Reserved2`). **Recommendation: no new dependency**; `windows` 0.62 already binds
+  `Wdk::System::SystemInformation::NtQuerySystemInformation` (add the `Wdk_System_SystemInformation` feature). The
+  layout is undocumented but stable since Vista. A unit test pins the offsets against the struct size.
+- **Grouping (choose):** (a) by exe name: simple, but merges every `msedgewebview2.exe` (Teams, WhatsApp, widgets) into
+  one row and splits nothing else usefully; (b) by exe *path*, then fold helper children (`msedgewebview2`,
+  `crashpad_handler`, `*-helper`) into their parent app: Chrome, Edge, VS Code and Teams come out as one row each,
+  close to Task Manager's "Apps" grouping (an app is a process with a window plus its process tree);
+  (c) the whole process tree: also folds a VS Code terminal's `node`/`powershell` into "VS Code", so End would kill
+  shells the user started. **Recommend (b)**, label and icon from `apps/` (window title owner / exe icon).
+  UWP apps (WhatsApp) group by their package's exe path like any other.
+- **Refresh:** only while the panel is open: the hover poller already knows the phase. A `processes` watcher thread
+  (through `activity::Watcher`) wakes on panel-open, refreshes every 2 s, and parks on close. Cost while closed: zero.
+- **Ending a group:** pids are revalidated by `(pid, creation time)` just before acting (as `sessions/process.rs`
+  does), so a reused pid is never ended. Order: `WM_CLOSE` to the group's top-level windows first (apps can prompt
+  to save), wait up to 5 s, then `TerminateProcess` per remaining pid, children before parents. `OpenProcess
+  (PROCESS_TERMINATE)` on an elevated target fails with `ERROR_ACCESS_DENIED`; the row then reads "Runs as
+  administrator; Cay can't end it" (no elevation prompt).
+- **Protected list, enforced in Rust:** PLAN's list (csrss, wininit, winlogon, services, lsass, smss, svchost, dwm,
+  explorer, System, Registry, Cay's own pid) plus `MsMpEng`, `NisSrv`, `SecurityHealthService`, `audiodg`,
+  `fontdrvhost`, `sihost`, `ctfmon`, `conhost`, `Memory Compression`, `Idle` (pid 0), and any process in session 0.
+  Protected rows can be shown (they're often big) but have no End button, and `end_process_group` refuses them anyway.
+- **Confirm (choose):** the island can't take focus (rule 2). (a) A native `MessageBoxW` like Connect's: "End
+  WhatsApp? 3 processes, 1.2 GB. Unsaved work may be lost." [End] [Cancel]; (b) the command window. **Recommend (a)**:
+  it's one question, needs no typing, and matches Connect.
+- **Agent tool (choose):** (a) nothing; (b) a read-only `list_heavy_processes` look tool (names and sizes only, asked
+  like the other looks), never an end-process tool. **Recommend (a) for Phase 3**, revisit later.
+
+**IPC (keeps the reserved names; payloads revised)**
+- `list_heavy_processes(limit) → ProcessGroup[]`: `{ key, name, pids: {pid, created}[], memoryBytes, icon, protected }`
+  (camelCase; `created` so the end call can revalidate).
+- `end_process_group(key, pids) → EndResult`: per pid `ok | closed | accessDenied | protected | notFound | changed`.
+- Event `processes:heavy` (the list, pushed by the watcher while the panel is open), so React runs no timer.
+- Switch: `processes.enabled` (default `false`) in `settings.json`, like `activities.*`, until Phase 4b.
+
+**Stages and tasks**
+- **3a: the list (read-only)**
+  - [ ] 3a.1 `processes/snapshot.rs`: the `NtQuerySystemInformation` read (private WS, creation time, parent pid,
+        name), with an offset test. Exit: unit test + a debug log line with count and timing.
+  - [ ] 3a.2 `processes/logic.rs` (pure): grouping per option (b), helper folding, sorting, protected flags. Exit:
+        unit tests with synthetic process tables (Chrome tree, WebView2 under two apps, svchost, pid reuse).
+  - [ ] 3a.3 Watcher thread: refresh every 2 s only while the panel is open, exe path cache by `(pid, created)`,
+        `processes:heavy` event, `processes.enabled` switch. Exit: log shows no refresh while closed.
+  - [ ] 3a.4 Panel section via `motion-designer` (after Agents/Calendar, inside D44's one scroller; icon, name,
+        memory figure in the panel's existing type scale; empty/off states; no new colours). Exit: `pnpm typecheck`,
+        headless render reviewed.
+  - [ ] 3a manual check (≈6 items: off by default, list matches Task Manager within ~10 %, refresh stops on close,
+        no focus stealing, click-through outside the panel, Text size 120 %).
+- **3b: End Task**
+  - [ ] 3b.1 `processes/end.rs`: revalidation, protected refusal, `WM_CLOSE` then `TerminateProcess`, per-pid
+        results, log of names and counts. Exit: tests on the pure parts; manual test only on a Notepad the test
+        started itself.
+  - [ ] 3b.2 Confirm box and row states (closing…, access denied, ended) via `motion-designer`.
+  - [ ] 3b manual check (≈6 items, throwaway processes only; never the author's apps without asking).
+
+**Sources:** Microsoft Learn: `NtQuerySystemInformation`, `SYSTEM_PROCESS_INFORMATION` (winternl.h), "Memory
+Performance Information" (working set vs private bytes); phnt `ntexapi.h` (field names behind the reserved bytes);
+`windows` 0.62.2 bindings (checked locally); `sysinfo` docs (`Process::memory` = working set on Windows);
+the 3.5 ms measurement above (PowerShell + C# P/Invoke, 2026-11-04).
 
 ### Phase 4b: settings
 A settings window (a normal, focusable window, separate from the island) for: activities on/off,
