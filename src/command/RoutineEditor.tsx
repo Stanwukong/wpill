@@ -1,8 +1,18 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MutableRefObject, type ReactNode } from "react";
 import { commands, errorMessage } from "../lib/ipc";
-import type { AgentMode, AgentOptions, IfMissed, RoutineDraft, RoutineView, Schedule, Weekday } from "../lib/types";
+import type { AgentBackendsPayload, AgentMode, AgentOptions, IfMissed, RoutineDraft, RoutineView, Schedule, Weekday } from "../lib/types";
 import { ALL_DAYS, lastLine, scheduleLine, sortDays, WEEKDAYS, WORKDAYS } from "./routineLabels";
-import { FolderField, LimitsField, ModeField, useFolders, type Limits } from "./TaskFields";
+import {
+  AgentField,
+  backendInfo,
+  defaultModel,
+  FolderField,
+  LimitsField,
+  ModeField,
+  useBackend,
+  useFolders,
+  type Limits,
+} from "./TaskFields";
 
 type Kind = Schedule["kind"];
 
@@ -52,7 +62,9 @@ function toSchedule(f: ScheduleFields): Schedule {
  */
 export function RoutineEditor({
   options,
+  backends,
   initial,
+  followDefault,
   view,
   paused,
   picking,
@@ -62,8 +74,12 @@ export function RoutineEditor({
   onShowRun,
 }: {
   options: AgentOptions;
+  /** The agents (2.9c); `null` until Rust lists them. */
+  backends: AgentBackendsPayload | null;
   /** What the form starts from (a saved routine, or a new one prefilled from a task). */
   initial: RoutineDraft;
+  /** A new routine nobody chose an agent for: it takes Rust's default agent once that arrives. */
+  followDefault: boolean;
   /** The saved routine as Rust reports it now (status, next run); missing while it's new. */
   view: RoutineView | undefined;
   paused: boolean;
@@ -90,6 +106,9 @@ export function RoutineEditor({
   const [desktopTools, setDesktopTools] = useState(initial.desktopTools);
   const [googleTools, setGoogleTools] = useState(initial.googleTools);
   const [mode, setMode] = useState<AgentMode>(initial.mode);
+  const [backend, setBackend] = useBackend(backends, followDefault ? null : initial.backend, (b) =>
+    setLimits((l) => ({ ...l, model: defaultModel(options, b) })),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -106,7 +125,7 @@ export function RoutineEditor({
     model: limits.model || null,
     maxTurns: Number.isFinite(turns) && turns > 0 ? turns : options.maxTurns,
     maxBudgetUsd: Number.parseFloat(limits.budget),
-    claudePath: limits.claudePath || null,
+    claudePath: backend === "claude" ? limits.claudePath || null : null,
     schedule: toSchedule(schedule),
     enabled,
     ifMissed,
@@ -114,6 +133,7 @@ export function RoutineEditor({
     desktopTools,
     googleTools,
     mode,
+    backend,
   });
 
   // The saved routine as this form normalizes it (first render only), so an untouched form counts as saved.
@@ -124,7 +144,7 @@ export function RoutineEditor({
   /** Saves if needed; the routine's id, or `null` if it couldn't be saved. */
   const save = async (): Promise<string | null> => {
     const d = draft();
-    if (!(d.maxBudgetUsd > 0)) {
+    if (backend === "claude" && !(d.maxBudgetUsd > 0)) {
       setError("Set a budget under Options ($0.05 to $20).");
       return null;
     }
@@ -376,9 +396,18 @@ export function RoutineEditor({
         </div>
       </div>
 
-      <ModeField mode={mode} onChange={setMode} />
+      <AgentField backend={backend} backends={backends} onChange={setBackend} />
 
-      <LimitsField options={options} limits={limits} onChange={setLimits} budgetRequired />
+      <ModeField mode={mode} backend={backend} onChange={setMode} />
+
+      <LimitsField
+        options={options}
+        backend={backend}
+        info={backendInfo(backends, backend)}
+        limits={limits}
+        onChange={setLimits}
+        budgetRequired
+      />
 
       <div className="task__section routine__switches">
         {/* Only scheduled runs wait; with no schedule it would say nothing. */}

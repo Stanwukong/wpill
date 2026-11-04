@@ -152,7 +152,8 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
   `COLOR` in `window/glow.rs`; never reintroduce Claude Code's spinner, `✻` or orange (D30); Claude content uses
   `--font-agent`, Cascadia Mono). The equaliser uses `--media-accent`: the art's accent, or soft white with no art, `features/agent/` (`useAgentRuns` lives in `Island`, panel rows `AgentRunItems` in AgentsSection's
   `agent` slot; the `agentApproval` view is `features/activities/AgentApproval.tsx`), `command/` (the command window's
-  own page: new task form, run list, transcript, follow-ups; `SessionAskView` + `useSessionAsks` for terminal sessions'
+  own page: new task form (agent picker and per-agent model field in `TaskFields`, 2.9c), run list, transcript,
+  follow-ups; `SessionAskView` + `useSessionAsks` for terminal sessions'
   held requests (2.8b); routines: `RoutineList`, `RoutineEditor`, `TaskFields`
   shared with `NewTask`, `useRoutines`, `routineLabels`).
   The island has three shapes (`data-mode`: `pill` | `activity` | `panel`), all driven by Rust events.

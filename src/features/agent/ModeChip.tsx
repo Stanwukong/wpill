@@ -16,9 +16,11 @@ export function ModeChip({ run }: { run: AgentRun }) {
   const next = run.nextMode !== null && run.nextMode !== run.mode;
   const shown = next && run.nextMode ? run.nextMode : run.mode;
   const label = MODE_LABEL[shown];
+  // Other agents (2.9c) take a new mode with the next message, even mid-turn.
+  const later = run.backend !== "claude" ? "\nMode changes take effect from your next message." : "";
   const title = next
     ? `${label} from your next message (now ${MODE_LABEL[run.mode]})\nClick for the next mode`
-    : `Permission mode: ${label}\nClick for the next mode`;
+    : `Permission mode: ${label}${later}\nClick for the next mode`;
 
   return (
     <button

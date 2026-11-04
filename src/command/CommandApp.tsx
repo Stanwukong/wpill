@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { commands, on, unlistenAll } from "../lib/ipc";
-import type { AgentOptions, AgentRun, SessionApprovalActivity, RoutineDraft, RoutineView } from "../lib/types";
+import type { AgentBackendsPayload, AgentOptions, AgentRun, SessionApprovalActivity, RoutineDraft, RoutineView } from "../lib/types";
 import { ClockGlyph, RunDot } from "../features/agent/AgentGlyphs";
 import { ago, endLabel } from "../features/agent/labels";
 import { isLive, useAgentRuns } from "../features/agent/useAgentRuns";
-import { mixedAgents } from "../features/sessions/AgentTag";
+import { AgentTag, mixedAgents } from "../features/sessions/AgentTag";
 import { AgentMark, WorkingIndicator } from "../features/sessions/WorkingGlyphs";
 import { NewTask } from "./NewTask";
 import { RoutineEditor } from "./RoutineEditor";
@@ -24,6 +24,8 @@ interface Editing {
   key: number;
   id: string | null;
   initial: RoutineDraft;
+  /** New, with no agent chosen: it follows Rust's default agent. */
+  followDefault: boolean;
 }
 
 function routineDraft(r: RoutineView): RoutineDraft {
@@ -43,11 +45,12 @@ function routineDraft(r: RoutineView): RoutineDraft {
     desktopTools: r.desktopTools,
     googleTools: r.googleTools,
     mode: r.mode,
+    backend: r.backend,
   };
 }
 
 /** A new routine: what the task knew, then the defaults (weekdays at 09:00, a budget, desktop tools off, the default mode). */
-function newDraft(seed: RoutineSeed, options: AgentOptions): RoutineDraft {
+function newDraft(seed: RoutineSeed, options: AgentOptions, backends: AgentBackendsPayload | null): RoutineDraft {
   const prompt = seed.prompt ?? "";
   return {
     id: null,
@@ -65,6 +68,7 @@ function newDraft(seed: RoutineSeed, options: AgentOptions): RoutineDraft {
     desktopTools: seed.desktopTools ?? false,
     googleTools: seed.googleTools ?? false,
     mode: seed.mode ?? options.mode,
+    backend: seed.backend ?? backends?.defaultBackend ?? "claude",
   };
 }
 
@@ -80,6 +84,8 @@ export function CommandApp() {
   /** Set while the routine editor shows (it takes the main area over a run, an ask or the new-task form). */
   const [editing, setEditing] = useState<Editing | null>(null);
   const [options, setOptions] = useState<AgentOptions | null>(null);
+  /** The agents the forms offer (2.9c); the first answer can take a few seconds, so nothing waits for it. */
+  const [backends, setBackends] = useState<AgentBackendsPayload | null>(null);
   /** `null`: the new-task form. */
   const [selected, setSelected] = useState<Selection | null>(null);
   /** Bumped when the window gains focus, so the visible view focuses its input. */
@@ -92,6 +98,10 @@ export function CommandApp() {
       .agentOptions()
       .then(setOptions)
       .catch((err: unknown) => console.debug("agent options", err));
+    commands
+      .agentBackends()
+      .then(setBackends)
+      .catch((err: unknown) => console.debug("agent backends", err));
   }, []);
 
   useEffect(() => {
@@ -151,8 +161,12 @@ export function CommandApp() {
     if (id === runId) setSelected(null);
     commands.agentRemove(id).catch((err: unknown) => console.debug("agent remove", err));
   };
-  const editRoutine = (initial: RoutineDraft) => setEditing((e) => ({ key: (e?.key ?? 0) + 1, id: initial.id, initial }));
-  const newRoutine = (seed: RoutineSeed = {}) => options && editRoutine(newDraft(seed, options));
+  const editRoutine = (initial: RoutineDraft, followDefault = false) =>
+    setEditing((e) => ({ key: (e?.key ?? 0) + 1, id: initial.id, initial, followDefault }));
+  const newRoutine = (seed: RoutineSeed = {}) =>
+    options && editRoutine(newDraft(seed, options, backends), seed.backend == null);
+  /** Any run on another agent: then every row names its agent (2.9c, as sessions do). */
+  const runsMixed = runs.some((r) => r.backend !== "claude");
 
   return (
     <div className="cmd">
@@ -244,6 +258,7 @@ export function CommandApp() {
                   <li key={r.runId}>
                     <RunItem
                       run={r}
+                      mixed={runsMixed}
                       selected={editing === null && r.runId === runId}
                       onSelect={() => showRun(r.runId)}
                       onRemove={() => remove(r.runId)}
@@ -260,6 +275,7 @@ export function CommandApp() {
             {options && (
               <NewTask
                 options={options}
+                backends={backends}
                 focusTick={selected === null ? focusTick : -1}
                 picking={picking}
                 onStarted={(runId) => {
@@ -297,7 +313,9 @@ export function CommandApp() {
               <RoutineEditor
                 key={editing.key}
                 options={options}
+                backends={backends}
                 initial={editing.initial}
+                followDefault={editing.followDefault}
                 view={routines.routines.find((r) => r.id === editing.id)}
                 paused={routines.paused}
                 picking={picking}
@@ -332,11 +350,13 @@ function AskItem({ ask, selected, onSelect }: { ask: SessionApprovalActivity; se
 /** A run's row: the row selects it; an ended run also gets a remove button (a sibling, shown on hover or focus). */
 function RunItem({
   run,
+  mixed,
   selected,
   onSelect,
   onRemove,
 }: {
   run: AgentRun;
+  mixed: boolean;
   selected: boolean;
   onSelect: () => void;
   onRemove: () => void;
@@ -355,6 +375,7 @@ function RunItem({
             {run.routine?.trigger === "schedule" && <ClockGlyph />}
             {name}
           </span>
+          <AgentTag agent={run.backend} mixed={mixed} />
           <span className="cmd-run__time">{ago(run.updatedAtMs)}</span>
         </span>
         <span className="cmd-run__detail">

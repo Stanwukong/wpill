@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { commands, errorMessage } from "../lib/ipc";
 import type { Routines, RoutineView } from "../lib/types";
 import { ClockGlyph } from "../features/agent/AgentGlyphs";
+import { AgentTag } from "../features/sessions/AgentTag";
 import { WorkingIndicator } from "../features/sessions/WorkingGlyphs";
 import { lastLine, scheduleLine } from "./routineLabels";
 import { folderName } from "./TaskFields";
@@ -26,6 +27,8 @@ export function RoutineList({
   // A failed Run click, shown on its row until the next change from Rust.
   const [runError, setRunError] = useState<{ id: string; message: string } | null>(null);
   useEffect(() => setRunError(null), [routines]);
+  /** Any routine on another agent: then every row names its agent (2.9c, as sessions do). */
+  const mixed = routines.some((r) => r.backend !== "claude");
 
   const run = (id: string) => {
     setRunError(null);
@@ -68,6 +71,7 @@ export function RoutineList({
               <RoutineItem
                 routine={r}
                 paused={paused}
+                mixed={mixed}
                 selected={r.id === selectedId}
                 error={runError?.id === r.id ? runError.message : null}
                 onSelect={() => onSelect(r)}
@@ -84,6 +88,7 @@ export function RoutineList({
 function RoutineItem({
   routine,
   paused,
+  mixed,
   selected,
   error,
   onSelect,
@@ -91,6 +96,7 @@ function RoutineItem({
 }: {
   routine: RoutineView;
   paused: boolean;
+  mixed: boolean;
   selected: boolean;
   error: string | null;
   onSelect: () => void;
@@ -105,6 +111,7 @@ function RoutineItem({
         <span className="cmd-run__line">
           <span className="cmd-run__mark cmd-routine__mark">{running ? <WorkingIndicator small /> : <ClockGlyph />}</span>
           <span className="cmd-run__project">{routine.name}</span>
+          <AgentTag agent={routine.backend} mixed={mixed} />
         </span>
         <span className="cmd-run__detail" title={schedule}>
           <span className="cmd-routine__when">{schedule}</span>

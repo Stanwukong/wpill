@@ -63,13 +63,13 @@ use windows::Win32::System::Threading::{
 use crate::activity::{approval_key, Activities, Signal, Watcher, ACTING_KEY};
 use crate::desktop::{self, refs::Refs};
 use crate::error::{AppError, AppResult};
-use crate::ipc::AgentBackend;
 use crate::ipc::{
     events, Activity, AgentActingActivity, AgentActingPhase, AgentEntry, AgentEvent,
     AgentFinishedActivity, AgentMode, AgentOptions, AgentOutputPayload, AgentRisk, AgentRunRoutine,
     AgentRunsPayload, AgentStarted, AgentStatus, ClaudeInstall, Routine, RoutineLastRun,
     RoutineSkip, RoutineTrigger, RoutineView, RoutinesPayload, SkipReason,
 };
+use crate::ipc::{AgentBackend, AgentBackendInfo, AgentBackendsPayload};
 use crate::win32::Handle;
 use crate::window::{self, glow};
 use approvals::{Approvals, Asked, Pending, Purpose, ReplyTo, Request};
@@ -181,6 +181,8 @@ struct Inner {
     routines: routines::Store,
     /// Wakes the `agent-routines` thread after a change.
     routines_wake: Option<Arc<Handle>>,
+    /// Each agent's model list, once fetched (2.9c): `opencode models` takes a few seconds.
+    models: HashMap<AgentBackend, Vec<String>>,
     /// Runs that have read mail (Cay's Gmail tools or a claude.ai Gmail connector): their desktop actions ask in
     /// Cay even in Auto, since the mail could carry someone else's instructions (D46).
     read_mail: HashSet<String>,
@@ -1582,8 +1584,7 @@ fn run_routine(app: &AppHandle, id: &str, trigger: RoutineTrigger) -> AppResult<
         max_budget_usd: Some(r.max_budget_usd),
         claude_path: r.claude_path,
         mode: Some(r.mode),
-        // A routine's agent comes with the picker (2.9c); until then routines run on Claude Code.
-        backend: None,
+        backend: Some(r.backend),
     };
     let routine = RoutineStart {
         tag: AgentRunRoutine {
@@ -1990,6 +1991,87 @@ pub async fn agent_start(app: AppHandle, request: AgentStartRequest) -> AppResul
 }
 
 #[tauri::command]
+/// The agents the command window can pick (2.9c): which are installed, their default model and the models they list.
+/// OpenCode's list comes from `opencode models` the first time (a few seconds), then from memory.
+pub async fn agent_backends(app: AppHandle) -> AppResult<AgentBackendsPayload> {
+    tauri::async_runtime::spawn_blocking(move || backends_payload(&app))
+        .await
+        .map_err(|e| AppError::AgentStart(e.to_string()))
+}
+
+fn backends_payload(app: &AppHandle) -> AgentBackendsPayload {
+    let agents = app.state::<Agents>();
+    let (settings, cached) = {
+        let inner = agents.lock();
+        (inner.settings.clone(), inner.models.clone())
+    };
+    let path_of = |b: AgentBackend| {
+        settings
+            .backends
+            .of(b)
+            .and_then(|s| s.path.clone())
+            .filter(|p| !p.trim().is_empty())
+    };
+    let model_of = |b: AgentBackend| settings.backends.of(b).and_then(|s| s.model.clone());
+
+    let claude = AgentBackendInfo {
+        backend: AgentBackend::Claude,
+        available: !installs(&agents).is_empty(),
+        install: Some("claude.ai/code".into()),
+        default_model: settings.model.clone(),
+        models: Vec::new(),
+    };
+    let opencode_exe = backend::opencode_exe(path_of(AgentBackend::Opencode).as_deref());
+    let opencode_models = match (cached.get(&AgentBackend::Opencode), &opencode_exe) {
+        (Some(models), _) => models.clone(),
+        (None, Some(exe)) => {
+            let models = backend::output(exe, &["models"], Duration::from_secs(20))
+                .map(|out| backend::opencode_models(&out))
+                .unwrap_or_default();
+            if !models.is_empty() {
+                agents
+                    .lock()
+                    .models
+                    .insert(AgentBackend::Opencode, models.clone());
+            }
+            models
+        }
+        (None, None) => Vec::new(),
+    };
+    let opencode = AgentBackendInfo {
+        backend: AgentBackend::Opencode,
+        available: opencode_exe.is_some(),
+        install: Some("npm install -g opencode-ai".into()),
+        default_model: model_of(AgentBackend::Opencode),
+        models: opencode_models,
+    };
+    let codex = AgentBackendInfo {
+        backend: AgentBackend::Codex,
+        available: backend::codex_adapter(path_of(AgentBackend::Codex).as_deref()).is_some(),
+        install: Some("npm install -g @agentclientprotocol/codex-acp".into()),
+        default_model: model_of(AgentBackend::Codex),
+        // Codex keeps its own list; read fresh each time (it refreshes it as you use Codex).
+        models: backend::codex_models_cache()
+            .and_then(|p| std::fs::read_to_string(p).ok())
+            .map(|text| backend::codex_models(&text))
+            .unwrap_or_default(),
+    };
+    let backends = [claude, opencode, codex]
+        .into_iter()
+        .map(|mut b| {
+            if b.available {
+                b.install = None;
+            }
+            b
+        })
+        .collect();
+    AgentBackendsPayload {
+        default_backend: settings.default_backend,
+        backends,
+    }
+}
+
+#[tauri::command]
 pub fn routines_list(agents: State<'_, Agents>) -> RoutinesPayload {
     agents.routines_payload()
 }
@@ -2126,7 +2208,12 @@ fn start_run(
         ..request
     };
     let settings = agents.lock().settings.clone();
-    let kind = request.backend.unwrap_or_default();
+    let kind = request.backend.unwrap_or(settings.default_backend);
+    let configured_path = settings
+        .backends
+        .of(kind)
+        .and_then(|b| b.path.clone())
+        .filter(|p| !p.trim().is_empty());
     let exe = match kind {
         AgentBackend::Claude => {
             let found = installs(&agents);
@@ -2134,7 +2221,7 @@ fn start_run(
             installs::pick(&found, configured.as_deref()).ok_or(AppError::AgentNoClaude)?
         }
         // Node and the adapter's script, kept together in `exe` for `start_acp`.
-        AgentBackend::Codex => backend::codex_adapter()
+        AgentBackend::Codex => backend::codex_adapter(configured_path.as_deref())
             .map(|(node, script)| format!("{}\n{}", node.display(), script.display()))
             .ok_or_else(|| {
                 AppError::AgentInvalid(
@@ -2143,7 +2230,7 @@ fn start_run(
                         .into(),
                 )
             })?,
-        AgentBackend::Opencode => backend::opencode_exe()
+        AgentBackend::Opencode => backend::opencode_exe(configured_path.as_deref())
             .map(|p| p.to_string_lossy().into_owned())
             .ok_or_else(|| {
                 AppError::AgentInvalid(
@@ -2154,10 +2241,14 @@ fn start_run(
     };
     let at = now_ms();
     let run_id = audit::run_id(at);
-    // `agent.model` is Claude Code's; other agents use their own default unless the task names one.
+    // `agent.model` is Claude Code's; another agent uses `agent.backends.<agent>.model`, else its own default.
     let model = match kind {
         AgentBackend::Claude => request.model.clone().or(settings.model.clone()),
-        _ => request.model.clone(),
+        other => request
+            .model
+            .clone()
+            .filter(|m| !m.trim().is_empty())
+            .or_else(|| settings.backends.of(other).and_then(|b| b.model.clone())),
     }
     .filter(|m| !m.is_empty());
     let launch = run::Launch {

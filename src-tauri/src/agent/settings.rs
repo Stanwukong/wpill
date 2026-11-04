@@ -31,6 +31,37 @@ pub struct AgentSettings {
     pub approval_timeout_secs: u64,
     /// The mode a new task starts in (2.8e): `auto` unless changed here.
     pub default_mode: crate::ipc::AgentMode,
+    /// The agent a new task starts on (2.9c): Claude Code unless changed here or in the command window.
+    pub default_backend: crate::ipc::AgentBackend,
+    /// Each other agent's exe and default model (2.9c); `null` finds it on PATH and leaves the model to the agent.
+    pub backends: Backends,
+}
+
+/// `agent.backends` (2.9c).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Backends {
+    pub opencode: BackendSettings,
+    pub codex: BackendSettings,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct BackendSettings {
+    /// OpenCode: `opencode.exe`. Codex: `codex-acp`'s `dist\index.js` (run with the `node.exe` on PATH).
+    pub path: Option<String>,
+    /// The model a task uses when it doesn't name one (`opencode/big-pickle`, `gpt-6-luna`).
+    pub model: Option<String>,
+}
+
+impl Backends {
+    pub fn of(&self, backend: crate::ipc::AgentBackend) -> Option<&BackendSettings> {
+        match backend {
+            crate::ipc::AgentBackend::Claude => None,
+            crate::ipc::AgentBackend::Opencode => Some(&self.opencode),
+            crate::ipc::AgentBackend::Codex => Some(&self.codex),
+        }
+    }
 }
 
 impl Default for AgentSettings {
@@ -46,6 +77,8 @@ impl Default for AgentSettings {
             user_settings: true,
             approval_timeout_secs: 600,
             default_mode: crate::ipc::AgentMode::Auto,
+            default_backend: crate::ipc::AgentBackend::Claude,
+            backends: Backends::default(),
         }
     }
 }
@@ -177,5 +210,27 @@ mod tests {
         let out = serde_json::to_value(&file).unwrap();
         assert_eq!(out["activities"]["volume"], false);
         assert_eq!(out["agent"]["hotkey"], "Win+Alt+A");
+        // 2.9c: Claude Code stays the default agent, and the other agents' entries are written out to edit.
+        assert_eq!(out["agent"]["defaultBackend"], "claude");
+        assert_eq!(
+            out["agent"]["backends"]["codex"]["model"],
+            serde_json::Value::Null
+        );
+        let picked: File = serde_json::from_str(
+            r#"{ "agent": { "defaultBackend": "opencode", "backends": { "opencode": { "model": "opencode/big-pickle" } } } }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            picked.agent.default_backend,
+            crate::ipc::AgentBackend::Opencode
+        );
+        assert_eq!(
+            picked
+                .agent
+                .backends
+                .of(crate::ipc::AgentBackend::Opencode)
+                .and_then(|b| b.model.as_deref()),
+            Some("opencode/big-pickle")
+        );
     }
 }

@@ -1,9 +1,9 @@
-import { useEffect, useState, type MutableRefObject } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { commands, errorMessage } from "../lib/ipc";
-import type { AgentMode, AgentOptions } from "../lib/types";
-import { MODE_HINT, MODE_LABEL, MODES } from "../features/agent/labels";
+import type { AgentBackend, AgentBackendInfo, AgentBackendsPayload, AgentMode, AgentOptions } from "../lib/types";
+import { BACKEND_LABEL, BACKENDS, MODE_LABEL, MODES, modeHint } from "../features/agent/labels";
 
-// Form pieces shared by the new-task form and the routine editor: the folder list and the run's limits.
+// Form pieces shared by the new-task form and the routine editor: the agent, the folder list and the run's limits.
 
 export const MODELS = [
   { value: "", label: "Default" },
@@ -11,6 +11,87 @@ export const MODELS = [
   { value: "sonnet", label: "Sonnet" },
   { value: "opus", label: "Opus" },
 ];
+
+export function backendInfo(
+  backends: AgentBackendsPayload | null,
+  backend: AgentBackend,
+): AgentBackendInfo | undefined {
+  return backends?.backends.find((b) => b.backend === backend);
+}
+
+/**
+ * The chosen agent (2.9c). `initial` is a saved choice; `null` follows Rust's default once it arrives (if installed),
+ * until the user picks one. `onSwitch` runs whenever the agent changes after the first render (the model resets).
+ */
+export function useBackend(
+  backends: AgentBackendsPayload | null,
+  initial: AgentBackend | null,
+  onSwitch: (backend: AgentBackend) => void,
+) {
+  const [picked, setPicked] = useState<AgentBackend | null>(initial);
+  const fallback = backends && backendInfo(backends, backends.defaultBackend)?.available ? backends.defaultBackend : "claude";
+  const backend = picked ?? fallback;
+  const shown = useRef(backend);
+  useEffect(() => {
+    if (shown.current === backend) return;
+    shown.current = backend;
+    onSwitch(backend);
+  }, [backend]);
+  return [backend, setPicked] as const;
+}
+
+/**
+ * Agent: Claude Code, OpenCode or Codex as a segmented choice, like Mode. An agent that isn't installed is disabled,
+ * and how to install it sits on the label's line (quiet, cut to one line), so nothing moves when the list arrives.
+ */
+export function AgentField({
+  backend,
+  backends,
+  onChange,
+}: {
+  backend: AgentBackend;
+  /** `null` until Rust lists the agents: every choice is offered meanwhile. */
+  backends: AgentBackendsPayload | null;
+  onChange: (backend: AgentBackend) => void;
+}) {
+  const missing = backends?.backends.filter((b) => !b.available && b.install) ?? [];
+  const hint = missing.map((b) => `${BACKEND_LABEL[b.backend]}: ${b.install}`).join(" · ");
+  return (
+    <div className="task__section">
+      <div className="task__label-row">
+        <span className="task__label" id="task-agent">
+          Agent
+        </span>
+        {hint && (
+          <span className="task__install" title={hint}>
+            {hint}
+          </span>
+        )}
+      </div>
+      <div className="seg seg--fit" role="radiogroup" aria-labelledby="task-agent">
+        {BACKENDS.map((b) => {
+          const info = backendInfo(backends, b);
+          const off = info !== undefined && !info.available;
+          return (
+            <button
+              key={b}
+              type="button"
+              role="radio"
+              aria-checked={backend === b}
+              className="seg__item"
+              disabled={off && backend !== b}
+              data-missing={off || undefined}
+              title={off ? `Not installed${info?.install ? `: ${info.install}` : ""}` : undefined}
+              onClick={() => onChange(b)}
+            >
+              {BACKEND_LABEL[b]}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 /** Last path segment ("C:\\code\\wpill" → "wpill"). */
 export function folderName(path: string): string {
@@ -105,7 +186,15 @@ export function FolderField({
  * Mode (2.8e): Claude Code's permission modes as a segmented choice, with what the chosen one means under it. The
  * hint keeps two lines' room so switching doesn't move the form. Never Bypass.
  */
-export function ModeField({ mode, onChange }: { mode: AgentMode; onChange: (mode: AgentMode) => void }) {
+export function ModeField({
+  mode,
+  backend,
+  onChange,
+}: {
+  mode: AgentMode;
+  backend: AgentBackend;
+  onChange: (mode: AgentMode) => void;
+}) {
   return (
     <div className="task__section">
       <span className="task__label" id="task-mode">
@@ -125,7 +214,7 @@ export function ModeField({ mode, onChange }: { mode: AgentMode; onChange: (mode
           </button>
         ))}
       </div>
-      <p className="task__mode-hint">{MODE_HINT[mode]}</p>
+      <p className="task__mode-hint">{modeHint(mode, backend)}</p>
     </div>
   );
 }
@@ -147,14 +236,40 @@ export function defaultLimits(options: AgentOptions): Limits {
   };
 }
 
-/** Options: model, turns, budget and install behind a disclosure that shows a one-line summary while closed. */
+/** The model a Claude Code task starts with when switching back to it (other agents start at their default). */
+export function defaultModel(options: AgentOptions, backend: AgentBackend): string {
+  return backend === "claude" ? (options.model ?? "") : "";
+}
+
+/** The model choices for an agent: Claude Code's aliases, or the agent's own list after "Default (its model)". */
+function modelChoices(backend: AgentBackend, info: AgentBackendInfo | undefined, model: string) {
+  const list =
+    backend === "claude"
+      ? MODELS
+      : [
+          { value: "", label: info?.defaultModel ? `Default (${info.defaultModel})` : "Default" },
+          ...(info?.models ?? []).map((m) => ({ value: m, label: m })),
+        ];
+  return list.some((m) => m.value === model) ? list : [...list, { value: model, label: model }];
+}
+
+/**
+ * Options: model, turns, budget and install behind a disclosure that shows a one-line summary while closed. The model
+ * follows the agent; turns, budget and the install only apply to Claude Code, so only it shows them (what was typed is
+ * kept for switching back).
+ */
 export function LimitsField({
   options,
+  backend,
+  info,
   limits,
   onChange,
   budgetRequired = false,
 }: {
   options: AgentOptions;
+  backend: AgentBackend;
+  /** The agent as Rust lists it (its models); missing until the list arrives. */
+  info: AgentBackendInfo | undefined;
   limits: Limits;
   onChange: (limits: Limits) => void;
   /** Routines always have a budget ($0.05–$20). */
@@ -163,14 +278,17 @@ export function LimitsField({
   const [open, setOpen] = useState(false);
   const { model, maxTurns, budget, claudePath } = limits;
   const set = (patch: Partial<Limits>) => onChange({ ...limits, ...patch });
-  const models = MODELS.some((m) => m.value === model) ? MODELS : [...MODELS, { value: model, label: model }];
-  const missingBudget = budgetRequired && !(Number.parseFloat(budget) > 0);
+  const models = modelChoices(backend, info, model);
+  const claude = backend === "claude";
+  const missingBudget = claude && budgetRequired && !(Number.parseFloat(budget) > 0);
 
-  const summary = [
-    MODELS.find((m) => m.value === model)?.label.toLowerCase() ?? model,
-    maxTurns ? `${maxTurns} turns` : "no turn limit",
-    budget ? `$${budget}` : budgetRequired ? "budget needed" : "no budget",
-  ].join(" · ");
+  const summary = claude
+    ? [
+        MODELS.find((m) => m.value === model)?.label.toLowerCase() ?? model,
+        maxTurns ? `${maxTurns} turns` : "no turn limit",
+        budget ? `$${budget}` : budgetRequired ? "budget needed" : "no budget",
+      ].join(" · ")
+    : model || "default";
 
   return (
     <div className="task__section">
@@ -187,7 +305,7 @@ export function LimitsField({
       </button>
       {open && (
         <div className="task__options">
-          <label className="task-field">
+          <label className={claude ? "task-field" : "task-field task-field--model"}>
             <span>Model</span>
             <select value={model} onChange={(e) => set({ model: e.target.value })}>
               {models.map((m) => (
@@ -197,45 +315,49 @@ export function LimitsField({
               ))}
             </select>
           </label>
-          <label className="task-field">
-            <span>Max turns</span>
-            <input
-              type="number"
-              min={1}
-              value={maxTurns}
-              placeholder={budgetRequired ? "Default" : "None"}
-              onChange={(e) => set({ maxTurns: e.target.value })}
-            />
-          </label>
-          <label className="task-field">
-            <span>Budget (USD)</span>
-            <input
-              type="number"
-              min={budgetRequired ? 0.05 : 0}
-              max={budgetRequired ? 20 : undefined}
-              step={budgetRequired ? 0.05 : 0.5}
-              value={budget}
-              required={budgetRequired}
-              aria-invalid={missingBudget || undefined}
-              placeholder={budgetRequired ? "Required" : "None"}
-              onChange={(e) => set({ budget: e.target.value })}
-            />
-          </label>
-          <label className="task-field task-field--wide">
-            <span>Claude Code</span>
-            <select
-              value={claudePath}
-              disabled={options.installs.length === 0}
-              onChange={(e) => set({ claudePath: e.target.value })}
-            >
-              {options.installs.length === 0 && <option value="">Not found</option>}
-              {options.installs.map((i) => (
-                <option key={i.path} value={i.path} title={i.path}>
-                  {`${i.version ?? "unknown version"} · ${i.source}`}
-                </option>
-              ))}
-            </select>
-          </label>
+          {claude && (
+            <>
+              <label className="task-field">
+                <span>Max turns</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={maxTurns}
+                  placeholder={budgetRequired ? "Default" : "None"}
+                  onChange={(e) => set({ maxTurns: e.target.value })}
+                />
+              </label>
+              <label className="task-field">
+                <span>Budget (USD)</span>
+                <input
+                  type="number"
+                  min={budgetRequired ? 0.05 : 0}
+                  max={budgetRequired ? 20 : undefined}
+                  step={budgetRequired ? 0.05 : 0.5}
+                  value={budget}
+                  required={budgetRequired}
+                  aria-invalid={missingBudget || undefined}
+                  placeholder={budgetRequired ? "Required" : "None"}
+                  onChange={(e) => set({ budget: e.target.value })}
+                />
+              </label>
+              <label className="task-field task-field--wide">
+                <span>Claude Code</span>
+                <select
+                  value={claudePath}
+                  disabled={options.installs.length === 0}
+                  onChange={(e) => set({ claudePath: e.target.value })}
+                >
+                  {options.installs.length === 0 && <option value="">Not found</option>}
+                  {options.installs.map((i) => (
+                    <option key={i.path} value={i.path} title={i.path}>
+                      {`${i.version ?? "unknown version"} · ${i.source}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
         </div>
       )}
     </div>

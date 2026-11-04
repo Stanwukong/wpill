@@ -1,21 +1,35 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MutableRefObject } from "react";
 import { commands, errorMessage } from "../lib/ipc";
-import type { AgentMode, AgentOptions } from "../lib/types";
+import type { AgentBackendsPayload, AgentMode, AgentOptions } from "../lib/types";
 import type { RoutineSeed } from "./routineLabels";
-import { defaultLimits, FolderField, LimitsField, ModeField, useFolders, type Limits } from "./TaskFields";
+import {
+  AgentField,
+  backendInfo,
+  defaultLimits,
+  defaultModel,
+  FolderField,
+  LimitsField,
+  ModeField,
+  useBackend,
+  useFolders,
+  type Limits,
+} from "./TaskFields";
 
 /**
- * The new-task form: the prompt, the folder it runs in (recent folders, or Browse…), its permission mode, and the run's limits behind
+ * The new-task form: the prompt, the folder it runs in (recent folders, or Browse…), the agent, its permission mode, and the run's limits behind
  * an Options disclosure. Ctrl+Enter or Run starts it; "Save as routine" opens the routine editor with it.
  */
 export function NewTask({
   options,
+  backends,
   focusTick,
   picking,
   onStarted,
   onSaveAsRoutine,
 }: {
   options: AgentOptions;
+  /** The agents (2.9c); `null` until Rust lists them. */
+  backends: AgentBackendsPayload | null;
   /** Changes when the window gains focus while this view shows; -1 while hidden. */
   focusTick: number;
   picking: MutableRefObject<boolean>;
@@ -26,6 +40,9 @@ export function NewTask({
   const { folders, cwd, setCwd, add } = useFolders(options);
   const [limits, setLimits] = useState<Limits>(() => defaultLimits(options));
   const [mode, setMode] = useState<AgentMode>(options.mode);
+  const [backend, setBackend] = useBackend(backends, null, (b) =>
+    setLimits((l) => ({ ...l, model: defaultModel(options, b) })),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
@@ -50,8 +67,9 @@ export function NewTask({
         model: limits.model || null,
         maxTurns: Number.isFinite(turns) && turns > 0 ? turns : null,
         maxBudgetUsd: Number.isFinite(usd) && usd > 0 ? usd : null,
-        claudePath: limits.claudePath || null,
+        claudePath: backend === "claude" ? limits.claudePath || null : null,
         mode,
+        backend,
       });
       setPrompt("");
       onStarted(runId);
@@ -69,8 +87,9 @@ export function NewTask({
       model: limits.model || null,
       maxTurns: Number.isFinite(turns) && turns > 0 ? turns : null,
       maxBudgetUsd: Number.isFinite(usd) && usd > 0 ? usd : null,
-      claudePath: limits.claudePath || null,
+      claudePath: backend === "claude" ? limits.claudePath || null : null,
       mode,
+      backend,
     });
 
   const onPromptKey = (e: KeyboardEvent) => {
@@ -105,9 +124,17 @@ export function NewTask({
         onError={setError}
       />
 
-      <ModeField mode={mode} onChange={setMode} />
+      <AgentField backend={backend} backends={backends} onChange={setBackend} />
 
-      <LimitsField options={options} limits={limits} onChange={setLimits} />
+      <ModeField mode={mode} backend={backend} onChange={setMode} />
+
+      <LimitsField
+        options={options}
+        backend={backend}
+        info={backendInfo(backends, backend)}
+        limits={limits}
+        onChange={setLimits}
+      />
 
       <footer className="task__footer">
         {error && (

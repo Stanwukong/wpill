@@ -295,7 +295,7 @@ pub struct AgentSession {
 /// An agent run's permission mode (2.8e, D40): Claude Code's own names. Auto by default; `bypassPermissions` and
 /// The agent a run uses (2.9b, D47/D48). Claude Code is native (stream-json); the others speak the Agent Client
 /// Protocol. Missing in requests and routines means Claude Code.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum AgentBackend {
     #[default]
@@ -312,6 +312,30 @@ impl AgentBackend {
             AgentBackend::Codex => "Codex",
         }
     }
+}
+
+/// One agent in the command window's picker (2.9c).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentBackendInfo {
+    pub backend: AgentBackend,
+    /// Installed where Cay can start it.
+    pub available: bool,
+    /// How to install it, when it isn't.
+    pub install: Option<String>,
+    /// The model a task uses when it doesn't name one (`agent.model` / `agent.backends.<agent>.model`).
+    pub default_model: Option<String>,
+    /// The models the agent lists; empty means free text (Claude Code) or not known yet.
+    pub models: Vec<String>,
+}
+
+/// `agent_backends`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentBackendsPayload {
+    /// `agent.defaultBackend`.
+    pub default_backend: AgentBackend,
+    pub backends: Vec<AgentBackendInfo>,
 }
 
 /// `dontAsk` are never offered (they don't deserialize).
@@ -700,6 +724,9 @@ pub struct Routine {
     /// The mode its runs start in (2.8e). Routines saved before 2.8e read as Ask.
     #[serde(default = "ask_mode")]
     pub mode: AgentMode,
+    /// The agent its runs use (2.9c). Routines saved before 2.9c read as Claude Code.
+    #[serde(default)]
+    pub backend: AgentBackend,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
     /// When the schedule was last set or turned on: due times before it don't count; anchors `every`.

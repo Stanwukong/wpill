@@ -30,6 +30,8 @@ pub struct RoutineDraft {
     pub cwd: String,
     pub model: Option<String>,
     pub max_turns: u32,
+    /// A cleared field arrives as `null`: read as no budget (an error for Claude Code, a placeholder otherwise).
+    #[serde(deserialize_with = "number_or_nan")]
     pub max_budget_usd: f64,
     pub claude_path: Option<String>,
     pub schedule: Schedule,
@@ -43,6 +45,13 @@ pub struct RoutineDraft {
     /// The mode its runs start in (2.8e); a new routine's form starts at Auto.
     #[serde(default = "auto_mode")]
     pub mode: crate::ipc::AgentMode,
+    /// The agent its runs use (2.9c).
+    #[serde(default)]
+    pub backend: crate::ipc::AgentBackend,
+}
+
+fn number_or_nan<'de, D: serde::Deserializer<'de>>(d: D) -> Result<f64, D::Error> {
+    Ok(Option::<f64>::deserialize(d)?.unwrap_or(f64::NAN))
 }
 
 fn auto_mode() -> crate::ipc::AgentMode {
@@ -172,9 +181,13 @@ pub fn validate(
         return Err("Type an instruction first.".into());
     }
     let cwd = folder(draft.cwd.trim()).ok_or("That folder doesn't exist.")?;
-    if !(draft.max_budget_usd.is_finite() && draft.max_budget_usd > 0.0) {
-        return Err("Routines need a budget.".into());
-    }
+    let budget_ok = draft.max_budget_usd.is_finite() && draft.max_budget_usd > 0.0;
+    // Only Claude Code takes a budget (2.9c): other agents' routines keep a placeholder their runs ignore.
+    let max_budget_usd = match (budget_ok, draft.backend) {
+        (true, _) => draft.max_budget_usd,
+        (false, crate::ipc::AgentBackend::Claude) => return Err("Routines need a budget.".into()),
+        (false, _) => 1.0,
+    };
     schedule::validate(&draft.schedule)?;
     let optional = |s: Option<String>| s.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
     let restart = existing
@@ -190,7 +203,7 @@ pub fn validate(
         cwd,
         model: optional(draft.model),
         max_turns: draft.max_turns.clamp(1, MAX_TURNS),
-        max_budget_usd: draft.max_budget_usd.clamp(MIN_BUDGET, MAX_BUDGET),
+        max_budget_usd: max_budget_usd.clamp(MIN_BUDGET, MAX_BUDGET),
         claude_path: optional(draft.claude_path),
         schedule: draft.schedule,
         enabled: draft.enabled,
@@ -199,6 +212,7 @@ pub fn validate(
         desktop_tools: draft.desktop_tools,
         google_tools: draft.google_tools,
         mode: draft.mode,
+        backend: draft.backend,
         created_at_ms: existing.map_or(now, |old| old.created_at_ms),
         updated_at_ms: now,
         schedule_since_ms: since,
@@ -244,6 +258,7 @@ mod tests {
             desktop_tools: false,
             google_tools: false,
             mode: crate::ipc::AgentMode::Auto,
+            backend: crate::ipc::AgentBackend::Codex,
         }
     }
 
@@ -254,6 +269,24 @@ mod tests {
     #[test]
     fn new_routines_are_checked_and_clamped() {
         let r = validate(draft(), None, 1000, ok).unwrap();
+        // The agent a routine runs on is kept (2.9c); old routines without one read as Claude Code.
+        assert_eq!(r.backend, crate::ipc::AgentBackend::Codex);
+        // Other agents ignore Cay's budget, so a routine on one never fails for lacking it.
+        let unset = RoutineDraft {
+            max_budget_usd: 0.0,
+            ..draft()
+        };
+        assert_eq!(
+            validate(unset.clone(), None, 1000, ok)
+                .unwrap()
+                .max_budget_usd,
+            1.0
+        );
+        let claude = RoutineDraft {
+            backend: crate::ipc::AgentBackend::Claude,
+            ..unset
+        };
+        assert!(validate(claude, None, 1000, ok).is_err());
         assert!(r.id.starts_with("rt-") && r.id.len() == 9, "{}", r.id);
         assert_eq!(r.name, "Tidy Downloads");
         assert_eq!(r.prompt, "sort it");
@@ -279,12 +312,15 @@ mod tests {
                 prompt: "".into(),
                 ..draft()
             },
+            // A Claude Code routine needs a budget (other agents' don't, 2.9c).
             RoutineDraft {
                 max_budget_usd: 0.0,
+                backend: crate::ipc::AgentBackend::Claude,
                 ..draft()
             },
             RoutineDraft {
                 max_budget_usd: f64::NAN,
+                backend: crate::ipc::AgentBackend::Claude,
                 ..draft()
             },
             RoutineDraft {

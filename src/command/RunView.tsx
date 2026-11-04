@@ -6,6 +6,7 @@ import { endLabel, RISK_LABEL, runLabel } from "../features/agent/labels";
 import { changePreview, PreviewBlock } from "../features/agent/PreviewBlock";
 import { ModeChip } from "../features/agent/ModeChip";
 import { decide, isLive, stopRun } from "../features/agent/useAgentRuns";
+import { AgentTag } from "../features/sessions/AgentTag";
 import { StepLabel } from "../features/sessions/StepLabel";
 import { PlanView, QuestionForm } from "./InteractionViews";
 import type { RoutineSeed } from "./routineLabels";
@@ -63,6 +64,7 @@ export function RunView({
           {run?.routine?.trigger === "schedule" && <ClockGlyph />}
           {run ? (run.routine?.name ?? run.project) : "Starting…"}
         </span>
+        {run && <AgentTag agent={run.backend} mixed={false} />}
         <span className="run__cwd" title={run?.cwd}>
           {run?.cwd}
         </span>
@@ -86,6 +88,7 @@ export function RunView({
                 prompt: entries.find((e): e is Extract<AgentEntry, { kind: "user" }> => e.kind === "user")?.text ?? run.prompt,
                 cwd: run.cwd,
                 model: run.model,
+                backend: run.backend,
               })
             }
           >

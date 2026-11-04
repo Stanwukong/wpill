@@ -358,6 +358,25 @@ export interface ClaudeHooksStatus {
 /** The agent a run uses (2.9b). Mirrors Rust's `AgentBackend`. */
 export type AgentBackend = "claude" | "opencode" | "codex";
 
+/** One agent in the command window's picker (2.9c). */
+export interface AgentBackendInfo {
+  backend: AgentBackend;
+  /** Installed where Cay can start it. */
+  available: boolean;
+  /** How to install it, when it isn't. */
+  install: string | null;
+  /** The model a task uses when it names none. */
+  defaultModel: string | null;
+  /** The models the agent lists; empty means free text (Claude Code) or not known yet. */
+  models: string[];
+}
+
+/** `agent_backends`. */
+export interface AgentBackendsPayload {
+  defaultBackend: AgentBackend;
+  backends: AgentBackendInfo[];
+}
+
 export interface AgentRun {
   runId: string;
   /** Which agent runs it. */
@@ -456,6 +475,8 @@ export interface RoutineDraft {
   googleTools: boolean;
   /** The mode its runs start in (2.8e); new routines start at `auto`, ones saved before 2.8e read as `default`. */
   mode: AgentMode;
+  /** The agent its runs use (2.9c); routines saved before 2.9c read as `claude`. */
+  backend: AgentBackend;
 }
 
 /** A saved routine, as Rust stores it. */

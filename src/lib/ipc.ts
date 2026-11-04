@@ -10,6 +10,7 @@ import type {
   AgentOutput,
   AgentRuns,
   AgentStartRequest,
+  AgentBackendsPayload,
   ActivityPayload,
   Routine,
   RoutineDraft,
@@ -87,6 +88,8 @@ export const commands = {
   claudeHooksInstall: () => invoke<void>("claude_hooks_install"),
   claudeHooksRemove: () => invoke<void>("claude_hooks_remove"),
   agentStart: (request: AgentStartRequest) => invoke<{ runId: string }>("agent_start", { request }),
+  /** 2.9c: the agents the picker offers; the first call may take a few seconds (OpenCode's model list). */
+  agentBackends: () => invoke<AgentBackendsPayload>("agent_backends"),
   /** A follow-up: queued into the running turn, or resumes a finished run. */
   agentSend: (runId: string, text: string) => invoke<void>("agent_send", { runId, text }),
   agentStop: (runId: string) => invoke<void>("agent_stop", { runId }),

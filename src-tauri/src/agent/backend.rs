@@ -167,12 +167,15 @@ pub fn codex(node: &str, script: &str, mode: AgentMode, model: Option<&str>) -> 
 
 /// `node.exe` and `codex-acp`'s script (`@agentclientprotocol/codex-acp`, installed with npm): the shim on PATH can't
 /// be started without a shell, so Cay runs Node on the script itself.
-pub fn codex_adapter() -> Option<(PathBuf, PathBuf)> {
+pub fn codex_adapter(configured: Option<&str>) -> Option<(PathBuf, PathBuf)> {
     let path = std::env::var_os("PATH")?;
     let dirs: Vec<PathBuf> = std::env::split_paths(&path).collect();
-    let script = dirs.iter().find_map(|dir| {
-        let s = dir.join(r"node_modules\@agentclientprotocol\codex-acp\dist\index.js");
-        (dir.join("codex-acp.cmd").is_file() && s.is_file()).then_some(s)
+    let configured = configured.map(PathBuf::from).filter(|p| p.is_file());
+    let script = configured.or_else(|| {
+        dirs.iter().find_map(|dir| {
+            let s = dir.join(r"node_modules\@agentclientprotocol\codex-acp\dist\index.js");
+            (dir.join("codex-acp.cmd").is_file() && s.is_file()).then_some(s)
+        })
     })?;
     let node = dirs
         .iter()
@@ -183,7 +186,10 @@ pub fn codex_adapter() -> Option<(PathBuf, PathBuf)> {
 
 /// The real `opencode.exe` you'd run: on PATH, or behind npm's shim (`node_modules\opencode-ai\bin\opencode.exe`,
 /// which a shim can't be started without a shell).
-pub fn opencode_exe() -> Option<PathBuf> {
+pub fn opencode_exe(configured: Option<&str>) -> Option<PathBuf> {
+    if let Some(exe) = configured.map(PathBuf::from).filter(|p| p.is_file()) {
+        return Some(exe);
+    }
     let path = std::env::var_os("PATH")?;
     for dir in std::env::split_paths(&path) {
         let exe = dir.join("opencode.exe");
@@ -201,6 +207,83 @@ pub fn opencode_exe() -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// The models Codex lists for you, from its own cache (`$CODEX_HOME\models_cache.json`): those marked `list`, in its
+/// order. Empty if Codex hasn't fetched them yet.
+pub fn codex_models(cache: &str) -> Vec<String> {
+    let Ok(v) = serde_json::from_str::<Value>(cache) else {
+        return Vec::new();
+    };
+    v["models"]
+        .as_array()
+        .map(|ms| {
+            ms.iter()
+                .filter(|m| m["visibility"] == json!("list"))
+                .filter_map(|m| m["slug"].as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// `opencode models` output: one `provider/model` per line.
+pub fn opencode_models(output: &str) -> Vec<String> {
+    output
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.contains(' ') && l.contains('/'))
+        .map(str::to_string)
+        .collect()
+}
+
+/// `exe args…`'s stdout, without a window, or `None` if it fails or takes longer than `timeout`.
+pub fn output(
+    exe: &std::path::Path,
+    args: &[&str],
+    timeout: std::time::Duration,
+) -> Option<String> {
+    use std::os::windows::process::CommandExt;
+    use std::process::{Command, Stdio};
+    use windows::Win32::System::Threading::CREATE_NO_WINDOW;
+
+    let mut child = Command::new(exe)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW.0)
+        .spawn()
+        .ok()?;
+    // Read on another thread so a full pipe can't stall the child before the deadline.
+    let mut stdout = child.stdout.take()?;
+    let reader = std::thread::spawn(move || {
+        let mut text = String::new();
+        let _ = std::io::Read::read_to_string(&mut stdout, &mut text);
+        text
+    });
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => break,
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(50))
+            }
+            _ => {
+                let _ = child.kill();
+                return None;
+            }
+        }
+    }
+    reader.join().ok()
+}
+
+/// `$CODEX_HOME\models_cache.json`, else `%USERPROFILE%\.codex\models_cache.json`.
+pub fn codex_models_cache() -> Option<PathBuf> {
+    let home = std::env::var_os("CODEX_HOME")
+        .filter(|d| !d.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("USERPROFILE").map(|h| PathBuf::from(h).join(".codex")))?;
+    Some(home.join("models_cache.json"))
 }
 
 /// The tools Cay's MCP server offers a run: Claude Code's prompt tool only to Claude Code, the desktop and Google
@@ -328,6 +411,21 @@ mod tests {
         assert_eq!(plan.config[1], ("collaboration_mode".into(), "plan".into()));
         assert_eq!(plan.config[2], ("model".into(), "gpt-6-luna".into()));
         assert_eq!(codex_mode(AgentMode::Auto), "agent");
+    }
+
+    #[test]
+    fn model_lists() {
+        let cache = r#"{ "models": [
+            { "slug": "gpt-reserve", "visibility": "hide" },
+            { "slug": "gpt-6-luna", "visibility": "list" },
+            { "slug": "gpt-5.6-terra", "visibility": "list" } ] }"#;
+        assert_eq!(codex_models(cache), vec!["gpt-6-luna", "gpt-5.6-terra"]);
+        assert!(codex_models("not json").is_empty());
+        let out = "opencode/beam-free\nopencode/big-pickle\n\nWarning: something happened\n";
+        assert_eq!(
+            opencode_models(out),
+            vec!["opencode/beam-free", "opencode/big-pickle"]
+        );
     }
 
     #[test]

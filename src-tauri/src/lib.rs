@@ -99,6 +99,7 @@ pub fn run() {
             sessions::claude_hooks_install,
             sessions::claude_hooks_remove,
             agent::agent_start,
+            agent::agent_backends,
             agent::agent_send,
             agent::agent_stop,
             agent::agent_remove,

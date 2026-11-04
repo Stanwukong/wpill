@@ -1107,6 +1107,7 @@ so tests and Connect must both say which folder they touch; and a hook only prov
 | 2026-11-04 | 2.9b step 2: Codex runs through `@agentclientprotocol/codex-acp` (Auto = its "Auto review"), checked live in Ask and Auto. The first message now waits for the mode to be set; a declined step that cancels Codex's turn ends it as done. 268 Rust tests. |
 | 2026-11-04 | 2.9b step 3: both ACP agents call Cay's own tools (`list_windows`, Auto, no card); Codex's MCP calls and Auto-review steps now read as `mcp__cay__…` and "Review"; ACP runs silent for 10 minutes are stopped. Two of my background dev sessions left an orphaned Vite and Cay behind, and an `agent-test quit` with no Cay running started one (CLAUDE.md's gotcha); cleaned up. 269 Rust tests. |
 | 2026-11-04 | **Stage 2.9b signed off** by the author (OpenCode and Codex runs); Goose deferred to the other machine. 2.9c started. |
+| 2026-11-04 | Stage 2.9c built: `agent.defaultBackend` and `agent.backends` in settings.json, routines with an agent, `agent_backends` (installed agents and their models: `opencode models`, Codex's model cache), the command window's agent and model picker with turns and budget for Claude Code only, agent tags on runs and routines (motion-designer), and the README's section on other agents. Manual checks pending. |
 | 2026-11-03 | Stage 2.9a, step 1: the rename (`claude/` → `sessions/`, session IPC names, `features/sessions/`, `--font-agent`, `data-agent`), no behaviour change; 230 Rust tests, clippy and typecheck clean. Codex updated to 0.166.0. |
 
 ## 7. Results & metrics

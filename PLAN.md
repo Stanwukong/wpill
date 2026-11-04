@@ -422,6 +422,16 @@ Added in 2.9a (Codex sessions):
 | file | `$OPENCODE_CONFIG_DIR\plugins\cay.js` (else `~\.config\opencode\plugins\cay.js`) | Cay's plugin, `cay-plugin: 1` on line 2 | Written by Connect OpenCode, deleted by Disconnect; a `cay.js` without the marker is never touched. Answers permissions with `postSessionIdPermissionsPermissionId` (`once` / `reject`). |
 | tray | Connect / Update / Disconnect OpenCode… | | Checks OpenCode ≥ 1.19.5. Never changes the user's `opencode.json`. |
 
+Added in 2.9b–c (runs on other agents):
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| type / field | `AgentBackend` on `AgentRun.backend`, `AgentStartRequest.backend`, `Routine.backend` | `"claude" \| "opencode" \| "codex"` | Missing means Claude Code. |
+| command | `agent_backends` | `() → { defaultBackend, backends: { backend, available, install, defaultModel, models }[] }` | Async; the first call runs `opencode models` (a few seconds). |
+| file | `settings.json` → `agent.defaultBackend`, `agent.backends.{opencode,codex}.{path,model}` | | `path`: `opencode.exe`, or codex-acp's `dist\index.js`. |
+| debug | `cay.exe agent-test start <folder> "<prompt>" <model> <turns> <mode> opencode\|codex` | | An ACP run without the command window. |
+| audit | `start.backend`, `unasked`, `silent` | | The watchdog's stop and the inactivity stop. |
+
 Unchanged, because they're Claude Code's own: `claude_hooks_status` / `_install` / `_remove`, `ClaudeHooksStatus`,
 `ClaudeInstall`, `agent.claudePath`, the `claude` block and `activities.claude` switch in `settings.json`, the pipe
 names `cay-claude-…` and the hook marker.
@@ -1393,14 +1403,26 @@ Tasks stay on for ACP runs (desktop tools and Gmail off until a scripted look-an
       doesn't count) stops the run with a note (`ACP_SILENCE`, on the `agent-timer` thread)
 - [ ] Cay's turn and budget limits don't reach ACP agents (noted for the README)
 
-**2.9c Settings and docs**
-- [ ] `agent.backends` block in settings.json (`{ "<id>": { enabled, path, args, provider, model } }`) and
-      `agent.defaultBackend: "claude"`; found automatically where possible (like `installs.rs`, real exe behind npm
-      shims); Ollama models from `ollama list`; edited by hand until Phase 4b
-- [ ] Command window: agent and model picker per task and per routine (routines saved before 2.9 read as Claude); runs
-      list and audit record backend, agent version, model and mode
-- [ ] README: supported agents, what each Connect writes, and what local models need (~32 GB RAM or a 24 GB GPU for
-      agent work; 16 GB runs gpt-oss-20b slowly)
+**2.9c Settings and docs** (built 2026-11-04; manual checks below)
+- [x] `agent.defaultBackend` (`"claude"`) and `agent.backends.{opencode,codex}.{path,model}` in settings.json; agents
+      found automatically (the real exe or script behind npm's shims); models from `opencode models` (once, kept) and
+      Codex's `models_cache.json`; edited by hand until Phase 4b. (Goose and Ollama come with Goose.)
+- [x] Command window: agent and model picker per task and per routine (routines saved before 2.9 read as Claude Code);
+      turns and budget only for Claude Code; the run list, run header and routine rows tag non-Claude agents; the audit
+      records the agent, exe, model and mode
+- [x] README: supported agents, what each Connect writes, what Auto means per agent, the limits, and what local models
+      need
+
+**2.9c manual checks** (`pnpm tauri dev`)
+1. The command window's new-task form shows an Agent row (Claude Code / OpenCode / Codex); an agent that isn't installed
+   is disabled with its install hint.
+2. With Codex picked, Options shows only Model: "Default (…)" and Codex's models; with Claude Code, Model, Max turns and
+   Budget as before.
+3. Start a small task on Codex and one on OpenCode: both run, the run list tags them `codex` / `opencode`, and the run
+   header names the agent.
+4. A routine saved with Codex keeps Codex after Cay restarts, and its Run now runs on Codex.
+5. `agent.defaultBackend: "opencode"` in settings.json (then restart Cay): a new task starts on OpenCode.
+6. `agent.backends.codex.model: "gpt-5.6-terra"`: Codex's Model reads "Default (gpt-5.6-terra)" and a run uses it.
 
 **Open questions (answered in D47)**
 - Gemini CLI: no sessions in 2.9; later as an ACP backend if it passes the same check.

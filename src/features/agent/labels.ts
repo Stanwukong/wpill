@@ -1,4 +1,4 @@
-import type { AgentEndReason, AgentMode, AgentRisk, AgentRun, AgentStatus } from "../../lib/types";
+import type { AgentBackend, AgentEndReason, AgentMode, AgentRisk, AgentRun, AgentStatus } from "../../lib/types";
 
 /** How an ended run is described: in the finished activity, the panel, the command window. */
 export function endLabel(status: AgentStatus, reason: AgentEndReason | null): string {
@@ -64,6 +64,35 @@ export const MODE_HINT: Record<AgentMode, string> = {
   acceptEdits: "File edits and simple file commands in the folder go ahead; everything else asks.",
   plan: "Claude plans first and asks you to approve the plan before changing anything.",
 };
+
+/** The agents a task can run on (2.9c), in the picker's order; plain names, no marks (D30). */
+export const BACKENDS: AgentBackend[] = ["claude", "opencode", "codex"];
+
+export const BACKEND_LABEL: Record<AgentBackend, string> = {
+  claude: "Claude Code",
+  opencode: "OpenCode",
+  codex: "Codex",
+};
+
+/** The picker's line under the mode, for the chosen agent: each mode maps to that agent's nearest setting (D48). */
+export function modeHint(mode: AgentMode, backend: AgentBackend): string {
+  if (backend === "claude") return MODE_HINT[mode];
+  const name = BACKEND_LABEL[backend];
+  switch (mode) {
+    case "auto":
+      return backend === "codex"
+        ? "Codex's auto review runs everyday steps and asks about the ones it judges unsafe."
+        : "Edits in the folder and safe commands go ahead; other commands and web fetches ask.";
+    case "default":
+      return `Every step ${name} would ask about waits for you.`;
+    case "acceptEdits":
+      return backend === "codex"
+        ? "File edits in the folder go ahead; everything else asks."
+        : "File edits go ahead; shell commands ask.";
+    case "plan":
+      return `${name} only reads and plans; nothing in the folder changes.`;
+  }
+}
 
 /**
  * A terminal session's mode as a tag (2.8e), or `null` for plain `default` and anything unknown. Sessions can also

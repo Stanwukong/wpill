@@ -304,6 +304,16 @@ textarea {
   color: var(--island-muted);
 }
 
+/* The agent's name (2.9c) right after the run's or routine's: the name ellipsizes first, the time stays right. */
+.cmd-run__project:has(+ .agent-tag) {
+  flex: 0 1 auto;
+}
+
+.cmd-run__project + .agent-tag {
+  margin-left: -2px;
+  margin-right: auto;
+}
+
 .cmd-run__detail {
   padding-left: 22px;
   font-size: 11.5px;
@@ -478,6 +488,15 @@ textarea {
 /* Room for Run on the name's line only. */
 .cmd-routine__body .cmd-run__project {
   margin-right: 22px;
+}
+
+/* With an agent tag, the tag keeps Run's room instead. */
+.cmd-routine__body .cmd-run__project:has(+ .agent-tag) {
+  margin-right: 0;
+}
+
+.cmd-routine__body .cmd-run__project + .agent-tag {
+  padding-right: 22px;
 }
 
 /* Run: top right of its row, on the name's line. */
@@ -724,6 +743,25 @@ textarea {
   color: rgba(245, 245, 247, 0.72);
 }
 
+/* A label with a quiet note on its own line (Agent: how to install a missing one), so the note never moves the form. */
+.task__label-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.task__install {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-size: 11px;
+  color: rgba(245, 245, 247, 0.42);
+}
+
 /* Room for four folders; more scroll. */
 .task__folders {
   flex: none;
@@ -871,6 +909,11 @@ textarea {
   grid-column: 1 / -1;
 }
 
+/* Alone (other agents have no turns or budget): room for "Default (model name)". */
+.task-field--model {
+  grid-column: span 2;
+}
+
 .task-field select,
 .task-field input {
   height: 30px;
@@ -1014,6 +1057,12 @@ textarea {
 
 .seg__item:focus-visible {
   box-shadow: inset 0 0 0 1.5px rgba(var(--agent-rgb), 0.55);
+}
+
+/* An agent that isn't installed: offered, but out of reach. */
+.seg__item:disabled {
+  color: rgba(245, 245, 247, 0.26);
+  cursor: default;
 }
 
 .seg--small .seg__item {
@@ -1252,6 +1301,10 @@ textarea {
   font-family: var(--font-agent);
   font-size: 13.5px;
   font-weight: 500;
+}
+
+.run__project + .agent-tag {
+  margin-left: -4px;
 }
 
 .run__cwd {
