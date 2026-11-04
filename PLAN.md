@@ -40,11 +40,14 @@ island, D36) is signed off (2026-11-01). 2.8b (diffs and whole commands on the c
 plans, D38) and 2.8d (live step line, D39) are built with their manual checks pending, and 2.8e (Claude Code's
 permission modes, Auto by default, D40) is signed off (2026-11-02). 2.8f (Connect's three states, usage limits
 through a chained status line, the optional sound, D41) is signed off (2026-11-02).
-**Now: [2.9 other agents and open models](#phase-29-other-agents-and-open-models-design-agreed-2026-11-03-d47)**
+**Phase 2.9 is complete (2026-11-04): [other agents and open models](#phase-29-other-agents-and-open-models-design-agreed-2026-11-03-d47)**
 (kick-off prompt: [prompts/phase-2.9-other-agents.md](prompts/phase-2.9-other-agents.md)): research and design agreed
 (2026-11-03, D47); **stage 2.9a (agent-neutral sessions: Codex and OpenCode) is signed off (2026-11-04), all 20 manual checks
 passed.** **Stage 2.9b (ACP runs on OpenCode and Codex, D48) is signed off (2026-11-04)**; Goose waits for the
-author's other machine. Now: 2.9c (settings, the agent and model picker, README). Then 3, 5, the spikes, and
+author's other machine. **2.9c (settings, the agent and model picker, README) is signed off (2026-11-04), all 6 manual
+checks passed.** Next, per the roadmap: [Phase 3, memory-heavy apps](#phase-3-memory-heavy-apps-behind-a-settings-toggle)
+(kick-off prompt: [prompts/phase-3-memory-heavy.md](prompts/phase-3-memory-heavy.md)), then 5, the spikes, and last
+4a-5 (release). Then 3, 5, the spikes, and
 last 4a-5 (release).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
@@ -495,8 +498,8 @@ meaning; new phases slot in between.
 | 6 | **4a Release readiness** (4a-1 to 4a-4 done; **4a-5 release and the dock check deferred to the end**, 2026-11-02) | Multi-monitor + per-monitor DPI, code signing, v0.2 release | Docking/undocking breaks placement today; unsigned installers trigger SmartScreen. |
 | 7 | **2.8 Agent UX** (complete 2026-11-02) | Approve terminal sessions from the island, see what you approve, questions and plans, a live step line, permission modes, trustworthy Connect | Proposed 2026-11-01 after a competitor survey (D34). Approving terminal sessions is the core of every rival; Cay only focuses the window. |
 | 8 | **6 Google Calendar and Gmail** (complete 2026-11-03; prompt [phase-6-google.md](prompts/phase-6-google.md)) | Upcoming events and tasks in the pill and panel; Gmail and Calendar tools for agent runs | Proposed 2026-11-01 (D35). Replaces the "calendar peek" spike. |
-| 9 | **2.9 Other agents and open models** (design agreed 2026-11-03, D47; in progress, prompt [phase-2.9-other-agents.md](prompts/phase-2.9-other-agents.md)) | Codex / OpenCode sessions in the island; agent runs through ACP (Goose + Ollama first) beside the native Claude Code path | Proposed 2026-11-01 after a competitor survey. Every rival watches several CLIs; none runs agents. Keeps Cay's lead (runs, routines, desktop tools) while closing the coverage gap. |
-| 10 | **3 Memory-heavy apps** | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
+| 9 | **2.9 Other agents and open models** (complete 2026-11-04, D47/D48; Goose deferred; prompt [phase-2.9-other-agents.md](prompts/phase-2.9-other-agents.md)) | Codex / OpenCode sessions in the island; agent runs through ACP (Goose + Ollama first) beside the native Claude Code path | Proposed 2026-11-01 after a competitor survey. Every rival watches several CLIs; none runs agents. Keeps Cay's lead (runs, routines, desktop tools) while closing the coverage gap. |
+| 10 | **3 Memory-heavy apps** (next; prompt [phase-3-memory-heavy.md](prompts/phase-3-memory-heavy.md)) | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
 | 11 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
 | 12 | **Spikes** | Notifications mirror, live window previews (calendar peek moved to Phase 6) | Uncertain feasibility or needs sign-in; prototype before committing. |
 | 13 | **4a-5 Release v0.2** (deferred here 2026-11-02) | Full manual pass of every phase, the dock check, publish the installer with its SHA-256 | The author's call: release once every phase is in. |
@@ -1403,7 +1406,7 @@ Tasks stay on for ACP runs (desktop tools and Gmail off until a scripted look-an
       doesn't count) stops the run with a note (`ACP_SILENCE`, on the `agent-timer` thread)
 - [ ] Cay's turn and budget limits don't reach ACP agents (noted for the README)
 
-**2.9c Settings and docs** (built 2026-11-04; manual checks below)
+**2.9c Settings and docs** (signed off 2026-11-04)
 - [x] `agent.defaultBackend` (`"claude"`) and `agent.backends.{opencode,codex}.{path,model}` in settings.json; agents
       found automatically (the real exe or script behind npm's shims); models from `opencode models` (once, kept) and
       Codex's `models_cache.json`; edited by hand until Phase 4b. (Goose and Ollama come with Goose.)
@@ -1413,7 +1416,7 @@ Tasks stay on for ACP runs (desktop tools and Gmail off until a scripted look-an
 - [x] README: supported agents, what each Connect writes, what Auto means per agent, the limits, and what local models
       need
 
-**2.9c manual checks** (`pnpm tauri dev`)
+**2.9c manual checks** (`pnpm tauri dev`): **all passed (2026-11-04)**
 1. The command window's new-task form shows an Agent row (Claude Code / OpenCode / Codex); an agent that isn't installed
    is disabled with its install hint.
 2. With Codex picked, Options shows only Model: "Default (…)" and Codex's models; with Claude Code, Model, Max turns and
@@ -1637,6 +1640,13 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
   run reads also lands in Claude Code's own transcripts under `~/.claude/projects`. After a run reads mail, Cay asks
   again about desktop actions, but Bash and file edits in Auto stay Claude Code's classifier's call. Attachments are
   listed, not read. Drafts are plain text.
+- Other agents (2.9, D47/D48): Codex sessions need Codex 0.166+ and a one-time `/hooks` trust; Connect writes the
+  exe's 8.3 path (on a volume without 8.3 names, PowerShell's `& '…'`). Codex 0.166 sends no reason with a permission
+  request, so its card shows only the command. OpenCode sessions only ask if your `opencode.json` has `"ask"` rules
+  (OpenCode allows everything by default); its `permission.ask` hook isn't used (never called in 1.19.5). Runs on
+  OpenCode and Codex ignore Cay's turn and budget limits, change mode from the next message, and stop after 10 silent
+  minutes. OpenCode's Auto is a list of allowed commands, not a reviewer. Codex's "reject once" ends its whole turn.
+  Desktop actions in Auto aren't judged by a classifier on those agents. Goose and local models aren't wired yet.
 - Single instance is keyed on the bundle identifier, so a dev build and the installed release build
   can't run at the same time. Quit one from the tray first.
 - Icons are cached per HICON/exe path. An app that changes its window icon at runtime may show a stale icon.
