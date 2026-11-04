@@ -19,7 +19,9 @@ import type {
   ApprovalPreview,
   CalendarUpcoming,
   GoogleState,
+  EndResult,
   HeavyProcesses,
+  ProcessId,
   SessionAsks,
   QuestionAnswer,
   ClaudeHooksStatus,
@@ -143,6 +145,9 @@ export const commands = {
   calendarJoin: (id: string) => invoke<void>("calendar_join", { id }),
   /** Phase 3: the latest memory-heavy apps (empty until the panel has been open once) and whether they're on. */
   listHeavyProcesses: (limit?: number) => invoke<HeavyProcesses>("list_heavy_processes", { limit }),
+  /** Asks in a native confirm box first; Rust only touches pids it listed for `key`. */
+  endProcessGroup: (key: string, pids: ProcessId[]) =>
+    invoke<EndResult>("end_process_group", { key, pids }),
 };
 
 export const on = {

@@ -404,7 +404,10 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
   (through `activity::Watcher`; waits on a condvar until `Processes::panel(true)`, which the hover poller calls on
   expand/collapse), `list_heavy_processes`; `snapshot.rs` = one `NtQuerySystemInformation` read, parsed at fixed x64
   offsets (pure `parse`, tested on a synthetic buffer); `logic.rs` (pure: grouping, helper folding, the protected
-  list); `names.rs` (`FileDescription`); `settings.rs` (`processes` block, off by default). `src/features/processes/`:
+  list); `names.rs` (`FileDescription`); `settings.rs` (`processes` block, off by default); `end.rs` (3b: pure
+  `check` (listed + fresh snapshot → what may be ended, children first), the confirm box, `WM_CLOSE` then
+  `TerminateProcess` through a creation-time-checked handle; `end_process_group` in `mod.rs`). Test ending only on
+  processes a test started itself (`cargo test --lib -- --ignored end_a_tree`). `src/features/processes/`:
   `useHeavyProcesses` (lives in `Island`), `MemorySection`. `apps::process_path(pid)` is the shared exe-path read.
 - **Building while Cay runs from `pnpm tauri dev`:** if this session runs inside that Cay (an agent run), editing Rust in
   the main checkout restarts Cay and ends the run. Work in a git worktree beside it (`git worktree add ../wpill-<x>

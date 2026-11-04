@@ -2,8 +2,10 @@
 //!
 //! The `processes-watcher` thread sleeps until the hover poller says the panel is open (`Processes::panel`), then
 //! takes one snapshot every 2 s (`snapshot.rs`, ~3.5 ms), groups it into apps (`logic.rs`) and pushes the biggest as
-//! `processes:heavy`. While the panel is closed it does nothing at all. Ending a group is stage 3b.
+//! `processes:heavy`. While the panel is closed it does nothing at all. `end_process_group` (3b, `end.rs`) ends an
+//! app after a native confirm box, only ever acting on processes this module listed.
 
+mod end;
 mod logic;
 mod names;
 mod settings;
@@ -18,7 +20,10 @@ use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
 
 use crate::activity::{Activities, Watcher};
 use crate::apps::{self, IconCache};
-use crate::ipc::{events, HeavyProcessesPayload, ProcessGroup, ProcessId};
+use crate::error::AppError;
+use crate::ipc::{
+    events, EndProcessOutcome, EndResult, HeavyProcessesPayload, ProcessGroup, ProcessId,
+};
 use crate::{win32, window};
 use logic::{Group, Proc};
 
@@ -31,6 +36,10 @@ struct Inner {
     /// The panel is open: the watcher refreshes.
     open: bool,
     stop: bool,
+    /// Refresh now rather than after the usual wait (an app was just ended).
+    dirty: bool,
+    /// An end is in progress (its confirm box or its wait): one at a time.
+    ending: bool,
     latest: Vec<ProcessGroup>,
 }
 
@@ -53,6 +62,12 @@ impl Processes {
             inner.open = open;
             self.wake.notify_all();
         }
+    }
+
+    /// Refresh at once if the panel is open, so an ended app leaves the list.
+    fn refresh_soon(&self) {
+        self.lock().dirty = true;
+        self.wake.notify_all();
     }
 
     fn payload(&self, limit: Option<u32>) -> HeavyProcessesPayload {
@@ -119,7 +134,11 @@ fn run(app: &AppHandle) {
                 break;
             }
         }
-        let limit = processes.lock().limit as usize;
+        let limit = {
+            let mut inner = processes.lock();
+            inner.dirty = false;
+            inner.limit as usize
+        };
         if let Some(groups) = refresh(app, own_pid, limit, &mut caches) {
             processes.lock().latest = groups.clone();
             let payload = HeavyProcessesPayload {
@@ -133,7 +152,7 @@ fn run(app: &AppHandle) {
         let guard = processes.lock();
         let (guard, _) = processes
             .wake
-            .wait_timeout_while(guard, REFRESH, |s| s.open && !s.stop)
+            .wait_timeout_while(guard, REFRESH, |s| s.open && !s.stop && !s.dirty)
             .unwrap_or_else(|e| e.into_inner());
         if guard.stop {
             break;
@@ -257,4 +276,107 @@ pub fn list_heavy_processes(
     limit: Option<u32>,
 ) -> HeavyProcessesPayload {
     processes.payload(limit)
+}
+
+/// Ends one app from the list (Phase 3b): asks in a native confirm box, asks the app to close, then ends what's left.
+/// Only pids Rust listed for `key` are touched, each checked again by creation time; protected apps are refused.
+#[tauri::command]
+pub async fn end_process_group(
+    app: AppHandle,
+    key: String,
+    pids: Vec<ProcessId>,
+) -> Result<EndResult, AppError> {
+    tauri::async_runtime::spawn_blocking(move || end_group(&app, &key, &pids)).await?
+}
+
+/// Clears `ending` however `end_group` returns.
+struct Ending<'a>(&'a Processes);
+
+impl Drop for Ending<'_> {
+    fn drop(&mut self) {
+        self.0.lock().ending = false;
+        self.0.refresh_soon();
+    }
+}
+
+fn end_group(app: &AppHandle, key: &str, pids: &[ProcessId]) -> Result<EndResult, AppError> {
+    let processes = app.state::<Processes>();
+    let group = {
+        let mut inner = processes.lock();
+        let group = inner
+            .latest
+            .iter()
+            .find(|g| g.key == key)
+            .cloned()
+            .ok_or(AppError::ProcessGroupGone)?;
+        if inner.ending {
+            return Err(AppError::ProcessEndBusy);
+        }
+        inner.ending = true;
+        group
+    };
+    let _ending = Ending(&processes);
+    let listed: Vec<end::Id> = group.pids.iter().filter_map(parse_id).collect();
+    // An id the page sent that doesn't parse can't be one Rust listed.
+    let requested: Vec<end::Id> = pids
+        .iter()
+        .map(|p| parse_id(p).unwrap_or((p.pid, 0)))
+        .collect();
+    let own_pid = std::process::id();
+    let own_hwnd = app
+        .get_webview_window(window::LABEL)
+        .and_then(|w| w.hwnd().ok())
+        .map(win32::raw)
+        .unwrap_or_default();
+
+    let fresh = || end::now().ok_or(AppError::ProcessGroupGone);
+    let first = end::check(&requested, &listed, &fresh()?, own_pid);
+    if first.go.is_empty() {
+        log::info!(
+            "end {}: nothing to end ({})",
+            group.name,
+            end::tally(&first.settled)
+        );
+        return Ok(result(first.settled));
+    }
+    if !end::confirm(&end::confirm_text(
+        &group.name,
+        first.go.len(),
+        group.memory_bytes,
+    )) {
+        log::info!("end {}: cancelled", group.name);
+        return Ok(EndResult {
+            cancelled: true,
+            outcomes: Vec::new(),
+        });
+    }
+    // The box may have been open a while: check again.
+    let checked = end::check(&requested, &listed, &fresh()?, own_pid);
+    let mut outcomes = checked.settled;
+    outcomes.extend(end::end(&checked.go, own_hwnd));
+    log::info!(
+        "end {}: {} processes: {}",
+        group.name,
+        outcomes.len(),
+        end::tally(&outcomes)
+    );
+    Ok(result(outcomes))
+}
+
+fn parse_id(p: &ProcessId) -> Option<end::Id> {
+    p.created.parse().ok().map(|c| (p.pid, c))
+}
+
+fn result(outcomes: Vec<(end::Id, crate::ipc::EndOutcome)>) -> EndResult {
+    EndResult {
+        cancelled: false,
+        outcomes: outcomes
+            .into_iter()
+            .map(|((pid, created), outcome)| EndProcessOutcome {
+                pid,
+                created: created.to_string(),
+                outcome,
+            })
+            .collect(),
+    }
 }

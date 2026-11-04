@@ -902,12 +902,52 @@ pub struct ProcessGroup {
 }
 
 /// A process, identified by pid *and* creation time so a reused pid is never mistaken for it.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProcessId {
     pub pid: u32,
     /// FILETIME ticks as a decimal string (too big for a JS number).
     pub created: String,
+}
+
+/// `end_process_group`'s reply (Phase 3b).
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EndResult {
+    /// You chose Cancel in the confirm box: nothing was done.
+    pub cancelled: bool,
+    /// One per pid asked for (none when cancelled).
+    pub outcomes: Vec<EndProcessOutcome>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EndProcessOutcome {
+    pub pid: u32,
+    pub created: String,
+    pub outcome: EndOutcome,
+}
+
+/// What happened to one process.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EndOutcome {
+    /// Cay ended it (`TerminateProcess`).
+    Ended,
+    /// It exited by itself after the app was asked to close.
+    Closed,
+    /// It runs as administrator (or is otherwise off limits): Cay can't end it.
+    AccessDenied,
+    /// The app has a protected member: Cay never ends it.
+    Protected,
+    /// It had already exited.
+    NotFound,
+    /// Not the process that was listed (its pid was reused), or not part of that app.
+    Changed,
+    /// The app is showing a dialog after being asked to close ("Save changes?"): left open for you.
+    Prompted,
+    /// Windows refused for another reason (logged).
+    Failed,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]

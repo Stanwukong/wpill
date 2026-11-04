@@ -132,6 +132,7 @@ pub fn run() {
             google::calendar_open,
             google::calendar_join,
             processes::list_heavy_processes,
+            processes::end_process_group,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Cay")

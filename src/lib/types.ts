@@ -580,6 +580,8 @@ export interface AppError {
     | "noCommandWindow"
     | "google"
     | "calendarItemGone"
+    | "processGroupGone"
+    | "processEndBusy"
     | "win32"
     | "tauri";
   message: string;
@@ -668,3 +670,36 @@ export interface ProcessId {
   /** FILETIME ticks as a decimal string (too big for a JS number). */
   created: string;
 }
+
+/** `end_process_group`'s reply (Phase 3b; mirrors `EndResult` in ipc.rs). */
+export interface EndResult {
+  /** Cancel in the confirm box: nothing was done. */
+  cancelled: boolean;
+  /** One per pid asked for (none when cancelled). */
+  outcomes: EndProcessOutcome[];
+}
+
+export interface EndProcessOutcome {
+  pid: number;
+  created: string;
+  outcome: EndOutcome;
+}
+
+/** What happened to one process (mirrors `EndOutcome` in ipc.rs). */
+export type EndOutcome =
+  /** Cay ended it. */
+  | "ended"
+  /** It exited by itself after the app was asked to close. */
+  | "closed"
+  /** Runs as administrator: Cay can't end it. */
+  | "accessDenied"
+  /** Part of a protected app: Cay never ends it. */
+  | "protected"
+  /** It had already exited. */
+  | "notFound"
+  /** Not the process that was listed (pid reused), or not part of that app. */
+  | "changed"
+  /** The app is showing a dialog after being asked to close: left open. */
+  | "prompted"
+  /** Windows refused for another reason. */
+  | "failed";

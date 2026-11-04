@@ -50,7 +50,8 @@ checks passed.** Next, per the roadmap: [Phase 3, memory-heavy apps](#phase-3-me
 4a-5 (release). Then 3, 5, the spikes, and
 last 4a-5 (release).
 **Phase 3 (memory-heavy apps): design agreed (2026-11-04, D49); stage 3a (the read-only list) is signed off
-(2026-11-04, all 6 manual checks passed) on branch `self/phase-3-memory-heavy` (draft PR #2); 3b (End Task) is next.** See
+(2026-11-04, all 6 manual checks passed) on branch `self/phase-3-memory-heavy` (draft PR #2); 3b.1 (ending an app in
+Rust, with its confirm box) is built; 3b.2 (the panel's End button and row states) is next.** See
 [Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
@@ -451,12 +452,19 @@ names `cay-claude-…` and the hook marker.
 | type | `ProcessGroup` | `{ key, name, pids: { pid, created }[], memoryBytes, icon, protected }` | `created`: FILETIME ticks as a string (beyond JS's 2^53). `memoryBytes`: private working set. |
 | switch | `processes.enabled`, `processes.limit` | `boolean` (false), `number` (6, 1–20) | In settings.json until Phase 4b. |
 
+### Phase 3b
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| command | `end_process_group` | `(key, pids: { pid, created }[]) → { cancelled, outcomes: { pid, created, outcome }[] }` | Async. Shows the native confirm box itself (OK / Cancel, Cancel the default); only pids Rust listed for `key` are touched. Errors `processGroupGone`, `processEndBusy` (one at a time). |
+| type | `EndOutcome` | `ended \| closed \| accessDenied \| protected \| notFound \| changed \| prompted \| failed` | `prompted`: the app showed a dialog after `WM_CLOSE` and was left open. Replaces the reserved `ok`. |
+
 ### Reserved for later phases (names fixed now so they slot in)
 
 | Phase | Kind | Name |
 |---|---|---|
 | 3 | command | `list_heavy_processes`: **in use since 3a** (see Phase 3a above) |
-| 3 | command | `end_process_group(key, pids) → EndResult` (per pid: `ok \| closed \| accessDenied \| protected \| notFound \| changed`; 3b) |
+| 3 | command | `end_process_group`: **in use since 3b.1** (see Phase 3b above) |
 | 4a | event | `monitor:changed` `{ scale }`: **in use since 4a-2**. The poller sends it when the island's monitor rect or DPI scale changes; `usePanelSizeReporter` measures again (it also does on a `devicePixelRatio` change, e.g. Text size) |
 | 4b | event | `settings:changed` |
 | 4b | command | `get_settings`, `set_settings` |
@@ -1691,9 +1699,17 @@ grouping (b), a native confirm box (a), and no agent tool for now (a).
         first refresh took ~577 ms (filling the exe-path cache), later ones 14–60 ms for ~340 processes, only while the
         panel was open; Cay saved the block back as `{ "enabled": true, "limit": 6 }` and kept every other key.
 - **3b: End Task**
-  - [ ] 3b.1 `processes/end.rs`: revalidation, protected refusal, `WM_CLOSE` then `TerminateProcess`, per-pid
+  - [x] 3b.1 `processes/end.rs`: revalidation, protected refusal, `WM_CLOSE` then `TerminateProcess`, per-pid
         results, log of names and counts. Exit: tests on the pure parts; manual test only on a Notepad the test
         started itself.
+  - Built 2026-11-04: `end_process_group` takes pids only from Rust's own latest list for that app, checks them
+        against a fresh snapshot before the confirm box and again after it, refuses the whole app if any member is
+        protected, then `WM_CLOSE` → up to 5 s → `TerminateProcess` children first, through a handle whose creation
+        time is checked (so a reused pid is never ended). An app whose window is disabled after `WM_CLOSE` (a "Save
+        changes?" dialog) is left open (`prompted`) instead of ended under the prompt. The confirm box lives in the
+        command, so the page can't skip it. 8 new tests (290 in all); a live `--ignored` test ends a windowless
+        `cmd` → `ping` tree it started (ping first). The `WM_CLOSE` and `prompted` paths need a window, so they're
+        in the 3b manual check, not tested yet.
   - [ ] 3b.2 Confirm box and row states (closing…, access denied, ended) via `motion-designer`.
   - [ ] 3b manual check (≈6 items, throwaway processes only; never the author's apps without asking).
 
