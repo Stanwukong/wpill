@@ -3,7 +3,7 @@
 ## 2026-11-04 | Phase 3: memory-heavy apps (research and design only)
 - Status: BLOCKED on design approval. The kick-off prompt (prompts/phase-3-memory-heavy.md) requires research and the
   author's OK before any code, and Phase 3 had no task list, so this run did research and drafted the design and tasks
-  in PLAN.md ("Phase 3 design: DRAFT – needs Femi's OK"). Nothing was executed. Branch `self/phase-3-memory-heavy`.
+  in PLAN.md ("Phase 3 design: DRAFT – needs Femi's OK"). Nothing was executed. Branch `self/phase-3-memory-heavy`, draft PR https://github.com/Stanwukong/wpill/pull/2.
 - Tasks: none run (3a.1–3b.2 drafted).
 - Desktop build: the running Cay is `pnpm tauri dev` (target\debug\cay.exe built 11:36, after e42e752, the last
   code commit on main; 172a158 is docs only), so it matches main. No installed release exists; nothing rebuilt.

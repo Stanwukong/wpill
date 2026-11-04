@@ -49,7 +49,7 @@ checks passed.** Next, per the roadmap: [Phase 3, memory-heavy apps](#phase-3-me
 (kick-off prompt: [prompts/phase-3-memory-heavy.md](prompts/phase-3-memory-heavy.md)), then 5, the spikes, and last
 4a-5 (release). Then 3, 5, the spikes, and
 last 4a-5 (release).
-**Phase 3: research done and a design drafted (2026-11-04, daily routine), DRAFT – needs Femi's OK** before any code;
+**Phase 3: research done and a design drafted (2026-11-04, daily routine), DRAFT – needs Femi's OK** before any code (draft PR #2);
 see [Phase 3 design](#phase-3-design-draft--needs-femis-ok-drafted-by-the-daily-routine-2026-11-04).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
