@@ -1,0 +1,91 @@
+/* Panel section (3a): AgentsSection's and Calendar's density (30 px rows, 12 px uppercase heading), at its natural
+   height in the panel's scroller (island.css). Read-only: no hover state, nothing to press. */
+.memory {
+  margin-bottom: 14px;
+}
+
+.memory__heading {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--island-muted);
+}
+
+.memory__list {
+  list-style: none;
+  margin: 0 -6px;
+  padding: 0;
+}
+
+/* Room at the right end for 3b's End button: it goes after the figure. */
+.memory-row {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  font-size: 12.5px;
+  cursor: default;
+}
+
+/* The running apps' icon: 24 px, the exe's own. */
+.memory-row__icon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+}
+
+/* No icon: an empty tile in the running apps' fallback shape, no letter (the name is right next to it). */
+.memory-row__icon--fallback {
+  box-sizing: border-box;
+  border-radius: 6px;
+  background: var(--tile-hover);
+  border: 1px solid var(--island-border);
+}
+
+.memory-row__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The row's share of the biggest one: a 2 px hairline on a faint track, so the figures read at a glance. */
+.memory-row__share {
+  flex: none;
+  width: 56px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--tile-hover);
+  overflow: hidden;
+}
+
+.memory-row__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--island-muted);
+  transform-origin: left center;
+  transform: scaleX(var(--share, 0));
+  transition: transform 240ms ease-out;
+}
+
+/* Tabular figures, wide enough for "1023 MB", so a changing number never shifts the bar or the name. */
+.memory-row__size {
+  flex: none;
+  min-width: 7ch;
+  text-align: right;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--island-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .memory-row__fill {
+    transition: none;
+  }
+}

@@ -49,8 +49,9 @@ checks passed.** Next, per the roadmap: [Phase 3, memory-heavy apps](#phase-3-me
 (kick-off prompt: [prompts/phase-3-memory-heavy.md](prompts/phase-3-memory-heavy.md)), then 5, the spikes, and last
 4a-5 (release). Then 3, 5, the spikes, and
 last 4a-5 (release).
-**Phase 3: research done and a design drafted (2026-11-04, daily routine), DRAFT – needs Femi's OK** before any code (draft PR #2);
-see [Phase 3 design](#phase-3-design-draft--needs-femis-ok-drafted-by-the-daily-routine-2026-11-04).
+**Phase 3 (memory-heavy apps): design agreed (2026-11-04, D49); stage 3a (the read-only list) is built on branch
+`self/phase-3-memory-heavy` (draft PR #2), manual check pending; 3b (End Task) waits for its sign-off.** See
+[Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -441,12 +442,21 @@ Unchanged, because they're Claude Code's own: `claude_hooks_status` / `_install`
 `ClaudeInstall`, `agent.claudePath`, the `claude` block and `activities.claude` switch in `settings.json`, the pipe
 names `cay-claude-…` and the hook marker.
 
+### Phase 3a
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| command | `list_heavy_processes` | `(limit?) → { enabled, groups: ProcessGroup[] }` | The watcher's latest list (empty until the panel has been open once). |
+| event | `processes:heavy` | same payload | Every 2 s while the panel is open and the switch is on; nothing while it's closed. |
+| type | `ProcessGroup` | `{ key, name, pids: { pid, created }[], memoryBytes, icon, protected }` | `created`: FILETIME ticks as a string (beyond JS's 2^53). `memoryBytes`: private working set. |
+| switch | `processes.enabled`, `processes.limit` | `boolean` (false), `number` (6, 1–20) | In settings.json until Phase 4b. |
+
 ### Reserved for later phases (names fixed now so they slot in)
 
 | Phase | Kind | Name |
 |---|---|---|
-| 3 | command | `list_heavy_processes(limit) → ProcessGroup[]` (`{ name, pids, memoryBytes, icon, protected }`) |
-| 3 | command | `end_process_group(name, pids) → EndResult` (per pid: `ok \| accessDenied \| protected \| notFound`) |
+| 3 | command | `list_heavy_processes`: **in use since 3a** (see Phase 3a above) |
+| 3 | command | `end_process_group(key, pids) → EndResult` (per pid: `ok \| closed \| accessDenied \| protected \| notFound \| changed`; 3b) |
 | 4a | event | `monitor:changed` `{ scale }`: **in use since 4a-2**. The poller sends it when the island's monitor rect or DPI scale changes; `usePanelSizeReporter` measures again (it also does on a `devicePixelRatio` change, e.g. Text size) |
 | 4b | event | `settings:changed` |
 | 4b | command | `get_settings`, `set_settings` |
@@ -1615,9 +1625,9 @@ our own pid) is refused in Rust, not just hidden in the UI. Access-denied (eleva
 gets a clear message explaining the app can't close elevated processes unless run as admin.
 Off by default.
 
-#### Phase 3 design: DRAFT – needs Femi's OK (drafted by the daily routine, 2026-11-04)
-Not to be executed until the author agrees. Research per [prompts/phase-3-memory-heavy.md](prompts/phase-3-memory-heavy.md);
-open choices are marked **(choose)** with a recommendation.
+#### Phase 3 design: agreed (drafted by the daily routine, approved by the author 2026-11-04, D49)
+Research per [prompts/phase-3-memory-heavy.md](prompts/phase-3-memory-heavy.md). The author took every recommendation:
+grouping (b), a native confirm box (a), and no agent tool for now (a).
 
 **Findings**
 - **Measured on the dev PC (7.9 GB RAM, 339 processes):** one `NtQuerySystemInformation(SystemProcessInformation)`
@@ -1664,15 +1674,18 @@ open choices are marked **(choose)** with a recommendation.
 
 **Stages and tasks**
 - **3a: the list (read-only)**
-  - [ ] 3a.1 `processes/snapshot.rs`: the `NtQuerySystemInformation` read (private WS, creation time, parent pid,
+  - [x] 3a.1 `processes/snapshot.rs`: the `NtQuerySystemInformation` read (private WS, creation time, parent pid,
         name), with an offset test. Exit: unit test + a debug log line with count and timing.
-  - [ ] 3a.2 `processes/logic.rs` (pure): grouping per option (b), helper folding, sorting, protected flags. Exit:
+  - [x] 3a.2 `processes/logic.rs` (pure): grouping per option (b), helper folding, sorting, protected flags. Exit:
         unit tests with synthetic process tables (Chrome tree, WebView2 under two apps, svchost, pid reuse).
-  - [ ] 3a.3 Watcher thread: refresh every 2 s only while the panel is open, exe path cache by `(pid, created)`,
+  - [x] 3a.3 Watcher thread: refresh every 2 s only while the panel is open, exe path cache by `(pid, created)`,
         `processes:heavy` event, `processes.enabled` switch. Exit: log shows no refresh while closed.
-  - [ ] 3a.4 Panel section via `motion-designer` (after Agents/Calendar, inside D44's one scroller; icon, name,
+  - [x] 3a.4 Panel section via `motion-designer` (after Agents/Calendar, inside D44's one scroller; icon, name,
         memory figure in the panel's existing type scale; empty/off states; no new colours). Exit: `pnpm typecheck`,
         headless render reviewed.
+  - Built 2026-11-04 (daily routine): 12 new Rust tests (the live one checks the private working set and the
+    creation-time offset against `GetProcessTimes`); `MemorySection` (heading "Memory", up to 6 rows: icon, name, a
+    hairline share bar, the figure in tabular numerals; renders nothing while off or before the first push).
   - [ ] 3a manual check (≈6 items: off by default, list matches Task Manager within ~10 %, refresh stops on close,
         no focus stealing, click-through outside the panel, Text size 120 %).
 - **3b: End Task**
@@ -1681,6 +1694,21 @@ open choices are marked **(choose)** with a recommendation.
         started itself.
   - [ ] 3b.2 Confirm box and row states (closing…, access denied, ended) via `motion-designer`.
   - [ ] 3b manual check (≈6 items, throwaway processes only; never the author's apps without asking).
+
+**Manual check (3a)** (`pnpm tauri dev` from the branch with `$env:RUST_LOG='info,cay_lib=debug'`; quit any other Cay
+first)
+1. **Off by default:** with no `processes` block (or `"enabled": false`) the panel has no Memory section, and the log has
+   no `processes:` lines.
+2. **On:** set `"processes": { "enabled": true }` in `%APPDATA%\io.github.stanwukong.cay\settings.json`, restart Cay,
+   open the panel: within a moment "Memory" lists up to 6 apps, biggest first, with icons and names.
+3. **Matches Task Manager:** compare the top rows with Task Manager → Processes (Memory column, grouped apps): each
+   figure within ~10 %; Chrome/Edge/VS Code are one row each; Teams/WhatsApp include their WebView2.
+4. **Only while open:** the log shows a `processes: N read in … ms` line every ~2 s while the panel is open and none
+   after it closes.
+5. **No focus stealing, still click-through:** the foreground app keeps focus while the panel opens and refreshes;
+   clicks beside the panel and on the collapsed pill's margins reach the app underneath.
+6. **Text size 120 % / scale:** the section fits, names ellipsize, figures line up, and the panel's hover area still
+   matches its edges as rows reorder.
 
 **Sources:** Microsoft Learn: `NtQuerySystemInformation`, `SYSTEM_PROCESS_INFORMATION` (winternl.h), "Memory
 Performance Information" (working set vs private bytes); phnt `ntexapi.h` (field names behind the reserved bytes);

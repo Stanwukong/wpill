@@ -158,7 +158,7 @@ unsafe extern "system" fn find_foreign_child(hwnd: HWND, lparam: LPARAM) -> BOOL
     true.into()
 }
 
-fn process_image_path(pid: u32) -> Option<String> {
+pub(super) fn process_image_path(pid: u32) -> Option<String> {
     // SAFETY: the handle is closed before returning; buf/len describe a valid buffer.
     unsafe {
         let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;

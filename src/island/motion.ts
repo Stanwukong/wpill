@@ -29,3 +29,9 @@ export const sessionDotsOut: Transition = { duration: 0.12, ease: "easeIn" };
 
 /** Agent acting: the hint line crossfades in place when waiting turns into acting (the row itself stays). */
 export const actingHintIn: Transition = { duration: 0.2, ease: "easeOut" };
+
+/** Memory rows (Phase 3): a row that changes place on a refresh glides there; well inside the 2 s refresh. */
+export const memoryReorder: Transition = { duration: 0.32, ease: [0.22, 1, 0.36, 1] };
+
+/** Memory rows: a new app in the list fades in (like the running apps' tiles, without the rise). */
+export const memoryRowIn: Transition = { duration: 0.18, ease: "easeOut" };

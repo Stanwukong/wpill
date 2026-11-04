@@ -639,3 +639,32 @@ export interface CalendarUpcoming {
   /** The pill's calendar icon shows. */
   pending: boolean;
 }
+
+// Phase 3: memory-heavy apps (mirrors `HeavyProcessesPayload` in ipc.rs).
+export interface HeavyProcesses {
+  /** `processes.enabled` in settings.json; no section while it's off. */
+  enabled: boolean;
+  /** Biggest first. */
+  groups: ProcessGroup[];
+}
+
+/** One app: its processes (same exe, plus helpers such as WebView2 it started), summed. */
+export interface ProcessGroup {
+  /** Stable across refreshes (the lowercased exe path). */
+  key: string;
+  /** "Google Chrome", else the exe's name without `.exe`. */
+  name: string;
+  pids: ProcessId[];
+  /** Private working set, as Task Manager's "Memory" column. */
+  memoryBytes: number;
+  /** PNG data URL. */
+  icon: string | null;
+  /** Cay never ends it (system, security, the desktop, services, Cay itself). */
+  protected: boolean;
+}
+
+export interface ProcessId {
+  pid: number;
+  /** FILETIME ticks as a decimal string (too big for a JS number). */
+  created: string;
+}

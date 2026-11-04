@@ -397,3 +397,15 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
 - Commits: small, imperative subject line; reference the phase (e.g. `phase1: alt-tab filter`).
 - **Branches: do not create new branches unless explicitly asked to. All work is committed and
   pushed to `main`.**
+
+## Learned by routine
+
+- **Layout, Phase 3:** `src-tauri/src/processes/`: `mod.rs` = managed `Processes`, the `processes-watcher` thread
+  (through `activity::Watcher`; waits on a condvar until `Processes::panel(true)`, which the hover poller calls on
+  expand/collapse), `list_heavy_processes`; `snapshot.rs` = one `NtQuerySystemInformation` read, parsed at fixed x64
+  offsets (pure `parse`, tested on a synthetic buffer); `logic.rs` (pure: grouping, helper folding, the protected
+  list); `names.rs` (`FileDescription`); `settings.rs` (`processes` block, off by default). `src/features/processes/`:
+  `useHeavyProcesses` (lives in `Island`), `MemorySection`. `apps::process_path(pid)` is the shared exe-path read.
+- **Building while Cay runs from `pnpm tauri dev`:** if this session runs inside that Cay (an agent run), editing Rust in
+  the main checkout restarts Cay and ends the run. Work in a git worktree beside it (`git worktree add ../wpill-<x>
+  <branch>`, `pnpm install` there; its own `target`, ~5 min cold for `cargo test --lib` with `CARGO_INCREMENTAL=0`).

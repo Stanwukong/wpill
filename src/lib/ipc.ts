@@ -19,6 +19,7 @@ import type {
   ApprovalPreview,
   CalendarUpcoming,
   GoogleState,
+  HeavyProcesses,
   SessionAsks,
   QuestionAnswer,
   ClaudeHooksStatus,
@@ -48,6 +49,7 @@ const EVENTS = {
   routinesChanged: "routines:changed",
   googleState: "google:state",
   calendarUpcoming: "calendar:upcoming",
+  processesHeavy: "processes:heavy",
 } as const;
 
 /** Which island shape a reported rect measures. */
@@ -139,6 +141,8 @@ export const commands = {
   calendarOpen: (id: string) => invoke<void>("calendar_open", { id }),
   /** Opens an event's meeting link (only when `hasJoin`). Errors `calendarItemGone`. */
   calendarJoin: (id: string) => invoke<void>("calendar_join", { id }),
+  /** Phase 3: the latest memory-heavy apps (empty until the panel has been open once) and whether they're on. */
+  listHeavyProcesses: (limit?: number) => invoke<HeavyProcesses>("list_heavy_processes", { limit }),
 };
 
 export const on = {
@@ -175,6 +179,9 @@ export const on = {
     listen<GoogleState>(EVENTS.googleState, (e) => cb(e.payload)),
   calendarUpcoming: (cb: (payload: CalendarUpcoming) => void): Promise<UnlistenFn> =>
     listen<CalendarUpcoming>(EVENTS.calendarUpcoming, (e) => cb(e.payload)),
+  /** Every 2 s while the panel is open and `processes.enabled` is on. */
+  processesHeavy: (cb: (payload: HeavyProcesses) => void): Promise<UnlistenFn> =>
+    listen<HeavyProcesses>(EVENTS.processesHeavy, (e) => cb(e.payload)),
 };
 
 /** Unsubscribes listeners registered with `on.*` (safe to call before they resolve). */

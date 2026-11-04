@@ -13,6 +13,8 @@ import { WorkingIndicator } from "../features/sessions/WorkingGlyphs";
 import { mixedAgents } from "../features/sessions/AgentTag";
 import { AgentsSection } from "../features/sessions/AgentsSection";
 import { useSessions } from "../features/sessions/useSessions";
+import { MemorySection } from "../features/processes/MemorySection";
+import { useHeavyProcesses } from "../features/processes/useHeavyProcesses";
 import { useArtTheme } from "../features/media/artTheme";
 import { MediaCard } from "../features/media/MediaCard";
 import { Equalizer, PillArt } from "../features/media/PillMedia";
@@ -53,6 +55,7 @@ export function Island() {
   const mixed = mixedAgents(agentSessions);
   const agentRuns = useAgentRuns();
   const calendar = useCalendar();
+  const heavyProcesses = useHeavyProcesses();
   const calendarListed =
     calendar.connected && (calendar.upcoming.events.length > 0 || calendar.upcoming.tasks.length > 0);
   const workingSessions = agentSessions.filter((s) => s.status === "working");
@@ -129,6 +132,7 @@ export function Island() {
                   mixed={mixed}
                   agent={panelRuns.length > 0 ? <AgentRunItems runs={panelRuns} /> : null}
                 />
+                <MemorySection processes={heavyProcesses} />
                 <AppsList />
               </div>
             </motion.div>

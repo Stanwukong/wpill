@@ -83,6 +83,11 @@ pub fn window_identity(hwnd: HWND) -> (Option<String>, Option<String>) {
     (enumerate::window_title(hwnd), enumerate::exe_path(hwnd))
 }
 
+/// A process's exe path (`PROCESS_QUERY_LIMITED_INFORMATION`, so most elevated processes too).
+pub fn process_path(pid: u32) -> Option<String> {
+    enumerate::process_image_path(pid)
+}
+
 /// `C:\…\chrome.exe` → `chrome.exe`.
 pub fn exe_file_name(path: &str) -> Option<String> {
     file_name(path)

@@ -26,6 +26,8 @@ pub mod events {
     pub const GOOGLE_STATE: &str = "google:state";
     /// Upcoming events and due tasks changed, or one changed phase (Phase 6a).
     pub const CALENDAR_UPCOMING: &str = "calendar:upcoming";
+    /// The memory-heavy apps, every 2 s while the panel is open and `processes.enabled` is on (Phase 3).
+    pub const PROCESSES_HEAVY: &str = "processes:heavy";
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -870,6 +872,42 @@ pub struct WindowInfo {
     pub exe_name: Option<String>,
     /// PNG data URL.
     pub icon: Option<String>,
+}
+
+/// `processes:heavy` and `list_heavy_processes` (Phase 3).
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeavyProcessesPayload {
+    /// `processes.enabled` in settings.json; the panel shows no section while it's off.
+    pub enabled: bool,
+    /// Biggest first.
+    pub groups: Vec<ProcessGroup>,
+}
+
+/// One app: its processes (same exe, plus helpers such as WebView2 it started), summed.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessGroup {
+    /// Stable across refreshes (the lowercased exe path).
+    pub key: String,
+    /// The exe's description ("Google Chrome"), else its file name without `.exe`.
+    pub name: String,
+    pub pids: Vec<ProcessId>,
+    /// Private working set, as Task Manager's "Memory" column.
+    pub memory_bytes: u64,
+    /// PNG data URL.
+    pub icon: Option<String>,
+    /// Cay never ends it (system, security, the desktop, services, Cay itself).
+    pub protected: bool,
+}
+
+/// A process, identified by pid *and* creation time so a reused pid is never mistaken for it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessId {
+    pub pid: u32,
+    /// FILETIME ticks as a decimal string (too big for a JS number).
+    pub created: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
