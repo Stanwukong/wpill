@@ -469,11 +469,12 @@ impl Client {
         self.asking.insert(key(&id), options);
         let tool = self.tools.entry(call_id.clone()).or_default();
         tool.asked = true;
+        let (name, input) = shape(&tool.title, &tool.kind, &tool.input);
         out.push(Out::Permission {
             rpc_id: id,
             tool_call_id: call_id,
-            tool: claude_name(&tool.title, &tool.kind),
-            input: Value::Object(claude_input(&tool.input)),
+            tool: name,
+            input: Value::Object(input),
         });
         out
     }
@@ -537,21 +538,27 @@ impl Client {
         let ended = matches!(status, "completed" | "failed");
         let known = tool.input.keys().any(|k| k != "cwd");
         let mut out = Vec::new();
-        let name = claude_name(&tool.title, &tool.kind);
+        let (name, input) = shape(&tool.title, &tool.kind, &tool.input);
         if !tool.shown && (known || ended || status == "in_progress") {
             tool.shown = true;
             out.push(Out::Event(StreamEvent::Tool {
                 id: id.to_string(),
                 name: name.clone(),
-                input: Value::Object(claude_input(&tool.input)),
+                input: Value::Object(input.clone()),
             }));
         }
         if ended && !tool.done {
             tool.done = true;
             let text = content_text(&call["content"]);
-            if ask_mode && status == "completed" && !tool.asked && is_risky(&tool.kind) {
-                let summary =
-                    super::describe::summary(&name, &Value::Object(claude_input(&tool.input)), "");
+            // Cay's own tools are gated by Cay, and an agent's review of a step isn't the step.
+            let gated_by_cay = name.starts_with("mcp__cay__") || name == REVIEW;
+            if ask_mode
+                && status == "completed"
+                && !tool.asked
+                && is_risky(&tool.kind)
+                && !gated_by_cay
+            {
+                let summary = super::describe::summary(&name, &Value::Object(input), "");
                 out.push(Out::Unasked {
                     tool: name.clone(),
                     summary,
@@ -629,6 +636,38 @@ pub fn claude_name(title: &str, kind: &str) -> String {
         _ if !title.is_empty() && title.len() <= 64 && !title.contains(' ') => title.into(),
         _ => "Tool".into(),
     }
+}
+
+/// How Cay shows an agent's own check of a step (Codex's Auto review).
+const REVIEW: &str = "Review";
+
+/// The tool as Claude Code would name it, and its arguments. Codex reports an MCP call as `{server, tool, arguments}`
+/// (read as `mcp__<server>__<tool>`, so Cay's grants and cards match) and its Auto review of a step as a call with a
+/// `reviewId` (shown as `Review`, naming the reviewed tool).
+fn shape(title: &str, kind: &str, input: &Map<String, Value>) -> (String, Map<String, Value>) {
+    let text = |key: &str| input.get(key).and_then(Value::as_str);
+    if let (Some(server), Some(tool)) = (text("server"), text("tool")) {
+        let args = input
+            .get("arguments")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        return (format!("mcp__{server}__{tool}"), args);
+    }
+    if input.contains_key("reviewId") {
+        let action = input.get("action");
+        let what = action
+            .and_then(|a| a.get("toolName"))
+            .filter(|v| !v.is_null())
+            .or_else(|| action.and_then(|a| a.get("type")))
+            .and_then(Value::as_str);
+        let mut shown = Map::new();
+        if let Some(what) = what {
+            shown.insert("description".into(), json!(what));
+        }
+        return (REVIEW.into(), shown);
+    }
+    (claude_name(title, kind), claude_input(input))
 }
 
 /// The agent's arguments under Claude Code's names (`filePath` → `file_path`, …), without the `cwd` ACP adds.
@@ -1057,6 +1096,36 @@ mod tests {
         assert!(
             matches!(&events(&out)[0], StreamEvent::Result(r) if r.subtype == "error_max_turns")
         );
+    }
+
+    #[test]
+    fn codex_mcp_calls_and_reviews_read_clearly() {
+        let (mut c, _) = open(setup());
+        let out = feed(
+            &mut c,
+            json!({ "jsonrpc": "2.0", "method": "session/update", "params": { "sessionId": SID,
+            "update": { "sessionUpdate": "tool_call", "toolCallId": "m", "kind": "execute", "status": "completed",
+                        "rawInput": { "server": "cay", "tool": "list_windows", "arguments": {} } } } }),
+        );
+        assert!(events(&out).contains(&StreamEvent::Tool {
+            id: "m".into(),
+            name: "mcp__cay__list_windows".into(),
+            input: json!({})
+        }));
+        // Cay asked about its own tool itself: not a step that ran unasked, even in Ask mode.
+        assert!(!out.iter().any(|o| matches!(o, Out::Unasked { .. })));
+        let out = feed(
+            &mut c,
+            json!({ "jsonrpc": "2.0", "method": "session/update", "params": { "sessionId": SID,
+            "update": { "sessionUpdate": "tool_call", "toolCallId": "r", "kind": "execute", "status": "completed",
+                        "rawInput": { "reviewId": "x", "threadId": "t", "action": { "type": "mcpToolCall", "toolName": "list_windows" } } } } }),
+        );
+        assert!(events(&out).contains(&StreamEvent::Tool {
+            id: "r".into(),
+            name: "Review".into(),
+            input: json!({ "description": "list_windows" })
+        }));
+        assert!(!out.iter().any(|o| matches!(o, Out::Unasked { .. })));
     }
 
     #[test]

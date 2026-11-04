@@ -279,7 +279,10 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
   decide` (you may click the card first). Its `opencode.exe` is the real exe behind npm's shim
   (`node_modules\opencode-ai\bin`). Codex runs through `@agentclientprotocol/codex-acp` (not Zed's deprecated
   package), started as `node.exe <dist\index.js>`; its "reject once" cancels the whole turn. An ACP mode the agent refuses
-  ends the run; the first message waits for the mode.
+  ends the run; the first message waits for the mode. An ACP run silent for 10 minutes is stopped (`ACP_SILENCE`).
+  A `pnpm tauri dev` started in the background and then stopped can leave Vite on port 1420 and `cay.exe` running:
+  free the port and quit Cay before starting another, and never send `agent-test quit` with no Cay running (it starts
+  one).
 - **The hook forwarder must stay quiet and fast.** `cay.exe hook` runs before Tauri, never panics
   (release is `panic = "abort"`, a non-zero exit shows as a hook error in Claude Code) and bounds every wait. The only
   thing it ever prints is a `PermissionRequest` decision you made in the island (2.8a); with no decision it prints

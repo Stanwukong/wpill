@@ -1378,15 +1378,18 @@ Tasks stay on for ACP runs (desktop tools and Gmail off until a scripted look-an
 - [x] Codex (`@agentclientprotocol/codex-acp` 2.5.0 through Node: Auto = its "Auto review", Accept edits =
       `workspace-write`, Ask and Plan = `read-only`; never `agent-full-access`), checked live through Cay
 - [ ] Goose (`goose acp`, `GOOSE_MODE` in the environment, Ollama, on the author's other machine)
-- [ ] Check that each ACP agent connects to Cay's MCP server and calls a Cay tool (a desktop look)
+- [x] Each ACP agent connects to Cay's MCP server and calls a Cay tool: `list_windows` from OpenCode and Codex in
+      Auto (no card, glow). Codex reports MCP calls as `{server, tool, arguments}` and its Auto review as a call with a
+      `reviewId`: shown as `mcp__cay__<tool>` and "Review", neither counted by the watchdog
 - [ ] Modes (D48): Auto (default), Accept edits, Ask, Plan for every backend, mapped to the agent's nearest setting
       (table in D48); never an approve-everything setting. Each backend: unit tests of its launch per mode (Ask asks
       for writes and shell; nothing maps to approve-everything), and an ignored live test that Ask asks first
 - [x] Cay's MCP tools for ACP runs: all of them (D48), offered per connection (`mcp::Offer`: no `approve`). Looks, actions and Calendar/Tasks follow the mode as for Claude
       Code; Gmail asks in Cay in every mode; after reading mail, desktop actions ask in Cay (D46)
 
-- [ ] An inactivity limit for ACP runs (a free model stalled one run until Stop); Cay's turn and budget limits don't
-      reach ACP agents yet
+- [x] An inactivity limit for ACP runs: 10 minutes with nothing from the agent (waiting on you or a desktop action
+      doesn't count) stops the run with a note (`ACP_SILENCE`, on the `agent-timer` thread)
+- [ ] Cay's turn and budget limits don't reach ACP agents (noted for the README)
 
 **2.9c Settings and docs**
 - [ ] `agent.backends` block in settings.json (`{ "<id>": { enabled, path, args, provider, model } }`) and

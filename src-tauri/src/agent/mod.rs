@@ -93,6 +93,9 @@ const RESUME_JUMP_MS: i64 = 2 * 60_000;
 const AWAY_IDLE_MS: u64 = 5 * 60_000;
 /// Messages named per run for approvals, at most.
 const MAX_MAIL_LABELS: usize = 200;
+/// An ACP run that's working, isn't waiting on you and has sent nothing (not even reasoning) for this long is stopped:
+/// a stalled model would otherwise hold the run open until you press Stop (2.9b).
+const ACP_SILENCE: Duration = Duration::from_secs(10 * 60);
 
 /// `cay.exe mcp`: `main.rs` calls this before anything else starts.
 pub fn mcp_bridge() -> i32 {
@@ -138,6 +141,8 @@ struct Slot {
     process: Option<run::Process>,
     /// An ACP agent's protocol state for the current process (2.9b); `None` for Claude Code.
     acp: Option<acp::Client>,
+    /// When the run's agent last sent anything: an ACP run silent for `ACP_SILENCE` is stopped (2.9b).
+    heard: Instant,
     /// Bumped per process, so a late line or exit from an earlier process is ignored.
     generation: u32,
     dir: PathBuf,
@@ -1376,6 +1381,7 @@ fn start_timer(app: AppHandle, stop: Arc<Handle>) -> AppResult<Watcher> {
                     if !expired.is_empty() {
                         inner.settle(expired, false, "timeout", &mut after);
                     }
+                    stop_silent(&mut inner, now, &mut after);
                 }
                 after.run(&app, &agents);
             }
@@ -1385,6 +1391,37 @@ fn start_timer(app: AppHandle, stop: Arc<Handle>) -> AppResult<Watcher> {
             let _ = unsafe { SetEvent(signal.0) };
         },
     )
+}
+
+/// Stops ACP runs whose agent has gone quiet (`ACP_SILENCE`). Waiting on your approval or on a desktop action isn't
+/// silence: the clock restarts once it's answered or done.
+fn stop_silent(inner: &mut Inner, now: Instant, after: &mut After) {
+    let quiet: Vec<String> = inner
+        .slots
+        .iter()
+        .filter(|s| s.acp.is_some() && s.process.is_some() && s.run.is_live())
+        .filter(|s| now.duration_since(s.heard) >= ACP_SILENCE)
+        .map(|s| s.run.id.clone())
+        .collect();
+    for run_id in quiet {
+        let acting = inner.acting.as_ref().is_some_and(|(r, _, _)| *r == run_id);
+        if acting || inner.approvals.has_pending(&run_id) {
+            if let Some(slot) = inner.slot(&run_id) {
+                slot.heard = now;
+            }
+            continue;
+        }
+        let minutes = ACP_SILENCE.as_secs() / 60;
+        log::warn!("agent run {run_id}: nothing from the agent for {minutes} minutes; stopping it");
+        inner.audit(&run_id, "silent", json!({ "minutes": minutes }));
+        note_error(
+            inner,
+            &run_id,
+            format!("The agent sent nothing for {minutes} minutes, so Cay stopped it."),
+            after,
+        );
+        stop_run(inner, &run_id, after);
+    }
 }
 
 /// The `agent-routines` thread: one look at every routine per wake-up, sleeping until the next due time (at
@@ -1685,6 +1722,7 @@ fn start_acp(
     let outs = client.prompt(&message);
     slot.acp = Some(client);
     slot.process = Some(process);
+    slot.heard = Instant::now();
     after.outputs.push(AgentOutputPayload {
         run_id: run_id.to_string(),
         entry,
@@ -1774,6 +1812,7 @@ fn on_line(app: &AppHandle, run_id: &str, generation: u32, line: &[u8]) {
         let Some(slot) = inner.slot(run_id).filter(|s| s.generation == generation) else {
             return;
         };
+        slot.heard = Instant::now();
         match slot.acp.as_mut() {
             Some(client) => {
                 let outs = client.on_line(line);
@@ -2169,6 +2208,7 @@ fn start_run(
             launch,
             process: None,
             acp: None,
+            heard: Instant::now(),
             generation: 0,
             dir,
             patient,
