@@ -1298,7 +1298,7 @@ Phase 6. Kick-off prompt: [prompts/phase-2.9-other-agents.md](prompts/phase-2.9-
 - Don't write an agent loop on raw model APIs (Ollama, OpenAI-compatible). An existing harness (Goose, OpenCode, …)
   runs the model; Cay is the client.
 
-**Agreed design (D47, 2026-11-03).** The author's calls: the full rename (IPC names included); update Codex and
+**Agreed design (D47, 2026-11-03; 2.9b's modes revised by D48, 2026-11-04).** The author's calls: the full rename (IPC names included); update Codex and
 require a minimum version; the live Goose/Ollama test runs on another machine (the dev PC has 8 GB RAM); Calendar and
 Tasks stay on for ACP runs (desktop tools and Gmail off until a scripted look-and-act test passes).
 
@@ -1370,15 +1370,17 @@ Tasks stay on for ACP runs (desktop tools and Gmail off until a scripted look-an
       `session/request_permission` → `agentApproval` (Allow → `allow_once`, Deny → `reject_once`, never
       `allow_always`); `session/load` for follow-ups when advertised, else the process stays with an idle timeout.
       Client fs/terminal capabilities off
-- [ ] Watchdog: a `tool_call` of kind edit / delete / move / execute / fetch reaching `in_progress` without a permission
-      request for its id stops the run, is audited, and shows "ran a step without asking"
+- [ ] Watchdog (Ask mode only, D48): a `tool_call` of kind edit / delete / move / execute / fetch reaching `in_progress`
+      without a permission request for its id stops the run, is audited, and shows "ran a step without asking"
 - [ ] Same suspended start + Job Object (`job.rs`), long paths and per-run folder
-- [ ] Goose first (`goose acp`, `GOOSE_MODE=approve` in the environment, Ollama); verify it connects to Cay's MCP
-      server; then OpenCode (`opencode acp`, per-run `"*": "ask"`) and Codex (`codex-acp`) if they pass the same check
-- [ ] Ask only for non-Claude backends. Each backend: a unit test that its launch forces asking, and an ignored live
-      test that a write and a shell command each ask first (run on the author's other machine)
-- [ ] Cay's MCP tools for ACP runs: Calendar and Tasks on (asked in Cay; an allowed card leaves the D25 one-time
-      grant); desktop tools and Gmail off until a scripted look-and-act test passes
+- [ ] OpenCode first (`opencode acp`, per-run config through `OPENCODE_CONFIG_CONTENT` / a per-run file), then Codex
+      (`codex-acp`), then Goose (`goose acp`, `GOOSE_MODE` in the environment, Ollama, on the author's other machine);
+      verify each connects to Cay's MCP server
+- [ ] Modes (D48): Auto (default), Accept edits, Ask, Plan for every backend, mapped to the agent's nearest setting
+      (table in D48); never an approve-everything setting. Each backend: unit tests of its launch per mode (Ask asks
+      for writes and shell; nothing maps to approve-everything), and an ignored live test that Ask asks first
+- [ ] Cay's MCP tools for ACP runs: all of them (D48). Looks, actions and Calendar/Tasks follow the mode as for Claude
+      Code; Gmail asks in Cay in every mode; after reading mail, desktop actions ask in Cay (D46)
 
 **2.9c Settings and docs**
 - [ ] `agent.backends` block in settings.json (`{ "<id>": { enabled, path, args, provider, model } }`) and

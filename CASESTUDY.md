@@ -829,6 +829,34 @@ approvals); per-agent native run paths (more code for the same events); Goose's 
 decides what asks); brand colours or monograms per agent (vendor look, D30); Gmail and desktop tools for local models
 from day one (the worst prompt-injection case).
 
+### D48: Other agents' runs use the same four modes as Claude Code, Auto by default (Phase 2.9b; reverses part of D47)
+*What:* the author's call (2026-11-04): runs on Codex, OpenCode and Goose shouldn't ask about almost every step, which
+would undo the point of an automated agent; they follow the same protocol as Claude Code's runs (D40). Every backend
+offers Auto (default), Accept edits, Ask and Plan, per task, per routine and switchable like Claude Code's, each
+mapped to the agent's own nearest setting:
+
+| Cay mode | Claude Code | Codex (`codex-acp`) | Goose | OpenCode (per-run rules) |
+|---|---|---|---|---|
+| Auto | classifier | workspace sandbox; leaving it or the network asks | `smart_approve` | edits in the folder and safe commands run; other shell, outside the folder and web fetches ask |
+| Accept edits | `acceptEdits` | edits run, the rest asks | `smart_approve` | edits allowed, shell asks |
+| Ask | `default` | read-only, asks | `approve` | `"*": "ask"` |
+| Plan | `plan` | read-only | `chat` | its read-only `plan` agent |
+
+*Reversed from D47:* "Ask only" for non-Claude backends; the watchdog in every mode (now Ask only, where it checks the
+agent really asks; in the other modes steps running unasked is the point); desktop tools and Gmail off until a
+scripted look-and-act test (now available to every backend from the start). *Desktop actions follow the mode* (the
+author's call, chosen over asking in Cay for agents without a classifier): in Auto they run without a card, as for
+Claude Code, but no classifier judges them; the screen glow and the your-input-aborts guard (D27) stay. *What stays:*
+the agents' approve-everything settings (Codex full access, Goose `auto`, OpenCode `allow` for everything) are never
+used, as `bypassPermissions` isn't (D40); Gmail asks in Cay in every mode, and a run that has read mail has its desktop
+actions asked in Cay even in Auto (D46); only a click decides what reaches the island. *Order:* OpenCode first (built-in
+ACP, free models, testable on the dev machine), then Codex through `codex-acp`, then Goose on the author's other
+machine. *Honest difference:* "Auto" protects less on OpenCode (pattern rules) and Goose (the model's own judgement)
+than on Claude Code (a classifier) or Codex (an OS sandbox); the command window will say which agent a run uses, and
+the README says what each Auto means. *Alternatives:* Ask only (D47; the author found it defeats automation); asking in
+Cay for desktop actions on agents without a classifier (recommended, declined); OpenCode Auto allowing all shell with
+a risky-pattern list (a list can't catch everything) or edits only (too many cards).
+
 ## 5. Challenges & resolutions
 
 ### C1: The panel collapsed while the cursor was visibly on it
@@ -1051,6 +1079,7 @@ so tests and Connect must both say which folder they touch; and a hook only prov
 | 2026-11-03 | Stage 2.9a built: Codex sessions through the same forwarder (`--agent codex`), Codex Connect in the tray (unquoted 8.3 path, Codex ≥ 0.166.0, `/hooks` trust), `apply_patch` diffs, the agent tag and the "Agents" heading (motion-designer). Codex 0.166's hooks checked in a scratch `CODEX_HOME` and its TUI (C15). All 12 manual checks passed (the author). OpenCode spike next. |
 | 2026-11-03 | OpenCode spike (1.19.5): `permission.ask` is never called, but a plugin can answer through OpenCode's own client. The author chose to build OpenCode sessions in 2.9a: Cay's `cay.js` plugin feeds the same forwarder (`--agent opencode`, tools renamed in Rust), answers permissions through the client, fails open (checked with Cay closed). Manual checks pending. |
 | 2026-11-04 | OpenCode's manual checks passed (the author): **stage 2.9a signed off**, Codex and OpenCode sessions in the island. Next: 2.9b (ACP runs). |
+| 2026-11-04 | 2.9b started. The author reversed D47's "Ask only": other agents' runs get Claude Code's four modes, Auto by default, desktop actions following the mode (D48); OpenCode first, then Codex, then Goose. |
 | 2026-11-03 | Stage 2.9a, step 1: the rename (`claude/` → `sessions/`, session IPC names, `features/sessions/`, `--font-agent`, `data-agent`), no behaviour change; 230 Rust tests, clippy and typecheck clean. Codex updated to 0.166.0. |
 
 ## 7. Results & metrics
