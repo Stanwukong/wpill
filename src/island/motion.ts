@@ -35,3 +35,6 @@ export const memoryReorder: Transition = { duration: 0.32, ease: [0.22, 1, 0.36,
 
 /** Memory rows: a new app in the list fades in (like the running apps' tiles, without the rise). */
 export const memoryRowIn: Transition = { duration: 0.18, ease: "easeOut" };
+
+/** Memory rows (3b): an app that was ended fades out, faster than rows come in; the rest then glide up (memoryReorder). */
+export const memoryRowOut: Transition = { duration: 0.14, ease: "easeIn" };

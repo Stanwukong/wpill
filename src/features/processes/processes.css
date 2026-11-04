@@ -1,5 +1,5 @@
 /* Panel section (3a): AgentsSection's and Calendar's density (30 px rows, 12 px uppercase heading), at its natural
-   height in the panel's scroller (island.css). Read-only: no hover state, nothing to press. */
+   height in the panel's scroller (island.css). The row itself isn't pressable; only its End control (3b) is. */
 .memory {
   margin-bottom: 14px;
 }
@@ -19,7 +19,6 @@
   padding: 0;
 }
 
-/* Room at the right end for 3b's End button: it goes after the figure. */
 .memory-row {
   height: 30px;
   display: flex;
@@ -84,8 +83,74 @@
   color: var(--island-muted);
 }
 
+/* Ending (3b): "Ending…" in the figure's place until Rust answers (the confirm box, then up to ~7 s). */
+.memory-row[data-ending] .memory-row__size {
+  color: var(--agent-status);
+}
+
+/* A result in the bar's and the figure's place, in the figure's small muted type; the name ellipsizes first. */
+.memory-row__note {
+  flex: none;
+  max-width: 62%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--island-muted);
+}
+
+/* Always 22 px wide, empty for protected apps, so the columns line up and nothing moves when the control shows. */
+.memory-row__end-slot {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0 -4px 0 -4px;
+}
+
+/* A quiet ×, like the agent rows' Stop: it shows on the row's hover and lights up on its own. */
+.memory-row__end {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--island-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 120ms ease-out,
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.memory-row:hover .memory-row__end:not(:disabled) {
+  opacity: 1;
+}
+
+.memory-row__end:hover:not(:disabled) {
+  color: var(--island-fg);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.memory-row__end:active:not(:disabled) {
+  background: var(--tile-active);
+}
+
+/* Another End is in flight: nothing to press, nothing shown. */
+.memory-row__end:disabled {
+  cursor: default;
+}
+
+.memory-row__end-glyph {
+  width: 12px;
+  height: 12px;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .memory-row__fill {
+  .memory-row__fill,
+  .memory-row__end {
     transition: none;
   }
 }

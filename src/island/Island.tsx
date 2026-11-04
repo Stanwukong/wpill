@@ -132,7 +132,11 @@ export function Island() {
                   mixed={mixed}
                   agent={panelRuns.length > 0 ? <AgentRunItems runs={panelRuns} /> : null}
                 />
-                <MemorySection processes={heavyProcesses} />
+                <MemorySection
+                  processes={heavyProcesses.processes}
+                  ends={heavyProcesses.ends}
+                  onEnd={heavyProcesses.end}
+                />
                 <AppsList />
               </div>
             </motion.div>

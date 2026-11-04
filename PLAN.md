@@ -51,7 +51,7 @@ checks passed.** Next, per the roadmap: [Phase 3, memory-heavy apps](#phase-3-me
 last 4a-5 (release).
 **Phase 3 (memory-heavy apps): design agreed (2026-11-04, D49); stage 3a (the read-only list) is signed off
 (2026-11-04, all 6 manual checks passed) on branch `self/phase-3-memory-heavy` (draft PR #2); 3b.1 (ending an app in
-Rust, with its confirm box) is built; 3b.2 (the panel's End button and row states) is next.** See
+Rust, with its confirm box) and 3b.2 (the panel's End button and row states) are built; the 3b manual check is next.** See
 [Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
@@ -1710,8 +1710,32 @@ grouping (b), a native confirm box (a), and no agent tool for now (a).
         command, so the page can't skip it. 8 new tests (290 in all); a live `--ignored` test ends a windowless
         `cmd` → `ping` tree it started (ping first). The `WM_CLOSE` and `prompted` paths need a window, so they're
         in the 3b manual check, not tested yet.
-  - [ ] 3b.2 Confirm box and row states (closing…, access denied, ended) via `motion-designer`.
+  - [x] 3b.2 Confirm box and row states (closing…, access denied, ended) via `motion-designer`.
+  - Built 2026-11-04: a quiet × in a fixed 22 px slot after the figure (shown on row hover; protected rows keep the
+        slot empty, so nothing shifts), "Ending…" in place of the figure while the command runs, then one line in the
+        figure's type: "Ended" (the row fades out with the next push), "Left open: it's asking you something",
+        "Runs as administrator; Cay can't end it", "Couldn't end it" / "No longer running". The state lives in
+        `useHeavyProcesses` (in `Island`), so it survives the panel collapsing while the confirm box is up; messages
+        clear when the group leaves the list or comes back with other pids, never on a timer. Headless renders at
+        640 and 420 px reviewed.
   - [ ] 3b manual check (≈6 items, throwaway processes only; never the author's apps without asking).
+
+**Manual check (3b)** (`pnpm tauri dev` from the branch with `$env:RUST_LOG='info,cay_lib=debug'`; for the check set
+`"processes": { "enabled": true, "limit": 20 }` so small throwaway apps get a row, and put 6 back afterwards. Grouping
+is by exe path, so End ends *every* window of that app: use apps you don't otherwise have open.)
+1. **Protected rows:** Windows Explorer, Desktop Window Manager, Antimalware and the like have no ×; other rows show it
+   only while hovered, and nothing in the row moves when it appears.
+2. **Cancel:** open Paint, hover its row, click × → the confirm box ("End Paint? …", Cancel the default) appears in
+   front; Cancel → the row is back to normal and Paint still runs. The log has `end Paint: cancelled`.
+3. **Ended:** × on Paint with an empty canvas → OK → "Ending…", then Paint closes, the row fades out and the rows below
+   glide up. The log has `end Paint: N processes: …` with `Closed`/`Ended` counts, no titles.
+4. **Asking to save:** draw one stroke in a new Paint, × → OK → Paint shows its own "Save changes?" → the row reads
+   "Left open: it's asking you something" after ~5 s and Paint is still running (answer Paint's dialog yourself).
+5. **Administrator:** start Registry Editor (`regedit`, it always runs elevated) → × → OK → "Runs as administrator; Cay
+   can't end it", and regedit still runs.
+6. **Focus and collapse:** while the confirm box is up, move away so the panel collapses, then click OK; reopening the
+   panel shows the right row state. The island never takes focus, and clicks beside the panel still reach the app
+   underneath.
 
 **Manual check (3a)** (`pnpm tauri dev` from the branch with `$env:RUST_LOG='info,cay_lib=debug'`; quit any other Cay
 first)
