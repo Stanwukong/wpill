@@ -365,7 +365,7 @@ fn outcome(r: &TurnResult) -> (AgentStatus, AgentEndReason, Option<String>) {
         _ => (
             AgentStatus::Failed,
             AgentEndReason::Error,
-            detail().or_else(|| Some("Claude Code reported an error.".into())),
+            detail().or_else(|| Some("The agent reported an error.".into())),
         ),
     }
 }

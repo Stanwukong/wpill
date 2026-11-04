@@ -128,6 +128,59 @@ pub fn opencode(exe: &str, mode: AgentMode, model: Option<&str>) -> AcpLaunch {
     }
 }
 
+/// Codex's `codex-acp` mode for a Cay mode (D48): its "Auto review" (it asks only about actions it judges unsafe),
+/// workspace edits, or read-only. Never `agent-full-access`.
+pub fn codex_mode(mode: AgentMode) -> &'static str {
+    match mode {
+        AgentMode::Auto => "agent",
+        AgentMode::AcceptEdits => "workspace-write",
+        AgentMode::Default | AgentMode::Plan => "read-only",
+    }
+}
+
+/// `codex-acp` (a Node script) for a mode and (optionally) a model. The mode is set twice: at startup
+/// (`INITIAL_AGENT_MODE`) and as the session's config, which the first message waits for.
+pub fn codex(node: &str, script: &str, mode: AgentMode, model: Option<&str>) -> AcpLaunch {
+    let agent_mode = codex_mode(mode);
+    let mut config = vec![
+        ("mode".to_string(), agent_mode.to_string()),
+        (
+            "collaboration_mode".to_string(),
+            if mode == AgentMode::Plan {
+                "plan"
+            } else {
+                "default"
+            }
+            .to_string(),
+        ),
+    ];
+    if let Some(model) = model.map(str::trim).filter(|m| !m.is_empty()) {
+        config.push(("model".into(), model.into()));
+    }
+    AcpLaunch {
+        exe: node.into(),
+        args: vec![script.into()],
+        env: vec![("INITIAL_AGENT_MODE".into(), agent_mode.into())],
+        config,
+    }
+}
+
+/// `node.exe` and `codex-acp`'s script (`@agentclientprotocol/codex-acp`, installed with npm): the shim on PATH can't
+/// be started without a shell, so Cay runs Node on the script itself.
+pub fn codex_adapter() -> Option<(PathBuf, PathBuf)> {
+    let path = std::env::var_os("PATH")?;
+    let dirs: Vec<PathBuf> = std::env::split_paths(&path).collect();
+    let script = dirs.iter().find_map(|dir| {
+        let s = dir.join(r"node_modules\@agentclientprotocol\codex-acp\dist\index.js");
+        (dir.join("codex-acp.cmd").is_file() && s.is_file()).then_some(s)
+    })?;
+    let node = dirs
+        .iter()
+        .map(|d| d.join("node.exe"))
+        .find(|n| n.is_file())?;
+    Some((node, script))
+}
+
 /// The real `opencode.exe` you'd run: on PATH, or behind npm's shim (`node_modules\opencode-ai\bin\opencode.exe`,
 /// which a shim can't be started without a shell).
 pub fn opencode_exe() -> Option<PathBuf> {
@@ -248,6 +301,33 @@ mod tests {
         assert_eq!(content["permission"], opencode_rules(AgentMode::Plan));
         let auto = opencode("x", AgentMode::Auto, Some("  "));
         assert_eq!(auto.config, vec![("mode".into(), "build".into())]);
+    }
+
+    /// D47/D48's test for Codex: Ask and Plan are read-only (every edit and network use asks), and nothing maps
+    /// to full access.
+    #[test]
+    fn codex_never_approves_everything_and_ask_asks() {
+        assert_eq!(codex_mode(AgentMode::Default), "read-only");
+        assert_eq!(codex_mode(AgentMode::Plan), "read-only");
+        for mode in ALL {
+            assert_ne!(codex_mode(mode), "agent-full-access");
+            let l = codex("node.exe", "index.js", mode, None);
+            assert!(l
+                .env
+                .iter()
+                .chain(l.config.iter())
+                .all(|(_, v)| !v.contains("full")));
+            assert_eq!(
+                l.env,
+                vec![("INITIAL_AGENT_MODE".into(), codex_mode(mode).into())]
+            );
+            assert_eq!(l.config[0], ("mode".into(), codex_mode(mode).into()));
+        }
+        let plan = codex("node.exe", "index.js", AgentMode::Plan, Some("gpt-6-luna"));
+        assert_eq!(plan.args, vec!["index.js"]);
+        assert_eq!(plan.config[1], ("collaboration_mode".into(), "plan".into()));
+        assert_eq!(plan.config[2], ("model".into(), "gpt-6-luna".into()));
+        assert_eq!(codex_mode(AgentMode::Auto), "agent");
     }
 
     #[test]

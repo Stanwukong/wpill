@@ -301,6 +301,7 @@ pub enum AgentBackend {
     #[default]
     Claude,
     Opencode,
+    Codex,
 }
 
 impl AgentBackend {
@@ -308,6 +309,7 @@ impl AgentBackend {
         match self {
             AgentBackend::Claude => "Claude Code",
             AgentBackend::Opencode => "OpenCode",
+            AgentBackend::Codex => "Codex",
         }
     }
 }

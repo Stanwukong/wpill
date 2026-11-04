@@ -356,7 +356,7 @@ export interface ClaudeHooksStatus {
 }
 
 /** The agent a run uses (2.9b). Mirrors Rust's `AgentBackend`. */
-export type AgentBackend = "claude" | "opencode";
+export type AgentBackend = "claude" | "opencode" | "codex";
 
 export interface AgentRun {
   runId: string;

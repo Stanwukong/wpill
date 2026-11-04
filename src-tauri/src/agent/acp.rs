@@ -61,7 +61,10 @@ enum Call {
     New,
     Load,
     Prompt,
-    Config,
+    /// `critical`: the run's mode; refused means the run stops rather than go on in another mode.
+    Config {
+        critical: bool,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -99,6 +102,8 @@ pub struct Client {
     can_load: bool,
     queued: VecDeque<String>,
     prompting: bool,
+    /// Config changes sent and not answered yet: the first prompt waits for them.
+    configuring: u32,
     text: String,
     tools: HashMap<String, ToolCall>,
     /// Permission requests waiting for an answer: JSON-RPC id → their options.
@@ -129,6 +134,7 @@ impl Client {
             can_load: false,
             queued: VecDeque::new(),
             prompting: false,
+            configuring: 0,
             text: String::new(),
             tools: HashMap::new(),
             asking: HashMap::new(),
@@ -160,7 +166,7 @@ impl Client {
     }
 
     fn next_prompt(&mut self) -> Vec<Out> {
-        if self.phase != Phase::Ready || self.prompting {
+        if self.phase != Phase::Ready || self.prompting || self.configuring > 0 {
             return Vec::new();
         }
         let (Some(text), Some(session)) = (self.queued.pop_front(), self.session.clone()) else {
@@ -180,8 +186,10 @@ impl Client {
         let Some(session) = self.session.clone() else {
             return Vec::new();
         };
+        self.configuring += 1;
+        let critical = is_mode(id);
         let bytes = self.request(
-            Call::Config,
+            Call::Config { critical },
             "session/set_config_option",
             json!({ "sessionId": session, "configId": id, "value": value }),
         );
@@ -270,6 +278,9 @@ impl Client {
                 }
                 self.phase = Phase::Ready;
                 let mut out = self.configure(result.get("configOptions"));
+                if self.phase == Phase::Broken {
+                    return out;
+                }
                 out.push(Out::Event(StreamEvent::Init {
                     session_id: self.session.clone().unwrap_or_default(),
                     model: self.model.clone(),
@@ -288,7 +299,14 @@ impl Client {
                     (_, Some(_)) => ("error_during_execution", true),
                     ("end_turn", None) => ("success", false),
                     ("max_turn_requests", None) => ("error_max_turns", true),
-                    ("cancelled", None) => ("cancelled", true),
+                    // Cay never cancels a turn (Stop ends the process), so this is the agent's own answer to a
+                    // declined step: Codex's "reject once" option cancels the turn.
+                    ("cancelled", None) => {
+                        out.push(Out::Notice(
+                            "The agent ended this turn after a step was declined.".into(),
+                        ));
+                        ("success", false)
+                    }
                     ("refusal", None) => ("error_refusal", true),
                     ("max_tokens", None) => ("error_max_tokens", true),
                     _ => ("success", false),
@@ -310,13 +328,22 @@ impl Client {
                 out.extend(self.next_prompt());
                 out
             }
-            (Call::Config, None) => {
+            (Call::Config { .. }, None) => {
+                self.configuring = self.configuring.saturating_sub(1);
                 self.configure_model(result.get("configOptions"));
-                Vec::new()
+                self.next_prompt()
             }
-            (Call::Config, Some(e)) => vec![Out::Notice(format!(
-                "The agent didn't change a setting: {e}"
-            ))],
+            (Call::Config { critical: true }, Some(e)) => {
+                self.broken(format!("The agent didn't switch to this run's mode: {e}"))
+            }
+            (Call::Config { critical: false }, Some(e)) => {
+                self.configuring = self.configuring.saturating_sub(1);
+                let mut out = vec![Out::Notice(format!(
+                    "The agent didn't change a setting: {e}"
+                ))];
+                out.extend(self.next_prompt());
+                out
+            }
             (Call::Initialize | Call::New | Call::Load, Some(e)) => {
                 self.broken(format!("The agent couldn't start: {e}"))
             }
@@ -373,6 +400,10 @@ impl Client {
             }
             if has {
                 out.extend(self.set_config(&id, &value));
+            } else if is_mode(&id) {
+                return self.broken(format!(
+                    "The agent has no {id} \"{value}\" for this run's mode."
+                ));
             } else {
                 out.push(Out::Notice(format!(
                     "The agent has no {id} \"{value}\"; it keeps its own."
@@ -542,6 +573,12 @@ impl Client {
         }
         vec![Out::Event(StreamEvent::Text(cut(text.trim(), MAX_TEXT)))]
     }
+}
+
+/// Config options that decide what the agent may do without asking (OpenCode's `mode`, Codex's `mode` and
+/// `collaboration_mode`).
+fn is_mode(id: &str) -> bool {
+    matches!(id, "mode" | "collaboration_mode")
 }
 
 /// Steps Ask mode promises to ask about (the watchdog's kinds).
@@ -956,11 +993,44 @@ mod tests {
             (json!("session/set_config_option"), json!("plan"))
         );
         assert_eq!(sets[1]["params"]["configId"], json!("model"));
+        // A mode the agent doesn't have ends the run rather than running in another mode; a model is only a note.
         let config = vec![("mode".to_string(), "chat".to_string())];
+        let (_, out) = open(Setup { config, ..setup() });
+        assert!(matches!(&events(&out)[..], [StreamEvent::Result(r)] if r.is_error));
+        let config = vec![("model".to_string(), "gpt-9".to_string())];
         let (_, out) = open(Setup { config, ..setup() });
         assert!(out
             .iter()
-            .any(|o| matches!(o, Out::Notice(n) if n.contains("chat"))));
+            .any(|o| matches!(o, Out::Notice(n) if n.contains("gpt-9"))));
+    }
+
+    #[test]
+    fn the_first_prompt_waits_for_the_mode() {
+        let config = vec![("mode".to_string(), "plan".to_string())];
+        let (mut c, out) = open(Setup { config, ..setup() });
+        let set = written(&out)[0].clone();
+        assert_eq!(set["params"]["value"], json!("plan"));
+        // Asked before the agent confirmed the mode: nothing is sent yet.
+        assert!(c.prompt("go").is_empty());
+        let out = feed(
+            &mut c,
+            json!({ "jsonrpc": "2.0", "id": set["id"], "result": { "configOptions": [] } }),
+        );
+        assert_eq!(written(&out)[0]["method"], json!("session/prompt"));
+
+        // Refused: the run ends with the reason, and the prompt is never sent.
+        let config = vec![("mode".to_string(), "plan".to_string())];
+        let (mut c, out) = open(Setup { config, ..setup() });
+        let set = written(&out)[0].clone();
+        c.prompt("go");
+        let out = feed(
+            &mut c,
+            json!({ "jsonrpc": "2.0", "id": set["id"], "error": { "code": -1, "message": "nope" } }),
+        );
+        assert!(written(&out).is_empty());
+        assert!(
+            matches!(&events(&out)[0], StreamEvent::Result(r) if r.is_error && r.errors[0].contains("mode"))
+        );
     }
 
     #[test]
@@ -986,6 +1056,20 @@ mod tests {
         );
         assert!(
             matches!(&events(&out)[0], StreamEvent::Result(r) if r.subtype == "error_max_turns")
+        );
+    }
+
+    #[test]
+    fn a_turn_the_agent_cancels_after_a_decline_ends_normally() {
+        let (mut c, _) = open(setup());
+        let p = written(&c.prompt("x"))[0].clone();
+        let out = feed(
+            &mut c,
+            json!({ "jsonrpc": "2.0", "id": p["id"], "result": { "stopReason": "cancelled" } }),
+        );
+        assert!(matches!(&out[0], Out::Notice(n) if n.contains("declined")));
+        assert!(
+            matches!(&events(&out)[0], StreamEvent::Result(r) if r.subtype == "success" && !r.is_error)
         );
     }
 

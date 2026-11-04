@@ -41,6 +41,7 @@ pnpm typecheck              # tsc --noEmit
 .\src-tauri\target\debug\cay.exe agent-test start <folder> "<prompt>" haiku 4 [auto|default|acceptEdits|plan]   # mode defaults to default (Ask) for tests
 .\src-tauri\target\debug\cay.exe agent-test mode <runId> acceptEdits   # switch a run's permission mode (2.8e)
 .\src-tauri\target\debug\cay.exe agent-test start <folder> "<prompt>" opencode/deepseek-v4.1-flash-free 6 auto opencode   # an ACP run on OpenCode (2.9b)
+.\src-tauri\target\debug\cay.exe agent-test start <folder> "<prompt>" gpt-6-luna 4 default codex   # an ACP run on Codex (codex-acp; uses your Codex login)
 .\src-tauri\target\debug\cay.exe agent-test decide <requestId> allow|deny [run]   # also: send, stop, stop-all, show, hide, quit
 .\src-tauri\target\debug\cay.exe agent-test look screenshot '{"hwnd":123}' C:\tmp\shot.png   # a desktop look without Claude (also list_windows, focused_window, ui_tree)
 .\src-tauri\target\debug\cay.exe agent-test act type_text '{"hwnd":123,"text":"hi"}'   # an action without Claude or approvals (no refs; real input: ask first)
@@ -276,7 +277,9 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
   step `in_progress` before it asks, so the watchdog judges completed steps. A free model can stall a run with no output
   (Stop ends it); test ACP runs with `agent-test start … opencode` in a scratch folder and decide with `agent-test
   decide` (you may click the card first). Its `opencode.exe` is the real exe behind npm's shim
-  (`node_modules\opencode-ai\bin`).
+  (`node_modules\opencode-ai\bin`). Codex runs through `@agentclientprotocol/codex-acp` (not Zed's deprecated
+  package), started as `node.exe <dist\index.js>`; its "reject once" cancels the whole turn. An ACP mode the agent refuses
+  ends the run; the first message waits for the mode.
 - **The hook forwarder must stay quiet and fast.** `cay.exe hook` runs before Tauri, never panics
   (release is `panic = "abort"`, a non-zero exit shows as a hook error in Claude Code) and bounds every wait. The only
   thing it ever prints is a `PermissionRequest` decision you made in the island (2.8a); with no decision it prints

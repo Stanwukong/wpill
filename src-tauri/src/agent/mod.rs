@@ -1634,6 +1634,14 @@ fn start_acp(
         AgentBackend::Opencode => {
             backend::opencode(&slot.launch.exe, mode, slot.launch.model.as_deref())
         }
+        AgentBackend::Codex => {
+            let (node, script) = slot
+                .launch
+                .exe
+                .split_once('\n')
+                .ok_or_else(|| AppError::AgentStart("codex-acp wasn't found".into()))?;
+            backend::codex(node, script, mode, slot.launch.model.as_deref())
+        }
         AgentBackend::Claude => return Err(AppError::AgentStart("not an ACP agent".into())),
     };
     let mcp_servers = json!([{
@@ -2086,6 +2094,16 @@ fn start_run(
             let configured = request.claude_path.clone().or(settings.claude_path.clone());
             installs::pick(&found, configured.as_deref()).ok_or(AppError::AgentNoClaude)?
         }
+        // Node and the adapter's script, kept together in `exe` for `start_acp`.
+        AgentBackend::Codex => backend::codex_adapter()
+            .map(|(node, script)| format!("{}\n{}", node.display(), script.display()))
+            .ok_or_else(|| {
+                AppError::AgentInvalid(
+                    "Codex's ACP adapter isn't installed (npm install -g @agentclientprotocol/codex-acp), so it \
+                     can't run this."
+                        .into(),
+                )
+            })?,
         AgentBackend::Opencode => backend::opencode_exe()
             .map(|p| p.to_string_lossy().into_owned())
             .ok_or_else(|| {
@@ -2590,6 +2608,7 @@ pub fn debug_command(app: &AppHandle, args: &[String]) {
                     ),
                     backend: match args.get(6).map(String::as_str) {
                         Some("opencode") => Some(AgentBackend::Opencode),
+                        Some("codex") => Some(AgentBackend::Codex),
                         _ => None,
                     },
                 },

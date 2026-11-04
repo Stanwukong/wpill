@@ -869,6 +869,16 @@ only its tools (`mcp::Offer`): no `approve` for ACP agents, and a routine's desk
 OpenCode names MCP tools `cay_<tool>`; they read as `mcp__cay__<tool>` so grants and cards match. ACP has no system
 prompt, so the first message carries Cay's guidance. *Checked live through Cay:* Ask (your Allow from the island, a
 Deny, a follow-up resuming the session in a new process), Auto (a write and `git status` with no card), Stop.
+*Codex (2.9b):* through `@agentclientprotocol/codex-acp` 2.5.0 (Zed's `@zed-industries/codex-acp` is deprecated in
+its favour), a Node script Cay starts as `node.exe <script>`; it bundles Codex 0.165 and uses your Codex login.
+Its modes turned out better than D48's table assumed: `agent` is "Auto review" (it asks only about actions it
+judges unsafe), so Codex's Auto has a reviewer like Claude Code's. Cay maps Auto → `agent`, Accept edits →
+`workspace-write`, Ask → `read-only`, Plan → `read-only` + `collaboration_mode: plan`; `agent-full-access` is
+never used. The mode is set at startup (`INITIAL_AGENT_MODE`) and as session config, and the first message now
+waits for every config answer; a mode the agent refuses or lacks ends the run instead of running in another mode.
+Codex's "reject once" option is `cancel`: declining one step ends the turn (`stopReason: cancelled`), which Cay now
+closes as done with a note, not as an error. *Checked live through Cay:* Ask (a card with the full PowerShell
+command; Deny wrote nothing), Auto (a write with no card).
 
 ## 5. Challenges & resolutions
 
@@ -1094,6 +1104,7 @@ so tests and Connect must both say which folder they touch; and a hook only prov
 | 2026-11-04 | OpenCode's manual checks passed (the author): **stage 2.9a signed off**, Codex and OpenCode sessions in the island. Next: 2.9b (ACP runs). |
 | 2026-11-04 | 2.9b started. The author reversed D47's "Ask only": other agents' runs get Claude Code's four modes, Auto by default, desktop actions following the mode (D48); OpenCode first, then Codex, then Goose. |
 | 2026-11-04 | 2.9b step 1: ACP runs on OpenCode (`acp.rs`, `backend.rs`, `run::spawn_command`, `mcp::Offer`), checked live through Cay in Ask and Auto; 265 Rust tests. A free model stalled one run until Stop (no inactivity limit yet). |
+| 2026-11-04 | 2.9b step 2: Codex runs through `@agentclientprotocol/codex-acp` (Auto = its "Auto review"), checked live in Ask and Auto. The first message now waits for the mode to be set; a declined step that cancels Codex's turn ends it as done. 268 Rust tests. |
 | 2026-11-03 | Stage 2.9a, step 1: the rename (`claude/` → `sessions/`, session IPC names, `features/sessions/`, `--font-agent`, `data-agent`), no behaviour change; 230 Rust tests, clippy and typecheck clean. Codex updated to 0.166.0. |
 
 ## 7. Results & metrics

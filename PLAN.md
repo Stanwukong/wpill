@@ -1375,9 +1375,10 @@ Tasks stay on for ACP runs (desktop tools and Gmail off until a scripted look-an
       before it asks, so that can't be the trigger)
 - [x] Same suspended start + Job Object (`job.rs`), long paths and per-run folder
 - [x] OpenCode (`opencode acp`, per-run rules in `OPENCODE_CONFIG_CONTENT`), checked live through Cay
-- [ ] Then Codex
-      (`codex-acp`), then Goose (`goose acp`, `GOOSE_MODE` in the environment, Ollama, on the author's other machine);
-      verify each connects to Cay's MCP server
+- [x] Codex (`@agentclientprotocol/codex-acp` 2.5.0 through Node: Auto = its "Auto review", Accept edits =
+      `workspace-write`, Ask and Plan = `read-only`; never `agent-full-access`), checked live through Cay
+- [ ] Goose (`goose acp`, `GOOSE_MODE` in the environment, Ollama, on the author's other machine)
+- [ ] Check that each ACP agent connects to Cay's MCP server and calls a Cay tool (a desktop look)
 - [ ] Modes (D48): Auto (default), Accept edits, Ask, Plan for every backend, mapped to the agent's nearest setting
       (table in D48); never an approve-everything setting. Each backend: unit tests of its launch per mode (Ask asks
       for writes and shell; nothing maps to approve-everything), and an ignored live test that Ask asks first
