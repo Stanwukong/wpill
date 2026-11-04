@@ -49,8 +49,8 @@ checks passed.** Next, per the roadmap: [Phase 3, memory-heavy apps](#phase-3-me
 (kick-off prompt: [prompts/phase-3-memory-heavy.md](prompts/phase-3-memory-heavy.md)), then 5, the spikes, and last
 4a-5 (release). Then 3, 5, the spikes, and
 last 4a-5 (release).
-**Phase 3 (memory-heavy apps): design agreed (2026-11-04, D49); stage 3a (the read-only list) is built on branch
-`self/phase-3-memory-heavy` (draft PR #2), manual check pending; 3b (End Task) waits for its sign-off.** See
+**Phase 3 (memory-heavy apps): design agreed (2026-11-04, D49); stage 3a (the read-only list) is signed off
+(2026-11-04, all 6 manual checks passed) on branch `self/phase-3-memory-heavy` (draft PR #2); 3b (End Task) is next.** See
 [Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
@@ -1686,8 +1686,10 @@ grouping (b), a native confirm box (a), and no agent tool for now (a).
   - Built 2026-11-04 (daily routine): 12 new Rust tests (the live one checks the private working set and the
     creation-time offset against `GetProcessTimes`); `MemorySection` (heading "Memory", up to 6 rows: icon, name, a
     hairline share bar, the figure in tabular numerals; renders nothing while off or before the first push).
-  - [ ] 3a manual check (≈6 items: off by default, list matches Task Manager within ~10 %, refresh stops on close,
-        no focus stealing, click-through outside the panel, Text size 120 %).
+  - [x] 3a manual check (≈6 items: off by default, list matches Task Manager within ~10 %, refresh stops on close,
+        no focus stealing, click-through outside the panel, Text size 120 %). Signed off by the author 2026-11-04: the
+        first refresh took ~577 ms (filling the exe-path cache), later ones 14–60 ms for ~340 processes, only while the
+        panel was open; Cay saved the block back as `{ "enabled": true, "limit": 6 }` and kept every other key.
 - **3b: End Task**
   - [ ] 3b.1 `processes/end.rs`: revalidation, protected refusal, `WM_CLOSE` then `TerminateProcess`, per-pid
         results, log of names and counts. Exit: tests on the pure parts; manual test only on a Notepad the test
