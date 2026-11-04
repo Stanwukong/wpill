@@ -42,8 +42,8 @@ permission modes, Auto by default, D40) is signed off (2026-11-02). 2.8f (Connec
 through a chained status line, the optional sound, D41) is signed off (2026-11-02).
 **Now: [2.9 other agents and open models](#phase-29-other-agents-and-open-models-design-agreed-2026-11-03-d47)**
 (kick-off prompt: [prompts/phase-2.9-other-agents.md](prompts/phase-2.9-other-agents.md)): research and design agreed
-(2026-11-03, D47); stage 2.9a (agent-neutral sessions, Codex) built, all 12 manual checks passed; the OpenCode spike
-remains before its sign-off. Then 3, 5, the spikes, and
+(2026-11-03, D47); **stage 2.9a (agent-neutral sessions: Codex and OpenCode) is signed off (2026-11-04), all 20 manual checks
+passed.** Next: 2.9b (ACP runs, Goose first; its live test runs on the author's other machine). Then 3, 5, the spikes, and
 last 4a-5 (release).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
@@ -1351,7 +1351,7 @@ Tasks stay on for ACP runs (desktop tools and Gmail off until a scripted look-an
 12. Disconnect Codex: only Cay's entries are removed (a backup is made); Claude Code's connection is untouched.
 
 **2.9a OpenCode manual checks** (dev build, OpenCode ≥ 1.19.5, a test folder whose `opencode.json` has
-`"permission": { "edit": "ask", "bash": "ask" }`)
+`"permission": { "edit": "ask", "bash": "ask" }`): **all passed (2026-11-04)**
 13. Tray → "Connect OpenCode…": the dialog names `~\.config\opencode\plugins\cay.js`, the exe it runs, the version
     found and the note about `"ask"` rules. OK writes the file; the tray then reads "Disconnect OpenCode…".
 14. In the test folder, start `opencode` (the TUI) and ask something: a row tagged `opencode` appears and works.
