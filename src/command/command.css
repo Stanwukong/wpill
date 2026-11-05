@@ -1517,8 +1517,60 @@ textarea {
   line-height: 1.55;
 }
 
-.run__empty {
+/*
+ * Empty, loading and error lines (2.10d.4): one quiet Segoe sentence where the view's content would start, an error in
+ * --danger, at most one quiet action. Loading fades in once after 300 ms (a fast load shows nothing); nothing loops.
+ */
+.cmd-state {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px max(22px, var(--col));
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 30px;
   color: var(--island-muted);
+}
+
+.run__log .cmd-state {
+  padding: 0;
+  margin: 0 0 10px;
+}
+
+.cmd-state__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmd-state[data-tone="error"] {
+  color: var(--danger);
+}
+
+.cmd-state[data-tone="loading"] {
+  animation: state-in 200ms ease-out 300ms both;
+}
+
+.cmd-state__action {
+  height: 26px;
+  color: var(--island-fg);
+}
+
+@keyframes state-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The sidebar's first-run hint, under New task. */
+.cmd-hint {
+  margin: 0;
+  padding: 6px 10px 0;
+  font-size: 11px;
+  color: rgba(245, 245, 247, 0.4);
 }
 
 /* Transcript entries. New ones fade in (160 ms); nothing else moves. */
@@ -1537,7 +1589,8 @@ textarea {
 
 @media (prefers-reduced-motion: reduce) {
   .entry,
-  .tools__calls {
+  .tools__calls,
+  .cmd-state[data-tone="loading"] {
     animation: none;
   }
 

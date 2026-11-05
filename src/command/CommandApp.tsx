@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { commands, on, unlistenAll } from "../lib/ipc";
+import { commands, errorMessage, on, unlistenAll } from "../lib/ipc";
 import type { AgentBackendsPayload, AgentOptions, AgentRun, SessionApprovalActivity, RoutineDraft, RoutineView } from "../lib/types";
 import { ClockGlyph, RunDot } from "../features/agent/AgentGlyphs";
 import { ago, endLabel } from "../features/agent/labels";
-import { isLive, useAgentRuns } from "../features/agent/useAgentRuns";
+import { isLive, useAgentRunList } from "../features/agent/useAgentRuns";
 import { AgentTag, mixedAgents } from "../features/sessions/AgentTag";
 import { AgentMark, WorkingIndicator } from "../features/sessions/WorkingGlyphs";
 import { DropOverlay, type DropInto } from "./Attachments";
@@ -15,9 +15,11 @@ import { nextIndex } from "./listKeys";
 import { runGroups } from "./runList";
 import { RunView } from "./RunView";
 import { SessionAskView } from "./SessionAskView";
+import { StateLine } from "./StateLine";
 import { useSessionAsks } from "./useSessionAsks";
 import { useRoutines } from "./useRoutines";
 import { useTranscripts } from "./useTranscripts";
+import { showsStartHint } from "./viewStates";
 
 /** What the main area shows besides the new-task form (`null`) and the routine editor. */
 type Selection = { kind: "run"; runId: string } | { kind: "ask"; requestId: number };
@@ -80,13 +82,15 @@ function newDraft(seed: RoutineSeed, options: AgentOptions, backends: AgentBacke
  * run's transcript or a terminal session's held request (2.8b), with those listed on the left. Esc hides it (Rust keeps it alive for next time).
  */
 export function CommandApp() {
-  const runs = useAgentRuns();
+  const { runs, loaded: runsLoaded } = useAgentRunList();
   const transcripts = useTranscripts();
   const routines = useRoutines();
   const asks = useSessionAsks();
   /** Set while the routine editor shows (it takes the main area over a run, an ask or the new-task form). */
   const [editing, setEditing] = useState<Editing | null>(null);
   const [options, setOptions] = useState<AgentOptions | null>(null);
+  /** Why the options didn't load; shown (with Retry) only while there are none to show. */
+  const [optionsError, setOptionsError] = useState<string | null>(null);
   /** The agents the forms offer (2.9c); the first answer can take a few seconds, so nothing waits for it. */
   const [backends, setBackends] = useState<AgentBackendsPayload | null>(null);
   /** `null`: the new-task form. */
@@ -110,10 +114,14 @@ export function CommandApp() {
   const [focusOnOpen, setFocusOnOpen] = useState(true);
 
   const refreshOptions = useCallback(() => {
+    setOptionsError(null);
     commands
       .agentOptions()
       .then(setOptions)
-      .catch((err: unknown) => console.debug("agent options", err));
+      .catch((err: unknown) => {
+        console.debug("agent options", err);
+        setOptionsError(errorMessage(err));
+      });
     commands
       .agentBackends()
       .then(setBackends)
@@ -310,6 +318,9 @@ export function CommandApp() {
             </svg>
             New task
           </button>
+          {showsStartHint(runsLoaded, routines.loaded, runs.length, routines.routines.length) && (
+            <p className="cmd-hint">Runs you start show here</p>
+          )}
           {asks.asks.length > 0 && (
             <section className="cmd-asks" aria-label="Waiting in sessions">
               <div className="cmd-routines__head">
@@ -417,7 +428,7 @@ export function CommandApp() {
           {dragging && <DropOverlay />}
           {/* Kept mounted (hidden) so a draft survives looking at a run. */}
           <div className="cmd__view" hidden={selected !== null || editing !== null}>
-            {options && (
+            {options ? (
               <NewTask
                 options={options}
                 backends={backends}
@@ -431,6 +442,8 @@ export function CommandApp() {
                 }}
                 onSaveAsRoutine={newRoutine}
               />
+            ) : (
+              <OptionsState error={optionsError} onRetry={refreshOptions} />
             )}
           </div>
           {runId && editing === null && (
@@ -439,7 +452,10 @@ export function CommandApp() {
                 key={runId}
                 runId={runId}
                 run={run}
+                runsLoaded={runsLoaded}
                 transcript={transcripts.get(runId)}
+                onRetry={() => transcripts.retry(runId)}
+                onNewTask={() => setSelected(null)}
                 focusTick={focusTick}
                 focusOnOpen={focusOnOpen}
                 dropInto={dropInto}
@@ -456,6 +472,11 @@ export function CommandApp() {
                 loaded={asks.loaded}
                 mixed={mixedAgents(asks.asks)}
               />
+            </div>
+          )}
+          {editing && !options && (
+            <div className="cmd__view">
+              <OptionsState error={optionsError} onRetry={refreshOptions} />
             </div>
           )}
           {editing && options && (
@@ -479,6 +500,17 @@ export function CommandApp() {
         </main>
       </div>
     </div>
+  );
+}
+
+/** In place of a form while Cay's options load, or after they failed to (with Retry). */
+function OptionsState({ error, onRetry }: { error: string | null; onRetry: () => void }) {
+  return error ? (
+    <StateLine tone="error" detail={error} action={{ label: "Retry", onClick: onRetry }}>
+      Couldn't load Cay's agent options
+    </StateLine>
+  ) : (
+    <StateLine tone="loading">Loading…</StateLine>
   );
 }
 

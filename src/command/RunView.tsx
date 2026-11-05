@@ -16,8 +16,10 @@ import { Markdown } from "./Markdown";
 import type { RoutineSeed } from "./routineLabels";
 import { decisionText, resultParts, toMarkdown } from "./runMarkdown";
 import { turns, type Call, type Turn, type TurnItem } from "./transcriptTurns";
+import { StateLine } from "./StateLine";
 import { useWholePreview } from "./useSessionAsks";
 import type { Transcript } from "./useTranscripts";
+import { runViewState, unshownRunError } from "./viewStates";
 
 /** Distance from the bottom (CSS px) that still counts as "at the bottom" for auto-scroll. */
 const STICK_PX = 24;
@@ -29,7 +31,10 @@ const STICK_PX = 24;
 export function RunView({
   runId,
   run,
+  runsLoaded,
   transcript,
+  onRetry,
+  onNewTask,
   focusTick,
   focusOnOpen,
   dropInto,
@@ -39,7 +44,13 @@ export function RunView({
   runId: string;
   /** Missing for a moment right after the run starts (until `agent:runs` arrives). */
   run: AgentRun | undefined;
+  /** Rust's first run list has arrived: a missing run is then gone, not just not listed yet. */
+  runsLoaded: boolean;
   transcript: Transcript | undefined;
+  /** Loads the transcript again after a failure. */
+  onRetry: () => void;
+  /** The way back from a run that's gone. */
+  onNewTask: () => void;
   focusTick: number;
   /** `false` when opened from the run list by an arrow key: the row keeps focus until the window's focus changes. */
   focusOnOpen: boolean;
@@ -58,6 +69,9 @@ export function RunView({
   /** New output arrived while the reader was scrolled up. */
   const [behind, setBehind] = useState(false);
   const [copied, setCopied] = useState(false);
+  /** The run has been listed while this view showed (keyed by run): missing after that, it's gone. */
+  const [seen, setSeen] = useState(false);
+  if (run && !seen) setSeen(true);
 
   // Follow new output (and the draft as it grows) while the reader is at the bottom; once they scroll up, leave them
   // alone and offer "Jump to latest".
@@ -82,6 +96,17 @@ export function RunView({
   // A draft with no turn yet (a cut transcript) still needs somewhere to show.
   const shown = draft != null && shaped.length === 0 ? [{ user: null, items: [] }] : shaped;
   const title = run ? (run.routine?.name ?? run.project) : undefined;
+  const state = runViewState(run, runsLoaded, seen, transcript);
+  const runError = unshownRunError(run, entries);
+
+  if (state === "gone") {
+    return (
+      <div className="run">
+        <div className="run__head" />
+        <StateLine action={{ label: "New task", onClick: onNewTask }}>This run is no longer in Cay's list</StateLine>
+      </div>
+    );
+  }
 
   return (
     <div className="run">
@@ -98,7 +123,7 @@ export function RunView({
           <StepLabel className="run__status" text={runLabel(run)} todos={run.todos} />
         ) : (
           run && (
-            <span className="run__status" data-status={run.status}>
+            <span className="run__status" data-status={run.status} title={run.error ?? undefined}>
               {runLabel(run)}
             </span>
           )
@@ -155,7 +180,12 @@ export function RunView({
             jumping.current = false;
           }}
         >
-          {transcript?.error && <p className="entry entry--error">{transcript.error}</p>}
+          {transcript?.error != null && (
+            <StateLine tone="error" detail={transcript.error} action={{ label: "Retry", onClick: onRetry }}>
+              Couldn't load this run's transcript
+            </StateLine>
+          )}
+          {runError && <p className="entry entry--error">{runError}</p>}
           {shown.map((turn, i) => (
             <TurnView
               key={turn.user ? `turn:${turn.user.atMs}:${i}` : `turn:start`}
@@ -163,7 +193,8 @@ export function RunView({
               draft={i === shown.length - 1 ? draft : null}
             />
           ))}
-          {transcript?.loading && entries.length === 0 && <p className="run__empty">Loading…</p>}
+          {state === "loading" && <StateLine tone="loading">Loading…</StateLine>}
+          {state === "empty" && <StateLine>{live ? "No output yet" : "Nothing was recorded for this run"}</StateLine>}
         </div>
         {behind && (
           <button type="button" className="run__jump" onClick={jump}>
