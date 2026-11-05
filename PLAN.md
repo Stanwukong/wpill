@@ -50,7 +50,7 @@ checks passed.**
 D50) signed off, all manual checks passed (3b on the author's other machine).** Built on branch
 `self/phase-3-memory-heavy` (PR #2). Next, per the roadmap: [Phase 2.10, agent window UI](#phase-210-agent-window-ui-design-agreed-2026-11-05-d51-d52)
 (added 2026-11-05, D51; design agreed 2026-11-05, D52; built on branch `self/phase-2.10-agent-window`, PR #3; 2.10c in draft PR #4).
-**Stages 2.10a (readable transcript) and 2.10b (attachments) are built and merged (PR #3, 2026-11-05); 2.10c (the window: maximize, remembered place, wide layout, D54) is built (2026-11-05). Their manual checks are pending.** 2.10d not started. After 2.10: [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
+**Stages 2.10a (readable transcript) and 2.10b (attachments) are built and merged (PR #3, 2026-11-05); 2.10c (the window: maximize, remembered place, wide layout, D54) and 2.10d (polish, D55) are built (2026-11-05, draft PR #4). Their manual checks are pending.** With 2.10d every Phase 2.10 task is built. After 2.10: [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
 [prompts/phase-5-utilities.md](prompts/phase-5-utilities.md)), the spikes, and last 4a-5 (release). See
 [Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
@@ -1971,15 +1971,28 @@ run's own attachments folder. The tasks below are the work list; the stage bulle
            edge; "Jump to latest" and dropping files still work. At the default size nothing changed.
         7. No focus stealing and no flicker of the island while the command window maximizes or restores.
 - **2.10d: polish** (started 2026-11-05 on Femi's go-ahead, before the 2.10c check; React only, no Rust)
-  - [ ] 2.10d.1 Composer: a quiet line under the follow-up box with the run's agent, model and mode ("claude · haiku ·
+  - [x] 2.10d.1 (1860dda) Composer: a quiet line under the follow-up box with the run's agent, model and mode ("claude · haiku ·
         Ask"); an unsent draft kept per run while Cay runs (pure `composerDrafts.ts`, tested), so switching runs and
         back keeps it; Enter/Shift+Enter and growing as now (motion-designer).
-  - [ ] 2.10d.2 Run list: newest first, grouped Today / Earlier, a filter box (project, prompt, routine name, agent),
+  - [x] 2.10d.2 (4a55132) Run list: newest first, grouped Today / Earlier, a filter box (project, prompt, routine name, agent),
         status at a glance (pure `runList.ts`: sort, group, filter; tested) (motion-designer).
-  - [ ] 2.10d.3 Keyboard: Ctrl+N new task, Ctrl+F the filter box, Up/Down through the run list (roving focus),
+  - [x] 2.10d.3 (bf54c44) Keyboard: Ctrl+N new task, Ctrl+F the filter box, Up/Down through the run list (roving focus),
         visible `:focus-visible` rings everywhere (pure key mapping tested) (motion-designer).
-  - [ ] 2.10d.4 States: empty (no runs, no match for a filter), loading (transcript not loaded yet) and error (a run
+  - [x] 2.10d.4 (47e4c9f) States: empty (no runs, no match for a filter), loading (transcript not loaded yet) and error (a run
         that failed to start, a transcript that can't load) per view; reduced motion respected (motion-designer).
+  - [ ] **2.10d manual check (Femi)**: from this branch (`pnpm tauri dev`), haiku runs in a scratch folder:
+        1. Under a run's follow-up box: "claude · haiku · Ask" (agent, model, mode; a mode picked while no process
+           runs shows the next mode) and the Enter / Shift+Enter hint (hidden when narrow).
+        2. Type in one run's follow-up box, open another run and come back: the text is still there; sending clears it.
+        3. Runs are newest first under "Today" / "Earlier"; the filter box narrows by project, prompt, routine, agent
+           or model; Esc in it clears first, a second Esc hides the window; no match says "No runs match".
+           A stopped run's dot is a hollow ring (also in the island's panel), done is filled, failed red.
+        4. Ctrl+N opens New task with the prompt focused; Ctrl+F focuses the filter (no WebView2 find bar); Down from
+           the filter and Up/Down/Home/End on rows move through runs and open them, focus staying on the row.
+        5. Tab through the window: every button, row, chip × and link shows the amber focus ring; mouse clicks don't.
+        6. First launch with no runs or routines: "Runs you start show here". A run removed from the tray while open:
+           "This run is no longer in Cay's list" with New task. "Loading…" appears only for a slow load.
+        7. Island unchanged apart from the stopped ring; no focus stealing.
 
 ### Phase 4b: settings
 A settings window (a normal, focusable window, separate from the island) for: activities on/off,
