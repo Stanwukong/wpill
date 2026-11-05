@@ -783,6 +783,9 @@ pub enum AgentEvent {
         id: String,
         name: String,
         label: String,
+        /// An edit's diff, as the approval card shows it (2.10a; built from the input, no file read).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        preview: Option<ApprovalPreview>,
     },
     ToolResult {
         id: String,
@@ -806,6 +809,8 @@ pub enum AgentEvent {
         reason: AgentEndReason,
         turns: u32,
         cost_usd: Option<f64>,
+        /// From the message that started this stretch of work to its end, as Cay timed it (2.10a).
+        duration_ms: Option<i64>,
     },
     Error {
         message: String,

@@ -50,6 +50,31 @@ pub struct Previews {
     pub full: ApprovalPreview,
 }
 
+/// Lines a transcript entry's diff keeps (2.10a): enough to read an edit without holding whole files per entry.
+pub const TRANSCRIPT_LINES: usize = 200;
+
+/// The command window's transcript copy of an edit's diff (2.10a): `Edit`, `MultiEdit`, `Write` or a Codex patch.
+/// Built from the input alone (no file read), so a `Write` shows its new text with no note about the old file. Other
+/// tools have none: a command's label already holds it, and a plan has its own view.
+pub fn for_transcript(tool: &str, input: &Value, cwd: &str) -> Option<ApprovalPreview> {
+    if tool == PLAN_TOOL || (SHELL_TOOLS.contains(&tool) && patch::of_input(input).is_none()) {
+        return None;
+    }
+    match build(tool, input, cwd, &Existing::NotRead, &[])?.full {
+        ApprovalPreview::Diff(mut d) => {
+            if tool == "Write" {
+                d.note = None;
+            }
+            if d.lines.len() > TRANSCRIPT_LINES {
+                d.more_lines += (d.lines.len() - TRANSCRIPT_LINES) as u32;
+                d.lines.truncate(TRANSCRIPT_LINES);
+            }
+            Some(ApprovalPreview::Diff(d))
+        }
+        _ => None,
+    }
+}
+
 /// For a `Write`: the file it would overwrite. For an `ExitPlanMode` whose plan was cut (`cut` names `plan`): its
 /// plan file, if it's Markdown. Bounded reads; everything else is `NotRead`.
 pub fn read_existing(tool: &str, input: &Value, cwd: &str, cut: &[String]) -> Existing {
@@ -480,6 +505,36 @@ mod tests {
         }
     }
 
+    #[test]
+    fn the_transcript_gets_edits_only_capped_and_without_reading_files() {
+        let cwd = r"C:\work";
+        let write = json!({ "file_path": "new.txt", "content": "x
+".repeat(500) });
+        let Some(ApprovalPreview::Diff(d)) = for_transcript("Write", &write, cwd) else {
+            panic!("a write's diff");
+        };
+        assert_eq!(d.note, None, "no claim about a file it didn't read");
+        assert_eq!(d.lines.len(), TRANSCRIPT_LINES);
+        assert_eq!(d.lines.len() as u32 + d.more_lines, 500);
+        assert_eq!(d.added, Some(500));
+        let edit = json!({ "file_path": "a.rs", "old_string": "a", "new_string": "b", "replace_all": true });
+        let Some(ApprovalPreview::Diff(d)) = for_transcript("Edit", &edit, cwd) else {
+            panic!("an edit's diff");
+        };
+        assert_eq!(d.note.as_deref(), Some("Every occurrence"));
+        assert_eq!(
+            for_transcript("Bash", &json!({ "command": "dir" }), cwd),
+            None
+        );
+        assert_eq!(
+            for_transcript("Read", &json!({ "file_path": "a.rs" }), cwd),
+            None
+        );
+        assert_eq!(
+            for_transcript(PLAN_TOOL, &json!({ "plan": "# Plan" }), cwd),
+            None
+        );
+    }
     #[test]
     fn edit_diff_with_counts_and_context() {
         let input = json!({

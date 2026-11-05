@@ -7,8 +7,8 @@
 
 use std::collections::VecDeque;
 
-use super::describe;
 use super::stream::{StreamEvent, TurnResult};
+use super::{describe, preview};
 use crate::ipc::{
     AgentEndReason, AgentEntry, AgentEvent, AgentMode, AgentRun, AgentRunRoutine, AgentStatus,
 };
@@ -45,6 +45,8 @@ pub struct Run {
     updated_at_ms: i64,
     /// Messages written to the current process that have no `result` yet.
     queued: u32,
+    /// When the first of the queued messages was sent: the start of the stretch a `Result` entry times (2.10a).
+    busy_since: Option<i64>,
     /// Set by `stop`: the exit that follows is the user's doing.
     stopping: bool,
     transcript: VecDeque<AgentEntry>,
@@ -85,6 +87,7 @@ impl Run {
             started_at_ms: at_ms,
             updated_at_ms: at_ms,
             queued: 0,
+            busy_since: None,
             stopping: false,
             transcript: VecDeque::new(),
             routine: None,
@@ -142,6 +145,9 @@ impl Run {
             self.error = None;
             self.stopping = false;
         }
+        if self.queued == 0 || self.busy_since.is_none() {
+            self.busy_since = Some(at_ms);
+        }
         self.queued += 1;
         self.updated_at_ms = at_ms;
         self.push(
@@ -192,10 +198,17 @@ impl Run {
                 if let Some(todos) = describe::todo_count(&name, &input) {
                     self.todos = Some(todos);
                 }
+                let preview = preview::for_transcript(&name, &input, &self.cwd);
                 let name = describe::display_tool(&name);
-                applied
-                    .entries
-                    .push(self.push(at_ms, AgentEvent::Tool { id, name, label }));
+                applied.entries.push(self.push(
+                    at_ms,
+                    AgentEvent::Tool {
+                        id,
+                        name,
+                        label,
+                        preview,
+                    },
+                ));
             }
             StreamEvent::ToolResult { id, is_error, text } => {
                 applied
@@ -225,6 +238,7 @@ impl Run {
                     self.reason = Some(reason);
                     let turns = self.turns;
                     let cost_usd = self.cost_usd;
+                    let duration_ms = self.took(at_ms);
                     applied.entries.push(self.push(
                         at_ms,
                         AgentEvent::Result {
@@ -232,6 +246,7 @@ impl Run {
                             reason,
                             turns,
                             cost_usd,
+                            duration_ms,
                         },
                     ));
                 } else if self.status == AgentStatus::Starting {
@@ -292,6 +307,7 @@ impl Run {
         self.status = status;
         self.reason = Some(reason);
         let (turns, cost_usd) = (self.turns, self.cost_usd);
+        let duration_ms = self.took(at_ms);
         applied.entries.push(self.push(
             at_ms,
             AgentEvent::Result {
@@ -299,10 +315,16 @@ impl Run {
                 reason,
                 turns,
                 cost_usd,
+                duration_ms,
             },
         ));
         applied.finished = true;
         applied
+    }
+
+    /// How long the stretch of work that just ended took, from its first message; ends the stretch.
+    fn took(&mut self, at_ms: i64) -> Option<i64> {
+        self.busy_since.take().map(|since| (at_ms - since).max(0))
     }
 
     /// A line for the transcript that isn't from the stream (approvals, decisions, start failures).
@@ -471,6 +493,55 @@ mod tests {
         assert!(a.close_stdin);
         assert_eq!(r.ipc(vec![]).turns, 2);
         assert_eq!(r.ipc(vec![]).cost_usd, Some(0.02));
+    }
+
+    #[test]
+    fn results_are_timed_from_the_first_message_and_edits_carry_their_diff() {
+        let mut r = run();
+        r.send("one", 1_000);
+        r.apply(init(), 1_100);
+        let a = r.apply(
+            StreamEvent::Tool {
+                id: "e".into(),
+                name: "Edit".into(),
+                input: json!({ "file_path": "a.txt", "old_string": "a", "new_string": "b" }),
+            },
+            1_200,
+        );
+        let AgentEvent::Tool { preview, .. } = &a.entries[0].event else {
+            panic!("a tool entry");
+        };
+        let Some(crate::ipc::ApprovalPreview::Diff(d)) = preview else {
+            panic!("an edit has its diff");
+        };
+        assert_eq!(
+            (d.file.as_str(), d.added, d.removed),
+            ("a.txt", Some(1), Some(1))
+        );
+        let a = r.apply(
+            StreamEvent::Tool {
+                id: "b".into(),
+                name: "Bash".into(),
+                input: json!({ "command": "dir" }),
+            },
+            1_300,
+        );
+        assert!(matches!(
+            &a.entries[0].event,
+            AgentEvent::Tool { preview: None, .. }
+        ));
+        r.send("two", 2_000);
+        r.apply(result("success", 1, 0.01), 3_000);
+        let a = r.apply(result("success", 1, 0.02), 4_500);
+        let duration = |a: &Applied| match a.entries.last().map(|e| &e.event) {
+            Some(AgentEvent::Result { duration_ms, .. }) => *duration_ms,
+            other => panic!("a result, got {other:?}"),
+        };
+        assert_eq!(duration(&a), Some(3_500), "from the first queued message");
+        // A follow-up after the end is timed on its own, and so is an exit.
+        r.send("three", 10_000);
+        let a = r.exited(Some(1), "boom", 10_250);
+        assert_eq!(duration(&a), Some(250));
     }
 
     #[test]

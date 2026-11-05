@@ -511,11 +511,11 @@ export interface AgentRuns {
 export type AgentEvent =
   | { kind: "user"; text: string }
   | { kind: "text"; text: string }
-  | { kind: "tool"; id: string; name: string; label: string }
+  | { kind: "tool"; id: string; name: string; label: string; preview?: ApprovalPreview }
   | { kind: "toolResult"; id: string; isError: boolean; text: string }
   | { kind: "approval"; requestId: number; tool: string; summary: string; risk: AgentRisk }
   | { kind: "decision"; requestId: number; allow: boolean; by: "user" | "remembered" | "timeout" | "runEnded" | "answered" | "approved" | "feedback" }
-  | { kind: "result"; status: AgentStatus; reason: AgentEndReason; turns: number; costUsd: number | null }
+  | { kind: "result"; status: AgentStatus; reason: AgentEndReason; turns: number; costUsd: number | null; durationMs: number | null }
   | { kind: "error"; message: string };
 
 export type AgentEntry = AgentEvent & { atMs: number };

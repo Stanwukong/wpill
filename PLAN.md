@@ -458,6 +458,13 @@ names `cay-claude-…` and the hook marker.
 | command | `end_process_group` | `(key, pids: { pid, created }[]) → { cancelled, outcomes: { pid, created, outcome }[] }` | Async. Shows the native confirm box itself (OK / Cancel, Cancel the default); only pids Rust listed for `key` are touched. Errors `processGroupGone`, `processEndBusy` (one at a time). |
 | type | `EndOutcome` | `ended \| closed \| accessDenied \| protected \| notFound \| changed \| prompted \| failed` | `prompted`: the app showed a dialog after `WM_CLOSE` and was left open. Replaces the reserved `ok`. |
 
+### Phase 2.10a
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| type | `AgentEvent` `tool` | `+ preview?: ApprovalPreview` | An edit's diff (`Edit`, `MultiEdit`, `Write`, a Codex patch), built from the input alone, ≤200 lines (`preview::for_transcript`). |
+| type | `AgentEvent` `result` | `+ durationMs: number \| null` | From the first message of the stretch that ended (Cay's own clock, every agent). |
+
 ### Reserved for later phases (names fixed now so they slot in)
 
 | Phase | Kind | Name |
@@ -1886,7 +1893,7 @@ run's own attachments folder. The tasks below are the work list; the stage bulle
 
 **Proposed tasks (once agreed)**
 - **2.10a: transcript**
-  - [ ] 2.10a.1 Rust: `Tool` entries carry an optional preview (from the input, no file read); `Result` carries
+  - [x] 2.10a.1 Rust: `Tool` entries carry an optional preview (from the input, no file read); `Result` carries
         `durationMs` (Rust's own start-to-result time, the same for every agent); tests in `stream.rs`/`lifecycle.rs`.
   - [ ] 2.10a.2 `Markdown.tsx`: tables, links (new `agent_open_link`, https only, checked in Rust), strikethrough,
         fence language label + Copy; unit tests for the parser (pure functions moved out of the component).
