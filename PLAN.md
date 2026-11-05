@@ -48,9 +48,8 @@ author's other machine. **2.9c (settings, the agent and model picker, README) is
 checks passed.**
 **Phase 3 (memory-heavy apps) is complete (2026-11-05): design agreed (D49), 3a (the read-only list) and 3b (End Task,
 D50) signed off, all manual checks passed (3b on the author's other machine).** Built on branch
-`self/phase-3-memory-heavy` (PR #2). Next, per the roadmap: [Phase 2.10, agent window UI](#phase-210-agent-window-ui-proposed-2026-11-05-d51-design-drafted-draft--needs-femis-ok)
-(added 2026-11-05, D51; research and a design draft with six choices for the author, 2026-11-05, branch
-`self/phase-2.10-agent-window`), then [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
+`self/phase-3-memory-heavy` (PR #2). Next, per the roadmap: [Phase 2.10, agent window UI](#phase-210-agent-window-ui-design-agreed-2026-11-05-d51-d52)
+(added 2026-11-05, D51; design agreed 2026-11-05, D52; built on branch `self/phase-2.10-agent-window`, PR #3), then [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
 [prompts/phase-5-utilities.md](prompts/phase-5-utilities.md)), the spikes, and last 4a-5 (release). See
 [Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
@@ -1760,7 +1759,7 @@ Performance Information" (working set vs private bytes); phnt `ntexapi.h` (field
 `windows` 0.62.2 bindings (checked locally); `sysinfo` docs (`Process::memory` = working set on Windows);
 the 3.5 ms measurement above (PowerShell + C# P/Invoke, 2026-11-04).
 
-### Phase 2.10: agent window UI (proposed 2026-11-05, D51; design drafted, DRAFT – needs Femi's OK)
+### Phase 2.10: agent window UI (design agreed 2026-11-05, D51, D52)
 The command window is where agent runs are read and steered, and it reads like a log: Claude's replies are plain
 paragraphs (raw `**`, `#`, backticks and tables show as typed), tool calls and their results are a flat list of lines,
 and there is no way to give a run an image or a file. This phase makes it a structured, readable conversation, adds
@@ -1824,9 +1823,9 @@ attachments, and lets the window go fullscreen. The island's Agents section is u
 - Each stage ends with `pnpm typecheck`, cargo checks where Rust changed, headless renders reviewed and a manual check
   list (real runs with `haiku` in a scratch folder; attachments only with files the test made itself).
 
-#### Phase 2.10 design: DRAFT – needs Femi's OK (drafted by the daily routine, 2026-11-05)
-No code yet. The six **(choose)** items need the author's pick; the recommendation is listed first. Once agreed,
-the tasks below replace the stage bullets above, each sized for one conversation.
+#### Phase 2.10 design: agreed (drafted by the daily routine, approved by the author 2026-11-05, D52)
+The author took every recommendation (the first option of each **(choose)** item), including `--add-dir` for the
+run's own attachments folder. The tasks below are the work list; the stage bullets above are their goals.
 
 **Findings (code)**
 - **The transcript lacks what the new views need.** `AgentEvent::Tool` carries only `name` and a one-line `label`, not

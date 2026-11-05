@@ -1000,6 +1000,17 @@ Markdown and a flat log, and a run can't be given a screenshot or a file.
 *Alternatives:* folding it into Phase 5 (unrelated scope); a Markdown library in place of extending `Markdown.tsx`
 (still open: the current renderer never builds HTML strings, which any replacement must keep).
 
+### D52: Phase 2.10's design: extend our own Markdown, maximize for "Fullscreen", copy attachments
+*What:* `Markdown.tsx` is extended (tables, links, strikethrough, fence languages) instead of adding a library; no
+syntax highlighting in 2.10; Claude's text streams as coalesced drafts that never enter the transcript; attached files
+are copied into the run's own `attachments` folder, passed with `--add-dir` from spawn; "Fullscreen" is the native
+maximize (the work area, taskbar and island stay); caps of 4 images, 10 files of 25 MB, 50 MB per message.
+*Why:* no dependency for one kind of text and React elements only; the copy keeps Claude's reach to files you chose
+(no whole Downloads folder); a true fullscreen window would make `fullscreen.rs` hide the island. Approved by the
+author (2026-11-05), including `--add-dir`, which widens what a run can read.
+*Alternatives:* `react-markdown` + `remark-gfm` (~40 kB, many packages); `prism-react-renderer`; referencing files in
+place with `--add-dir` per parent folder; `set_fullscreen`.
+
 ### C8: The agent pipe refused every bridge's hello
 *Symptom:* the first real agent run failed with "MCP tool mcp__topbar__approve not found"; TopBar's log said it had
 refused two connections "without a valid run token". *Diagnosis:* the bridge writes its hello as soon as it connects,
