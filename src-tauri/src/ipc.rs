@@ -761,6 +761,24 @@ pub struct RoutinesPayload {
     pub paused: bool,
 }
 
+/// Whether an attachment goes to Claude as an image or is passed as a file (2.10b).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AttachmentKind {
+    Image,
+    File,
+}
+
+/// An attachment as the transcript and the audit show it: never its content or where it came from.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAttachment {
+    pub name: String,
+    pub kind: AttachmentKind,
+    /// The original file's size.
+    pub bytes: u64,
+}
+
 /// One transcript entry: what the command window shows for a run.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -773,9 +791,11 @@ pub struct AgentEntry {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum AgentEvent {
-    /// A prompt or follow-up you sent.
+    /// A prompt or follow-up you sent, and what you attached to it (2.10b: names, kinds and sizes only).
     User {
         text: String,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<AgentAttachment>,
     },
     /// Claude's text.
     Text {

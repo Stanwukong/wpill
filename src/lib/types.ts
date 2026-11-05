@@ -508,8 +508,16 @@ export interface AgentRuns {
   runs: AgentRun[];
 }
 
+/** An attachment as the transcript shows it (2.10b): never its content or where it came from. */
+export interface AgentAttachment {
+  name: string;
+  kind: "image" | "file";
+  /** The original file's size. */
+  bytes: number;
+}
+
 export type AgentEvent =
-  | { kind: "user"; text: string }
+  | { kind: "user"; text: string; attachments?: AgentAttachment[] }
   | { kind: "text"; text: string }
   | { kind: "tool"; id: string; name: string; label: string; preview?: ApprovalPreview }
   | { kind: "toolResult"; id: string; isError: boolean; text: string }
@@ -543,6 +551,8 @@ export interface AgentStartRequest {
   mode?: AgentMode | null;
   /** The agent (2.9b); omitted is Claude Code. */
   backend?: AgentBackend | null;
+  /** Files to attach to the first message (2.10b): paths, never bytes. Claude Code runs only for now. */
+  attachments?: string[];
 }
 
 export interface ClaudeInstall {

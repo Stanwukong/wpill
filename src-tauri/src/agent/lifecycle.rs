@@ -10,7 +10,8 @@ use std::collections::VecDeque;
 use super::stream::{self, StreamEvent, TurnResult};
 use super::{describe, preview};
 use crate::ipc::{
-    AgentEndReason, AgentEntry, AgentEvent, AgentMode, AgentRun, AgentRunRoutine, AgentStatus,
+    AgentAttachment, AgentEndReason, AgentEntry, AgentEvent, AgentMode, AgentRun, AgentRunRoutine,
+    AgentStatus,
 };
 
 /// Entries kept per run for the command window (oldest dropped first).
@@ -144,6 +145,16 @@ impl Run {
 
     /// A prompt or follow-up is being written to the process.
     pub fn send(&mut self, text: &str, at_ms: i64) -> AgentEntry {
+        self.send_with(text, Vec::new(), at_ms)
+    }
+
+    /// A message with attachments (2.10b): the transcript keeps their names, kinds and sizes.
+    pub fn send_with(
+        &mut self,
+        text: &str,
+        attachments: Vec<AgentAttachment>,
+        at_ms: i64,
+    ) -> AgentEntry {
         if self.prompt.is_empty() {
             self.prompt = describe::truncate(text.trim(), MAX_PROMPT);
         }
@@ -163,6 +174,7 @@ impl Run {
             at_ms,
             AgentEvent::User {
                 text: text.to_string(),
+                attachments,
             },
         )
     }
@@ -644,5 +656,25 @@ mod tests {
         assert_eq!(r.reason, None);
         assert_eq!(r.session.as_deref(), Some("sid"));
         assert_eq!(r.ipc(vec![]).prompt, "x");
+    }
+
+    #[test]
+    fn a_message_keeps_its_attachments() {
+        let mut r = Run::new("r".into(), r"C:\p".into(), None, 0);
+        let files = vec![AgentAttachment {
+            name: "a.png".into(),
+            kind: crate::ipc::AttachmentKind::Image,
+            bytes: 3,
+        }];
+        let entry = r.send_with("look", files.clone(), 1);
+        assert_eq!(
+            entry.event,
+            AgentEvent::User {
+                text: "look".into(),
+                attachments: files
+            }
+        );
+        let plain = serde_json::to_value(r.send("again", 2)).unwrap();
+        assert!(plain.get("attachments").is_none());
     }
 }

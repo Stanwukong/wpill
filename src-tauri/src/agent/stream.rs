@@ -187,11 +187,12 @@ pub fn cut(text: &str, max: usize) -> String {
     }
 }
 
-/// A user message for `--input-format stream-json`, one line with its newline.
-pub fn user_message(text: &str) -> Vec<u8> {
+/// A user message for `--input-format stream-json`, one line with its newline. `content` is the text, or content
+/// blocks (images, then the text, 2.10b).
+pub fn user_content(content: Value) -> Vec<u8> {
     let message = serde_json::json!({
         "type": "user",
-        "message": { "role": "user", "content": text },
+        "message": { "role": "user", "content": content },
         "parent_tool_use_id": null,
         "session_id": "",
     });
@@ -316,10 +317,14 @@ mod tests {
     fn cut_and_user_message() {
         assert_eq!(cut("abc", 5), "abc");
         assert_eq!(cut("abcdef", 3), "abc\n… (cut)");
-        let line = user_message("hi \"there\"");
+        let line = user_content(Value::String("hi \"there\"".into()));
         assert!(line.ends_with(b"\n"));
         let v: Value = serde_json::from_slice(&line).unwrap();
         assert_eq!(v["message"]["content"], "hi \"there\"");
         assert_eq!(v["type"], "user");
+        let blocks = serde_json::json!([{ "type": "text", "text": "x" }]);
+        let line = user_content(blocks.clone());
+        let v: Value = serde_json::from_slice(&line).unwrap();
+        assert_eq!(v["message"]["content"], blocks);
     }
 }

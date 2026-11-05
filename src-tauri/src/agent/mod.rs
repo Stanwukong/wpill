@@ -23,6 +23,8 @@
 mod acp;
 mod actions;
 mod approvals;
+mod attach;
+mod attachments;
 mod audit;
 mod backend;
 mod bridge;
@@ -1592,6 +1594,8 @@ fn run_routine(app: &AppHandle, id: &str, trigger: RoutineTrigger) -> AppResult<
         claude_path: r.claude_path,
         mode: Some(r.mode),
         backend: Some(r.backend),
+        // Routines take no attachments (2.10b).
+        attachments: Vec::new(),
     };
     let routine = RoutineStart {
         tag: AgentRunRoutine {
@@ -1606,12 +1610,14 @@ fn run_routine(app: &AppHandle, id: &str, trigger: RoutineTrigger) -> AppResult<
     start_run(app, request, Some(routine))
 }
 
-/// Starts `slot`'s next process (the first, or a `--resume` follow-up) and writes `text` to it.
+/// Starts `slot`'s next process (the first, or a `--resume` follow-up) and writes `text` to it, with what's
+/// `attached` (2.10b; only Claude Code runs have attachments).
 fn start_process(
     app: &AppHandle,
     inner: &mut Inner,
     run_id: &str,
     text: &str,
+    attached: &attach::Prepared,
     after: &mut After,
 ) -> AppResult<()> {
     let exe_path = std::env::current_exe().map_err(|e| AppError::AgentStart(e.to_string()))?;
@@ -1634,6 +1640,11 @@ fn start_process(
         "env": { bridge::TOKEN_ENV: slot.token, bridge::RUN_ENV: slot.run.id },
     } } });
     std::fs::write(&config, mcp.to_string()).map_err(|e| AppError::AgentStart(e.to_string()))?;
+    if let Some(folder) = &slot.launch.attachments_dir {
+        // `--add-dir` needs the folder to exist, even with nothing attached yet.
+        std::fs::create_dir_all(folder).map_err(|e| AppError::AgentStart(e.to_string()))?;
+    }
+    attached.restore().map_err(AppError::AgentInvalid)?;
     slot.launch.resume = slot.run.session.clone().filter(|_| slot.generation > 1);
     // A mode chosen between messages (2.8e) starts this process.
     slot.launch.mode = slot.run.take_mode();
@@ -1647,9 +1658,9 @@ fn start_process(
         move |code, stderr| on_exit(&exit_app, &exit_id, generation, code, &stderr),
     )
     .map_err(|e| AppError::AgentStart(format!("Couldn't start Claude Code: {e}")))?;
-    let entry = slot.run.send(text, now_ms());
+    let entry = slot.run.send_with(text, attached.list.clone(), now_ms());
     process
-        .write(&stream::user_message(text))
+        .write(&stream::user_content(attached.content(text)))
         .map_err(|e| AppError::AgentStart(e.to_string()))?;
     slot.process = Some(process);
     after.outputs.push(AgentOutputPayload {
@@ -1999,6 +2010,9 @@ pub struct AgentStartRequest {
     /// The agent (2.9b); `None` is Claude Code.
     #[serde(default)]
     backend: Option<AgentBackend>,
+    /// Files to attach to the first message (2.10b): paths, never bytes.
+    #[serde(default)]
+    attachments: Vec<String>,
 }
 
 #[tauri::command]
@@ -2268,6 +2282,25 @@ fn start_run(
             .or_else(|| settings.backends.of(other).and_then(|b| b.model.clone())),
     }
     .filter(|m| !m.is_empty());
+    let dir = agents
+        .lock()
+        .audit
+        .as_ref()
+        .map(|a| a.dir().join("runs").join(&run_id))
+        .unwrap_or_else(|| std::env::temp_dir().join(&run_id));
+    let attachments_dir = dir.join(attachments::FOLDER);
+    let attached = if request.attachments.is_empty() {
+        attach::Prepared::default()
+    } else if kind != AgentBackend::Claude || routine.is_some() {
+        return Err(AppError::AgentInvalid(
+            "Attachments work with Claude Code runs for now.".into(),
+        ));
+    } else {
+        attach::prepare(&attachments_dir, &request.attachments).map_err(|e| {
+            let _ = std::fs::remove_dir_all(&dir);
+            AppError::AgentInvalid(e)
+        })?
+    };
     let launch = run::Launch {
         exe: exe.clone(),
         cwd: request.cwd.clone(),
@@ -2281,15 +2314,13 @@ fn start_run(
         desktop_tools: routine.as_ref().is_none_or(|r| r.desktop_tools),
         google_tools: routine.as_ref().is_none_or(|r| r.google_tools),
         mode: request.mode.unwrap_or(settings.default_mode),
+        // Only the copies Cay makes for this run; routines take no attachments.
+        attachments_dir: (kind == AgentBackend::Claude && routine.is_none())
+            .then(|| attachments_dir.to_string_lossy().into_owned()),
     };
     let mut after = After::default();
     let result = {
         let mut inner = agents.lock();
-        let dir = inner
-            .audit
-            .as_ref()
-            .map(|a| a.dir().join("runs").join(&run_id))
-            .unwrap_or_else(|| std::env::temp_dir().join(&run_id));
         inner.audit(
             &run_id,
             "start",
@@ -2301,6 +2332,7 @@ fn start_run(
                 "desktopTools": launch.desktop_tools,
                 "googleTools": launch.google_tools,
                 "mode": launch.mode,
+                "attachments": attachments::for_audit(&attached.list),
             }),
         );
         let mut run = Run::new(run_id.clone(), request.cwd, model, at);
@@ -2338,7 +2370,7 @@ fn start_run(
             inner.routines.save();
             after.routines_changed = true;
         }
-        let result = start_process(app, &mut inner, &run_id, &prompt, &mut after);
+        let result = start_process(app, &mut inner, &run_id, &prompt, &attached, &mut after);
         if let Err(e) = &result {
             log::warn!("agent run {run_id} didn't start: {e}");
             if let Some(slot) = inner.slot(&run_id) {
@@ -2367,15 +2399,42 @@ pub async fn agent_send(
     agents: State<'_, Agents>,
     run_id: String,
     text: String,
+    attachments: Option<Vec<String>>,
 ) -> AppResult<()> {
     let text = text.trim().to_string();
     if text.is_empty() || text.len() > MAX_PROMPT {
         return Err(AppError::AgentInvalid("Type a message first.".into()));
     }
+    let attachments = attachments.unwrap_or_default();
+    let attached = if attachments.is_empty() {
+        attach::Prepared::default()
+    } else {
+        let folder = {
+            let mut inner = agents.lock();
+            let slot = inner.slot(&run_id).ok_or(AppError::AgentRunGone)?;
+            slot.launch
+                .attachments_dir
+                .clone()
+                .filter(|_| slot.run.backend == AgentBackend::Claude)
+        };
+        let folder = folder.ok_or_else(|| {
+            AppError::AgentInvalid("Attachments work with Claude Code runs for now.".into())
+        })?;
+        tauri::async_runtime::spawn_blocking(move || {
+            attach::prepare(std::path::Path::new(&folder), &attachments)
+        })
+        .await
+        .map_err(|e| AppError::AgentStart(e.to_string()))?
+        .map_err(AppError::AgentInvalid)?
+    };
     let mut after = After::default();
     let result = {
         let mut inner = agents.lock();
-        inner.audit(&run_id, "followUp", json!({ "text": text }));
+        inner.audit(
+            &run_id,
+            "followUp",
+            json!({ "text": text, "attachments": attachments::for_audit(&attached.list) }),
+        );
         let slot = inner.slot(&run_id).ok_or(AppError::AgentRunGone)?;
         let writable =
             slot.run.is_live() && slot.process.as_ref().is_some_and(|p| p.stdin.is_some());
@@ -2394,11 +2453,12 @@ pub async fn agent_send(
             acp_outs(&mut inner, &run_id, outs, &mut after);
             Ok(())
         } else if writable {
-            let entry = slot.run.send(&text, now_ms());
+            attached.restore().map_err(AppError::AgentInvalid)?;
+            let entry = slot.run.send_with(&text, attached.list.clone(), now_ms());
             let written = slot
                 .process
                 .as_mut()
-                .map(|p| p.write(&stream::user_message(&text)));
+                .map(|p| p.write(&stream::user_content(attached.content(&text))));
             after.outputs.push(AgentOutputPayload {
                 run_id: run_id.clone(),
                 entry,
@@ -2413,7 +2473,7 @@ pub async fn agent_send(
                 "This run never started a session, so it can't continue. Start a new one.".into(),
             ))
         } else {
-            start_process(&app, &mut inner, &run_id, &text, &mut after)
+            start_process(&app, &mut inner, &run_id, &text, &attached, &mut after)
         }
     };
     after.run(&app, &agents);
@@ -2766,6 +2826,8 @@ pub fn debug_command(app: &AppHandle, args: &[String]) {
                         Some("codex") => Some(AgentBackend::Codex),
                         _ => None,
                     },
+                    // Paths after the agent are attachments (2.10b).
+                    attachments: args.iter().skip(7).cloned().collect(),
                 },
             )
             .await
@@ -2800,9 +2862,15 @@ pub fn debug_command(app: &AppHandle, args: &[String]) {
                 arg(2) == "allow",
             )
             .map(|()| "decided".into()),
-            "send" => agent_send(app.clone(), agents, arg(1), arg(2))
-                .await
-                .map(|()| "sent".into()),
+            "send" => agent_send(
+                app.clone(),
+                agents,
+                arg(1),
+                arg(2),
+                Some(args.iter().skip(3).cloned().collect()),
+            )
+            .await
+            .map(|()| "sent".into()),
             "stop" => agent_stop(app.clone(), agents, arg(1)).map(|()| "stopped".into()),
             "stop-all" => {
                 stop_all(&app);

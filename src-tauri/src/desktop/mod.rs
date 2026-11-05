@@ -28,6 +28,7 @@ use std::time::Duration;
 
 use ::windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
 
+pub use encode::Encoded;
 pub use guard::abort as abort_action;
 pub use logic::{LookError, Rect};
 pub use plan::{ActError, Action};
@@ -106,6 +107,26 @@ pub fn identify(hwnd: i64) -> Option<Target> {
 /// The monitor a look is about (for the glow): the window's, or the primary one.
 pub fn monitor_for(look: &Look) -> Rect {
     windows::monitor_rect(look.hwnd().map(|h| h as isize))
+}
+
+/// An image file scaled and encoded like a look's screenshot (an attachment, 2.10b), on its own COM thread.
+pub fn scale_image(path: std::path::PathBuf) -> Result<Encoded, String> {
+    let (tx, rx) = mpsc::channel();
+    std::thread::Builder::new()
+        .name("attach-image".into())
+        .spawn(move || {
+            // SAFETY: COM for this thread only (WIC); balanced below.
+            let com = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.is_ok();
+            let result = encode::encode_file(&path).map_err(|e| e.message());
+            if com {
+                // SAFETY: balances the CoInitializeEx above; every COM object is dropped by now.
+                unsafe { CoUninitialize() };
+            }
+            let _ = tx.send(result);
+        })
+        .map_err(|e| e.to_string())?;
+    rx.recv_timeout(LOOK_TIMEOUT)
+        .unwrap_or_else(|_| Err("scaling the image took too long".into()))
 }
 
 /// Runs `look`. `expect_pid` is the target's process when it was approved (a reused HWND is refused).

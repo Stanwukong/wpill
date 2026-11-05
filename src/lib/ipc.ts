@@ -97,7 +97,9 @@ export const commands = {
   /** 2.9c: the agents the picker offers; the first call may take a few seconds (OpenCode's model list). */
   agentBackends: () => invoke<AgentBackendsPayload>("agent_backends"),
   /** A follow-up: queued into the running turn, or resumes a finished run. */
-  agentSend: (runId: string, text: string) => invoke<void>("agent_send", { runId, text }),
+  /** A follow-up; `attachments` are file paths (2.10b), never bytes. */
+  agentSend: (runId: string, text: string, attachments?: string[]) =>
+    invoke<void>("agent_send", { runId, text, attachments: attachments ?? null }),
   agentStop: (runId: string) => invoke<void>("agent_stop", { runId }),
   /** Removes an ended run from the list. Errors `agentInvalid` while it still runs, `agentRunGone`. */
   agentRemove: (runId: string) => invoke<void>("agent_remove", { runId }),
