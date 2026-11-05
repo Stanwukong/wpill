@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEve
 import { commands, errorMessage } from "../lib/ipc";
 import type { AgentApprovalActivity, AgentEntry, AgentRun, Interaction } from "../lib/types";
 import { ClockGlyph, RiskGlyph, StopGlyph } from "../features/agent/AgentGlyphs";
-import { RISK_LABEL, runLabel } from "../features/agent/labels";
+import { MODE_LABEL, RISK_LABEL, runLabel } from "../features/agent/labels";
 import { changePreview, PreviewBlock } from "../features/agent/PreviewBlock";
 import { ModeChip } from "../features/agent/ModeChip";
 import { decide, isLive, stopRun } from "../features/agent/useAgentRuns";
@@ -10,6 +10,7 @@ import { AgentTag } from "../features/sessions/AgentTag";
 import { StepLabel } from "../features/sessions/StepLabel";
 import { WorkingIndicator } from "../features/sessions/WorkingGlyphs";
 import { AttachButton, AttachmentChips, useAttachments, useDropTarget, type DropInto } from "./Attachments";
+import { composerDrafts } from "./composerDrafts";
 import { PlanView, QuestionForm } from "./InteractionViews";
 import { Markdown } from "./Markdown";
 import type { RoutineSeed } from "./routineLabels";
@@ -185,6 +186,7 @@ export function RunView({
         runId={runId}
         live={live}
         acceptsImages={run?.acceptsImages ?? null}
+        meta={run ? composerMeta(run) : null}
         focusTick={focusTick}
         dropInto={dropInto}
         picking={picking}
@@ -495,14 +497,27 @@ function PendingApproval({ approval }: { approval: AgentApprovalActivity }) {
   );
 }
 
+/** "claude · haiku · Ask": whose run it is, its model if one was picked, and the mode the next message runs in. */
+interface ComposerMeta {
+  agent: string;
+  model: string | null;
+  mode: string;
+}
+
+function composerMeta(run: AgentRun): ComposerMeta {
+  return { agent: run.backend, model: run.model, mode: MODE_LABEL[run.nextMode ?? run.mode] };
+}
+
 /**
  * Enter sends, Shift+Enter is a newline. Grows to about five lines. Attachments ride along as chips above the box;
- * a refused send keeps them so one can be removed and the message sent again.
+ * a refused send keeps them so one can be removed and the message sent again. Unsent text is kept per run
+ * (`composerDrafts`) while the window lives; attachments aren't.
  */
 function Composer({
   runId,
   live,
   acceptsImages,
+  meta,
   focusTick,
   dropInto,
   picking,
@@ -511,11 +526,13 @@ function Composer({
   live: boolean;
   /** `false`: an ACP agent that gets images as file links; `null`: not known yet. */
   acceptsImages: boolean | null;
+  /** The run's agent, model and mode; `null` until the run is known. */
+  meta: ComposerMeta | null;
   focusTick: number;
   dropInto: DropInto;
   picking: MutableRefObject<boolean>;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => composerDrafts.get(runId) ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -542,6 +559,7 @@ function Composer({
     try {
       const paths = attachments.items.map((a) => a.path);
       await commands.agentSend(runId, value, paths.length > 0 ? paths : undefined);
+      composerDrafts.clear(runId);
       setText("");
       attachments.clear();
     } catch (err) {
@@ -579,7 +597,10 @@ function Composer({
           placeholder={live ? "Add to this task…" : "Follow up…"}
           value={text}
           spellCheck={false}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            composerDrafts.set(runId, e.target.value);
+          }}
           onKeyDown={onKey}
           onPaste={attachments.onPaste}
         />
@@ -596,6 +617,16 @@ function Composer({
           </svg>
         </button>
       </div>
+      {meta && (
+        <div className="composer__meta">
+          <span className="composer__run" title={[meta.agent, meta.model, meta.mode].filter(Boolean).join(" · ")}>
+            <span>{meta.agent}</span>
+            {meta.model && <span className="composer__model">{meta.model}</span>}
+            <span>{meta.mode}</span>
+          </span>
+          <span className="composer__hint">Enter to send · Shift+Enter for a new line</span>
+        </div>
+      )}
     </div>
   );
 }

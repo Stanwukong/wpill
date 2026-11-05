@@ -2493,7 +2493,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px max(18px, var(--col)) 16px;
+  padding: 10px max(18px, var(--col)) 12px;
 }
 
 .composer__box {
@@ -2518,6 +2518,57 @@ textarea {
   line-height: 22px;
   user-select: text;
   scrollbar-width: thin;
+}
+
+/*
+ * Under the box (2.10d): whose run this is, its model and the mode the next message runs in, in the run's own
+ * Cascadia; the keys on the right in Segoe. Both quiet; the hint goes first when the window is narrow.
+ */
+.composer__meta {
+  container-type: inline-size;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 0 4px 0 12px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--agent-status);
+}
+
+.composer__run {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  font-family: var(--font-agent);
+  white-space: nowrap;
+}
+
+.composer__run > span {
+  flex: none;
+}
+
+.composer__run > span + span::before {
+  content: "\00a0·\00a0";
+}
+
+/* A long model name gives way; the mode, which changes, stays readable. */
+.composer__run > .composer__model {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.composer__hint {
+  flex: none;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+@container (max-width: 380px) {
+  .composer__hint {
+    display: none;
+  }
 }
 
 .composer__send {

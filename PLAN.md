@@ -1970,7 +1970,16 @@ run's own attachments folder. The tasks below are the work list; the stage bulle
            composer, new-task form and routine editor sit in a centred 760 px column; scrollbars stay at the window's
            edge; "Jump to latest" and dropping files still work. At the default size nothing changed.
         7. No focus stealing and no flicker of the island while the command window maximizes or restores.
-- **2.10d: polish**: the four bullets above, one task each (composer; run list; keyboard; states).
+- **2.10d: polish** (started 2026-11-05 on Femi's go-ahead, before the 2.10c check; React only, no Rust)
+  - [ ] 2.10d.1 Composer: a quiet line under the follow-up box with the run's agent, model and mode ("claude · haiku ·
+        Ask"); an unsent draft kept per run while Cay runs (pure `composerDrafts.ts`, tested), so switching runs and
+        back keeps it; Enter/Shift+Enter and growing as now (motion-designer).
+  - [ ] 2.10d.2 Run list: newest first, grouped Today / Earlier, a filter box (project, prompt, routine name, agent),
+        status at a glance (pure `runList.ts`: sort, group, filter; tested) (motion-designer).
+  - [ ] 2.10d.3 Keyboard: Ctrl+N new task, Ctrl+F the filter box, Up/Down through the run list (roving focus),
+        visible `:focus-visible` rings everywhere (pure key mapping tested) (motion-designer).
+  - [ ] 2.10d.4 States: empty (no runs, no match for a filter), loading (transcript not loaded yet) and error (a run
+        that failed to start, a transcript that can't load) per view; reduced motion respected (motion-designer).
 
 ### Phase 4b: settings
 A settings window (a normal, focusable window, separate from the island) for: activities on/off,
