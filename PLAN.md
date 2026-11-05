@@ -45,13 +45,11 @@ through a chained status line, the optional sound, D41) is signed off (2026-11-0
 (2026-11-03, D47); **stage 2.9a (agent-neutral sessions: Codex and OpenCode) is signed off (2026-11-04), all 20 manual checks
 passed.** **Stage 2.9b (ACP runs on OpenCode and Codex, D48) is signed off (2026-11-04)**; Goose waits for the
 author's other machine. **2.9c (settings, the agent and model picker, README) is signed off (2026-11-04), all 6 manual
-checks passed.** Next, per the roadmap: [Phase 3, memory-heavy apps](#phase-3-memory-heavy-apps-behind-a-settings-toggle)
-(kick-off prompt: [prompts/phase-3-memory-heavy.md](prompts/phase-3-memory-heavy.md)), then 5, the spikes, and last
-4a-5 (release). Then 3, 5, the spikes, and
-last 4a-5 (release).
-**Phase 3 (memory-heavy apps): design agreed (2026-11-04, D49); stage 3a (the read-only list) is signed off
-(2026-11-04, all 6 manual checks passed) on branch `self/phase-3-memory-heavy` (draft PR #2); 3b.1 (ending an app in
-Rust, with its confirm box) and 3b.2 (the panel's End button and row states) are built; the 3b manual check is next.** See
+checks passed.**
+**Phase 3 (memory-heavy apps) is complete (2026-11-05): design agreed (D49), 3a (the read-only list) and 3b (End Task,
+D50) signed off, all manual checks passed (3b on the author's other machine).** Built on branch
+`self/phase-3-memory-heavy` (PR #2). Next, per the roadmap: [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
+[prompts/phase-5-utilities.md](prompts/phase-5-utilities.md)), then the spikes, and last 4a-5 (release). See
 [Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
@@ -519,8 +517,8 @@ meaning; new phases slot in between.
 | 7 | **2.8 Agent UX** (complete 2026-11-02) | Approve terminal sessions from the island, see what you approve, questions and plans, a live step line, permission modes, trustworthy Connect | Proposed 2026-11-01 after a competitor survey (D34). Approving terminal sessions is the core of every rival; Cay only focuses the window. |
 | 8 | **6 Google Calendar and Gmail** (complete 2026-11-03; prompt [phase-6-google.md](prompts/phase-6-google.md)) | Upcoming events and tasks in the pill and panel; Gmail and Calendar tools for agent runs | Proposed 2026-11-01 (D35). Replaces the "calendar peek" spike. |
 | 9 | **2.9 Other agents and open models** (complete 2026-11-04, D47/D48; Goose deferred; prompt [phase-2.9-other-agents.md](prompts/phase-2.9-other-agents.md)) | Codex / OpenCode sessions in the island; agent runs through ACP (Goose + Ollama first) beside the native Claude Code path | Proposed 2026-11-01 after a competitor survey. Every rival watches several CLIs; none runs agents. Keeps Cay's lead (runs, routines, desktop tools) while closing the coverage gap. |
-| 10 | **3 Memory-heavy apps** (next; prompt [phase-3-memory-heavy.md](prompts/phase-3-memory-heavy.md)) | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
-| 11 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
+| 10 | **3 Memory-heavy apps** (complete 2026-11-05, D49/D50; prompt [phase-3-memory-heavy.md](prompts/phase-3-memory-heavy.md)) | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
+| 11 | **5 Utilities** (next; prompt [phase-5-utilities.md](prompts/phase-5-utilities.md)) | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
 | 12 | **Spikes** | Notifications mirror, live window previews (calendar peek moved to Phase 6) | Uncertain feasibility or needs sign-in; prototype before committing. |
 | 13 | **4a-5 Release v0.2** (deferred here 2026-11-02) | Full manual pass of every phase, the dock check, publish the installer with its SHA-256 | The author's call: release once every phase is in. |
 
@@ -1718,7 +1716,9 @@ grouping (b), a native confirm box (a), and no agent tool for now (a).
         `useHeavyProcesses` (in `Island`), so it survives the panel collapsing while the confirm box is up; messages
         clear when the group leaves the list or comes back with other pids, never on a timer. Headless renders at
         640 and 420 px reviewed.
-  - [ ] 3b manual check (≈6 items, throwaway processes only; never the author's apps without asking).
+  - [x] 3b manual check (≈6 items, throwaway processes only; never the author's apps without asking). Signed off by the
+        author 2026-11-05 (run on the other machine); on the dev PC one End on WhatsApp logged `8 processes: 8 Ended`
+        (it hides to the tray on `WM_CLOSE`, so all 8 were terminated after the 5 s wait).
 
 **Manual check (3b)** (`pnpm tauri dev` from the branch with `$env:RUST_LOG='info,cay_lib=debug'`; for the check set
 `"processes": { "enabled": true, "limit": 20 }` so small throwaway apps get a row, and put 6 back afterwards. Grouping
@@ -1791,6 +1791,11 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
   OpenCode and Codex ignore Cay's turn and budget limits, change mode from the next message, and stop after 10 silent
   minutes. OpenCode's Auto is a list of allowed commands, not a reviewer. Codex's "reject once" ends its whole turn.
   Desktop actions in Auto aren't judged by a classifier on those agents. Goose and local models aren't wired yet.
+- Memory-heavy apps (3, D49/D50): off by default (`processes.enabled`). End ends every process of that exe path, so
+  every window of the app. An app that hides to the tray on `WM_CLOSE` (WhatsApp) is terminated after 5 s, so anything
+  it hadn't saved is lost; an app showing a dialog is left open. Apps run as administrator can't be ended. Packaged
+  apps whose exe has no description show its file name (WhatsApp as "WhatsApp.Root"). Only the top `processes.limit`
+  apps (6) are listed.
 - Single instance is keyed on the bundle identifier, so a dev build and the installed release build
   can't run at the same time. Quit one from the tray first.
 - Icons are cached per HICON/exe path. An app that changes its window icon at runtime may show a stale icon.
