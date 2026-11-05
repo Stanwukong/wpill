@@ -50,7 +50,7 @@ checks passed.**
 D50) signed off, all manual checks passed (3b on the author's other machine).** Built on branch
 `self/phase-3-memory-heavy` (PR #2). Next, per the roadmap: [Phase 2.10, agent window UI](#phase-210-agent-window-ui-design-agreed-2026-11-05-d51-d52)
 (added 2026-11-05, D51; design agreed 2026-11-05, D52; built on branch `self/phase-2.10-agent-window`, PR #3).
-**Stages 2.10a (readable transcript) and 2.10b (attachments) are built (2026-11-05); their manual checks are pending.** 2.10c–d not started. After 2.10: [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
+**Stages 2.10a (readable transcript) and 2.10b (attachments) are built and merged (PR #3, 2026-11-05); 2.10c (the window: maximize, remembered place, wide layout, D54) is built (2026-11-05). Their manual checks are pending.** 2.10d not started. After 2.10: [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
 [prompts/phase-5-utilities.md](prompts/phase-5-utilities.md)), the spikes, and last 4a-5 (release). See
 [Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
@@ -470,6 +470,16 @@ names `cay-claude-…` and the hook marker.
 | command | `agent_pick_attachments` | `() → AttachmentPick[]` | 2.10b.4. The Attach button's multi-file picker (sync, main thread); `[]` if cancelled. |
 | event | `agent:textDraft` | `{ runId, text }` | Command window only. Claude's whole text so far while it's written (`--include-partial-messages`; ACP chunks), at most every 100 ms (`lifecycle::DRAFT_EVERY_MS`); never in the transcript or audit, no `agent:runs` for it; the run's next `agent:output` entry replaces it. |
 | type | `AgentEvent` `result` | `+ durationMs: number \| null` | From the first message of the stretch that ended (Cay's own clock, every agent). |
+
+### Phase 2.10c
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| command | `command_window_toggle_maximize` | `() → boolean` | The Fullscreen button and F11: native maximize or restore (D54); the new state. |
+| command | `command_window_maximized` | `() → boolean` | For the first render; `command:maximized` follows. |
+| command | `command_window_escape` | `() → ()` | Esc: restores a maximized window, else hides it (saving its place, like `command_window_hide`). |
+| event | `command:maximized` | `boolean` | Command window only; on every change (button, F11, title bar double-click, Win+Up, Snap). |
+| setting | `agent.window` | `{ x, y, width, height, maximized } \| null` | Physical px of the restored rect, written by Cay when the window hides; restored only onto a current work area (`window::command::fit`). |
 
 ### Reserved for later phases (names fixed now so they slot in)
 
@@ -1941,10 +1951,25 @@ run's own attachments folder. The tasks below are the work list; the stage bulle
         4. Five images: the cap error shows and the chips stay. A follow-up with attachments after the run ended works.
         5. An OpenCode or Codex run with an image and a file (images as images; files as links).
 - **2.10c: window**
-  - [ ] 2.10c.1 Fullscreen button + F11 + double-click (per choice 5); Esc leaves it first.
-  - [ ] 2.10c.2 Remember size, position and state in `settings.json` (`agent.window`); restore only on a current
+  - [x] 2.10c.1 (e3b5ab0) Fullscreen button + F11 + double-click (per choice 5); Esc leaves it first.
+  - [x] 2.10c.2 (4be4996) Remember size, position and state in `settings.json` (`agent.window`); restore only on a current
         monitor's work area (D31), else centre.
-  - [ ] 2.10c.3 Wide layout: run list as a sidebar, transcript at ~760 px (motion-designer).
+  - [x] 2.10c.3 (a873d4e) Wide layout: run list as a sidebar, transcript at ~760 px (motion-designer).
+  - [ ] **2.10c manual check (Femi)**: from this branch (`pnpm tauri dev`):
+        1. The square button left of Close maximizes the window: it fills the work area, the taskbar stays visible,
+           the island still shows, and the icon becomes two squares ("Exit fullscreen"). It restores again.
+        2. F11 and a double-click on the title bar toggle it too; Win+Up and Snap keep the icon in step.
+        3. Esc while maximized restores the window; a second Esc hides it. Esc in an open picker or menu still only
+           closes that.
+        4. Move and resize the window, hide it, quit Cay from the tray and start it again: the window opens where it
+           was, the same size. Maximized when hidden: it opens maximized, and restores to that remembered size.
+           `settings.json` has `agent.window` with physical px.
+        5. Put a saved place off-screen by hand (e.g. `"x": 5000`) and restart: the window opens centred. With a
+           second monitor: a place on it is kept; unplug it and the window opens centred on the primary.
+        6. Maximized (or a wide window): the run list stays a sidebar (256 px past 1200 px), the transcript,
+           composer, new-task form and routine editor sit in a centred 760 px column; scrollbars stay at the window's
+           edge; "Jump to latest" and dropping files still work. At the default size nothing changed.
+        7. No focus stealing and no flicker of the island while the command window maximizes or restores.
 - **2.10d: polish**: the four bullets above, one task each (composer; run list; keyboard; states).
 
 ### Phase 4b: settings

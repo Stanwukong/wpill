@@ -80,3 +80,23 @@
 - For Femi: run the 2.10a and 2.10b manual checks in PLAN.md. Live unknowns: whether WebView2 reports "Files" in
   `clipboardData.types` for a Win+Shift+S paste, and whether OpenCode/Codex read a `resource_link` outside the
   project folder without asking.
+
+## 2026-11-05 (evening) | Phase 2.10: agent window UI, stage 2.10c
+- Status: PARTIAL (2.10a–b merged in PR #3; 2.10c built, its manual check is Femi's; 2.10d not started, it waits for
+  the 2.10c check as earlier stages did). PR: see below.
+- Found: PR #3 merged at 15:36 with no review comments; nothing uncommitted. The branch was fast-forwarded to main
+  (101b1cc) in `..\wpill-phase210` and reused, as "resume on its existing branch".
+- Tasks: ✅ 2.10c.1 e3b5ab0 (button, F11, Esc restores first, `command:maximized`; the title-bar double-click is
+  Tauri's default `allow-internal-toggle-maximize`, no capability change) · ✅ 2.10c.2 4be4996 (`agent.window`, pure
+  `fit` with 4 tests; `agent::settings` made `pub mod`) · ✅ 2.10c.3 a873d4e (CSS only, motion-designer; pixel-identical
+  at 720 and 540 px in headless Edge, C:\tmp\cmdwide) · ⏳ 2.10c manual check (Femi).
+- Checks: cargo fmt --check, clippy --lib --tests -D warnings, cargo test --lib (322 passed, 2 ignored), pnpm
+  typecheck, pnpm test (16), pnpm build: all clean. Not run live: the dev Cay on main hosts this run, so the branch build
+  wasn't launched (single instance; editing it would end the run).
+- Desktop build: the dev Cay's `target\debug\cay.exe` was rebuilt 15:47, after main's merge commit 101b1cc (15:36),
+  so it matches main. Nothing rebuilt.
+- How: shell + motion-designer (no VS Code extension driving; Femi may be at the machine).
+- Next run: if Femi signed off 2.10c, start 2.10d.1 (composer: grows, Enter/Shift+Enter, agent/model/mode, per-run
+  draft) on this branch in `..\wpill-phase210`. If the check found problems, fix those first.
+- For Femi: run the 2.10c manual check in PLAN.md. Live unknown: whether Tao's maximize of the undecorated window stays
+  inside the work area here (the plan's open question for choice 5).

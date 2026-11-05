@@ -422,3 +422,10 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
   `CF_HDROP`, `PNG`, DIB → a file in `agent\pasted`; pure `parse_dib`; `describe` for drops), `folder::pick_files` (the
   Attach picker). `src/command/Attachments.tsx` + `attachmentList.ts` hold the chips, paste and drop. Attachment bytes
   never cross IPC, and the pasted test never writes the real clipboard (it would replace the user's).
+- **The command window's place (2.10c, D54):** `window/command.rs` keeps its restored rect (`NORMAL`, from moves and
+  resizes while not maximized) and writes `agent.window` (physical px + `maximized`) to `settings.json` when it hides
+  (`agent::settings::save_window`); on creation `fit` uses it only if a current work area holds ≥120 px of the title
+  bar. Maximize is native (`command_window_toggle_maximize`); Rust emits `command:maximized`. Wide views centre in a
+  760 px column through a container query on `.cmd__main` (`--col`), so narrow windows are unchanged.
+- **Long Python edit scripts in Git Bash:** an inline `python - <<'EOF'` heredoc with many quotes failed to parse
+  ("unexpected EOF"); write the script to a file under `C:\tmp` (or use Edit) instead.
