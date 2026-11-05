@@ -83,7 +83,7 @@
 
 ## 2026-11-05 (evening) | Phase 2.10: agent window UI, stage 2.10c
 - Status: PARTIAL (2.10a–b merged in PR #3; 2.10c built, its manual check is Femi's; 2.10d not started, it waits for
-  the 2.10c check as earlier stages did). PR: see below.
+  the 2.10c check as earlier stages did). Draft PR https://github.com/Stanwukong/wpill/pull/4.
 - Found: PR #3 merged at 15:36 with no review comments; nothing uncommitted. The branch was fast-forwarded to main
   (101b1cc) in `..\wpill-phase210` and reused, as "resume on its existing branch".
 - Tasks: ✅ 2.10c.1 e3b5ab0 (button, F11, Esc restores first, `command:maximized`; the title-bar double-click is
