@@ -5,9 +5,12 @@
 //! building a webview window there deadlocks on Windows. The hotkey thread's `WM_HOTKEY` gives Cay the
 //! right to take the foreground, which is what lets `set_focus` work.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindow};
+use tauri::{
+    AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WindowEvent,
+};
 
 use crate::error::{AppError, AppResult};
 use crate::ipc::{events, CommandFocus};
@@ -15,6 +18,9 @@ use crate::ipc::{events, CommandFocus};
 /// What a window that was just created should select: its page isn't listening yet when `show` emits, so it takes
 /// this once loaded (`command_take_focus`).
 static PENDING: Mutex<Option<CommandFocus>> = Mutex::new(None);
+
+/// Whether the window is maximized, as last emitted (`command:maximized`), so a resize only emits a change.
+static MAXIMIZED: AtomicBool = AtomicBool::new(false);
 
 pub const LABEL: &str = "command";
 const WIDTH: f64 = 720.0;
@@ -64,6 +70,66 @@ pub fn hide(app: &AppHandle) -> AppResult<()> {
     Ok(())
 }
 
+/// What Esc does (2.10c): a maximized window is restored first; only then does Esc hide it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Escape {
+    Restore,
+    Hide,
+}
+
+pub fn escape_action(maximized: bool) -> Escape {
+    if maximized {
+        Escape::Restore
+    } else {
+        Escape::Hide
+    }
+}
+
+/// Esc in the window: restore if maximized, else hide.
+pub fn escape(app: &AppHandle) -> AppResult<()> {
+    let Some(window) = app.get_webview_window(LABEL) else {
+        return Ok(());
+    };
+    match escape_action(window.is_maximized()?) {
+        Escape::Restore => window.unmaximize()?,
+        Escape::Hide => window.hide()?,
+    }
+    Ok(())
+}
+
+/// The Fullscreen button and F11 (2.10c, choice 5): native maximize, which fills the work area and leaves the
+/// taskbar showing. Returns the new state; `command:maximized` follows from the resize as well.
+pub fn toggle_maximize(app: &AppHandle) -> AppResult<bool> {
+    let Some(window) = app.get_webview_window(LABEL) else {
+        return Ok(false);
+    };
+    if window.is_maximized()? {
+        window.unmaximize()?;
+    } else {
+        window.maximize()?;
+    }
+    window.is_maximized().map_err(Into::into)
+}
+
+pub fn is_maximized(app: &AppHandle) -> bool {
+    app.get_webview_window(LABEL)
+        .and_then(|window| window.is_maximized().ok())
+        .unwrap_or(false)
+}
+
+/// Emits `command:maximized` when the state changed: maximize, restore, Win+Up, Snap and the title bar's
+/// double-click (Tauri's own drag-region toggle) all end in a resize.
+fn follow_maximized(window: &WebviewWindow) {
+    let Ok(now) = window.is_maximized() else {
+        return;
+    };
+    if MAXIMIZED.swap(now, Ordering::Relaxed) != now {
+        if let Err(err) = window.emit_to(LABEL, events::COMMAND_MAXIMIZED, now) {
+            log::debug!("command:maximized: {err}");
+        }
+    }
+}
+
 pub fn hwnd(app: &AppHandle) -> Option<windows::Win32::Foundation::HWND> {
     app.get_webview_window(LABEL)?.hwnd().ok()
 }
@@ -97,5 +163,23 @@ fn create(app: &AppHandle) -> AppResult<WebviewWindow> {
     let x = origin.x + (monitor.size().width as i32 - size.width as i32) / 2;
     let y = origin.y + (monitor.size().height as f64 * 0.12) as i32;
     window.set_position(PhysicalPosition::new(x, y))?;
+    MAXIMIZED.store(false, Ordering::Relaxed);
+    let watched = window.clone();
+    window.on_window_event(move |event| {
+        if matches!(event, WindowEvent::Resized(_)) {
+            follow_maximized(&watched);
+        }
+    });
     Ok(window)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn escape_restores_a_maximized_window_before_hiding_it() {
+        assert_eq!(escape_action(true), Escape::Restore);
+        assert_eq!(escape_action(false), Escape::Hide);
+    }
 }

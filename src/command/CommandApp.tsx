@@ -97,6 +97,8 @@ export function CommandApp() {
   const dropInto: DropInto = useRef(null);
   /** Files hover the window and a composer would take them. */
   const [dragging, setDragging] = useState(false);
+  /** Native maximize (2.10c): Rust reports every change, including double-clicks on the bar and Snap. */
+  const [maximized, setMaximized] = useState(false);
 
   const refreshOptions = useCallback(() => {
     commands
@@ -109,6 +111,13 @@ export function CommandApp() {
       .catch((err: unknown) => console.debug("agent backends", err));
   }, []);
 
+  const toggleMaximize = useCallback(() => {
+    commands
+      .commandWindowToggleMaximize()
+      .then(setMaximized)
+      .catch((err: unknown) => console.debug("command maximize", err));
+  }, []);
+
   useEffect(() => {
     refreshOptions();
     const select = (s: Selection) => {
@@ -118,6 +127,7 @@ export function CommandApp() {
     const subscriptions = [
       on.commandFocusRun((runId) => select({ kind: "run", runId })),
       on.commandFocusAsk((requestId) => select({ kind: "ask", requestId })),
+      on.commandMaximized(setMaximized),
       on.filesDrag((drag) => {
         if (drag.type === "over") setDragging(dropInto.current !== null);
         else {
@@ -132,12 +142,21 @@ export function CommandApp() {
       .commandTakeFocus()
       .then((focus) => focus && select(focus))
       .catch((err: unknown) => console.debug("command focus", err));
+    commands
+      .commandWindowMaximized()
+      .then(setMaximized)
+      .catch((err: unknown) => console.debug("command maximized", err));
     const onFocus = () => setFocusTick((n) => n + 1);
     const onVisible = () => document.visibilityState === "visible" && onFocus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented || picking.current) return;
-      e.preventDefault();
-      void commands.commandWindowHide().catch(() => {});
+      if (e.defaultPrevented || picking.current) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        void commands.commandWindowEscape().catch(() => {});
+      } else if (e.key === "F11") {
+        e.preventDefault();
+        toggleMaximize();
+      }
     };
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisible);
@@ -148,7 +167,7 @@ export function CommandApp() {
       document.removeEventListener("visibilitychange", onVisible);
       document.removeEventListener("keydown", onKey);
     };
-  }, [refreshOptions]);
+  }, [refreshOptions, toggleMaximize]);
 
   const runId = selected?.kind === "run" ? selected.runId : null;
   const askId = selected?.kind === "ask" ? selected.requestId : null;
@@ -181,7 +200,7 @@ export function CommandApp() {
   const runsMixed = runs.some((r) => r.backend !== "claude");
 
   return (
-    <div className="cmd">
+    <div className="cmd" data-maximized={maximized || undefined}>
       <header className="cmd__bar" data-tauri-drag-region>
         <AgentMark />
         <span className="cmd__title" data-tauri-drag-region>
@@ -199,16 +218,39 @@ export function CommandApp() {
             </kbd>
           )
         )}
-        <button
-          className="cmd__close"
-          aria-label="Close"
-          title="Close (Esc)"
-          onClick={() => void commands.commandWindowHide().catch(() => {})}
-        >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round">
-            <path d="M4 4l8 8M12 4l-8 8" />
-          </svg>
-        </button>
+        <div className="cmd__btns">
+          <button
+            className="cmd__btn"
+            aria-label={maximized ? "Exit fullscreen (F11)" : "Fullscreen (F11)"}
+            title={maximized ? "Exit fullscreen (F11)" : "Fullscreen (F11)"}
+            onClick={toggleMaximize}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.4}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              {maximized ? (
+                <path d="M4 6.5h5.5V12H4zM6.5 4H12v5.5" />
+              ) : (
+                <rect x="4" y="4" width="8" height="8" rx="0.5" />
+              )}
+            </svg>
+          </button>
+          <button
+            className="cmd__btn"
+            aria-label="Close"
+            title="Close (Esc)"
+            onClick={() => void commands.commandWindowHide().catch(() => {})}
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round">
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        </div>
       </header>
       <div className="cmd__body">
         <nav className="cmd__runs" aria-label="Runs">

@@ -26,6 +26,11 @@ textarea {
   box-shadow: inset 0 0 0 1px var(--island-border);
 }
 
+/* Maximized (2.10c): the screen's edge is the window's edge, so the hairline goes. */
+.cmd[data-maximized] {
+  box-shadow: none;
+}
+
 /* Title bar: the whole strip drags the window (data-tauri-drag-region), except its buttons. */
 .cmd__bar {
   flex: none;
@@ -70,7 +75,13 @@ textarea {
   color: rgba(255, 107, 107, 0.8);
 }
 
-.cmd__close {
+/* Fullscreen and Close: one group, closer together than the bar's gap. */
+.cmd__btns {
+  display: flex;
+  gap: 2px;
+}
+
+.cmd__btn {
   width: 32px;
   height: 28px;
   display: grid;
@@ -84,12 +95,12 @@ textarea {
     color 120ms ease;
 }
 
-.cmd__close svg {
+.cmd__btn svg {
   width: 14px;
   height: 14px;
 }
 
-.cmd__close:hover {
+.cmd__btn:hover {
   background: rgba(255, 255, 255, 0.08);
   color: var(--island-fg);
 }

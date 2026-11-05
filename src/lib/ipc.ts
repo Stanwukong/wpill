@@ -52,6 +52,7 @@ const EVENTS = {
   agentTextDraft: "agent:textDraft",
   commandFocusRun: "command:focus-run",
   commandFocusAsk: "command:focus-ask",
+  commandMaximized: "command:maximized",
   sessionAsks: "sessions:asks",
   routinesChanged: "routines:changed",
   googleState: "google:state",
@@ -141,6 +142,11 @@ export const commands = {
   /** What a newly created command window should select, once (it missed the focus event). */
   commandTakeFocus: () => invoke<CommandFocus | null>("command_take_focus"),
   commandWindowHide: () => invoke<void>("command_window_hide"),
+  /** Native maximize (2.10c); returns the new state. */
+  commandWindowToggleMaximize: () => invoke<boolean>("command_window_toggle_maximize"),
+  commandWindowMaximized: () => invoke<boolean>("command_window_maximized"),
+  /** Esc: restores a maximized window, else hides it. */
+  commandWindowEscape: () => invoke<void>("command_window_escape"),
   routinesList: () => invoke<Routines>("routines_list"),
   /** Creates (no `id`) or edits a routine; errors `agentInvalid` with a message to show. */
   routineSave: (routine: RoutineDraft) => invoke<Routine>("routine_save", { routine }),
@@ -195,6 +201,9 @@ export const on = {
   /** Command window only: which held session request to show. */
   commandFocusAsk: (cb: (requestId: number) => void): Promise<UnlistenFn> =>
     listen<number>(EVENTS.commandFocusAsk, (e) => cb(e.payload)),
+  /** Command window only (2.10c): maximized or restored, by the button, F11, a double-click or Snap. */
+  commandMaximized: (cb: (maximized: boolean) => void): Promise<UnlistenFn> =>
+    listen<boolean>(EVENTS.commandMaximized, (e) => cb(e.payload)),
   sessionAsks: (cb: (payload: SessionAsks) => void): Promise<UnlistenFn> =>
     listen<SessionAsks>(EVENTS.sessionAsks, (e) => cb(e.payload)),
   routinesChanged: (cb: (payload: Routines) => void): Promise<UnlistenFn> =>
