@@ -7,6 +7,7 @@ import { AgentTag } from "../features/sessions/AgentTag";
 import { decideSession, focusSession } from "../features/sessions/useSessions";
 import { AgentMark } from "../features/sessions/WorkingGlyphs";
 import { PlanView, QuestionForm } from "./InteractionViews";
+import { StateLine } from "./StateLine";
 import { useWholePreview } from "./useSessionAsks";
 
 /**
@@ -33,7 +34,11 @@ export function SessionAskView({
     return (
       <div className="run">
         <div className="run__head" />
-        {loaded && <p className="ask__gone ask__gone--alone">No longer waiting: answered, or back in the terminal.</p>}
+        {loaded ? (
+          <p className="ask__gone ask__gone--alone">No longer waiting: answered, or back in the terminal.</p>
+        ) : (
+          <StateLine tone="loading">Loading…</StateLine>
+        )}
       </div>
     );
   }

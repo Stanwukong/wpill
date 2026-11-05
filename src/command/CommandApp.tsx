@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { commands, on, unlistenAll } from "../lib/ipc";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { commands, errorMessage, on, unlistenAll } from "../lib/ipc";
 import type { AgentBackendsPayload, AgentOptions, AgentRun, SessionApprovalActivity, RoutineDraft, RoutineView } from "../lib/types";
 import { ClockGlyph, RunDot } from "../features/agent/AgentGlyphs";
 import { ago, endLabel } from "../features/agent/labels";
-import { isLive, useAgentRuns } from "../features/agent/useAgentRuns";
+import { isLive, useAgentRunList } from "../features/agent/useAgentRuns";
 import { AgentTag, mixedAgents } from "../features/sessions/AgentTag";
 import { AgentMark, WorkingIndicator } from "../features/sessions/WorkingGlyphs";
 import { DropOverlay, type DropInto } from "./Attachments";
@@ -11,11 +11,15 @@ import { NewTask } from "./NewTask";
 import { RoutineEditor } from "./RoutineEditor";
 import { RoutineList } from "./RoutineList";
 import { nameFromPrompt, WORKDAYS, type RoutineSeed } from "./routineLabels";
+import { nextIndex } from "./listKeys";
+import { runGroups } from "./runList";
 import { RunView } from "./RunView";
 import { SessionAskView } from "./SessionAskView";
+import { StateLine } from "./StateLine";
 import { useSessionAsks } from "./useSessionAsks";
 import { useRoutines } from "./useRoutines";
 import { useTranscripts } from "./useTranscripts";
+import { showsStartHint } from "./viewStates";
 
 /** What the main area shows besides the new-task form (`null`) and the routine editor. */
 type Selection = { kind: "run"; runId: string } | { kind: "ask"; requestId: number };
@@ -78,13 +82,15 @@ function newDraft(seed: RoutineSeed, options: AgentOptions, backends: AgentBacke
  * run's transcript or a terminal session's held request (2.8b), with those listed on the left. Esc hides it (Rust keeps it alive for next time).
  */
 export function CommandApp() {
-  const runs = useAgentRuns();
+  const { runs, loaded: runsLoaded } = useAgentRunList();
   const transcripts = useTranscripts();
   const routines = useRoutines();
   const asks = useSessionAsks();
   /** Set while the routine editor shows (it takes the main area over a run, an ask or the new-task form). */
   const [editing, setEditing] = useState<Editing | null>(null);
   const [options, setOptions] = useState<AgentOptions | null>(null);
+  /** Why the options didn't load; shown (with Retry) only while there are none to show. */
+  const [optionsError, setOptionsError] = useState<string | null>(null);
   /** The agents the forms offer (2.9c); the first answer can take a few seconds, so nothing waits for it. */
   const [backends, setBackends] = useState<AgentBackendsPayload | null>(null);
   /** `null`: the new-task form. */
@@ -97,16 +103,36 @@ export function CommandApp() {
   const dropInto: DropInto = useRef(null);
   /** Files hover the window and a composer would take them. */
   const [dragging, setDragging] = useState(false);
+  /** Native maximize (2.10c): Rust reports every change, including double-clicks on the bar and Snap. */
+  const [maximized, setMaximized] = useState(false);
+  /** The run list's filter (2.10d); the selected run stays selected while filtered out of view. */
+  const [runQuery, setRunQuery] = useState("");
+  /** The filter box, for Ctrl+F (2.10d.3). */
+  const runFilter = useRef<HTMLInputElement>(null);
+  /** Set while an arrow key shows a run: its follow-up box then leaves focus on the row, so the next arrow works. */
+  const arrowing = useRef(false);
+  const [focusOnOpen, setFocusOnOpen] = useState(true);
 
   const refreshOptions = useCallback(() => {
+    setOptionsError(null);
     commands
       .agentOptions()
       .then(setOptions)
-      .catch((err: unknown) => console.debug("agent options", err));
+      .catch((err: unknown) => {
+        console.debug("agent options", err);
+        setOptionsError(errorMessage(err));
+      });
     commands
       .agentBackends()
       .then(setBackends)
       .catch((err: unknown) => console.debug("agent backends", err));
+  }, []);
+
+  const toggleMaximize = useCallback(() => {
+    commands
+      .commandWindowToggleMaximize()
+      .then(setMaximized)
+      .catch((err: unknown) => console.debug("command maximize", err));
   }, []);
 
   useEffect(() => {
@@ -118,6 +144,7 @@ export function CommandApp() {
     const subscriptions = [
       on.commandFocusRun((runId) => select({ kind: "run", runId })),
       on.commandFocusAsk((requestId) => select({ kind: "ask", requestId })),
+      on.commandMaximized(setMaximized),
       on.filesDrag((drag) => {
         if (drag.type === "over") setDragging(dropInto.current !== null);
         else {
@@ -132,12 +159,34 @@ export function CommandApp() {
       .commandTakeFocus()
       .then((focus) => focus && select(focus))
       .catch((err: unknown) => console.debug("command focus", err));
+    commands
+      .commandWindowMaximized()
+      .then(setMaximized)
+      .catch((err: unknown) => console.debug("command maximized", err));
     const onFocus = () => setFocusTick((n) => n + 1);
     const onVisible = () => document.visibilityState === "visible" && onFocus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented || picking.current) return;
-      e.preventDefault();
-      void commands.commandWindowHide().catch(() => {});
+      if (e.defaultPrevented || picking.current) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        void commands.commandWindowEscape().catch(() => {});
+      } else if (e.key === "F11") {
+        e.preventDefault();
+        toggleMaximize();
+      } else if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+        // Ctrl+N / Ctrl+F (2.10d.3); preventDefault keeps WebView2's own new window and find bar shut.
+        const key = e.key.toLowerCase();
+        if (key === "n") {
+          e.preventDefault();
+          setEditing(null);
+          setSelected(null);
+          onFocus();
+        } else if (key === "f") {
+          e.preventDefault();
+          runFilter.current?.focus();
+          runFilter.current?.select();
+        }
+      }
     };
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisible);
@@ -148,7 +197,7 @@ export function CommandApp() {
       document.removeEventListener("visibilitychange", onVisible);
       document.removeEventListener("keydown", onKey);
     };
-  }, [refreshOptions]);
+  }, [refreshOptions, toggleMaximize]);
 
   const runId = selected?.kind === "run" ? selected.runId : null;
   const askId = selected?.kind === "ask" ? selected.requestId : null;
@@ -161,6 +210,8 @@ export function CommandApp() {
 
   const showRun = (runId: string) => {
     setEditing(null);
+    setFocusOnOpen(!arrowing.current);
+    arrowing.current = false;
     setSelected({ kind: "run", runId });
   };
   const showAsk = (requestId: number) => {
@@ -179,9 +230,27 @@ export function CommandApp() {
     options && editRoutine(newDraft(seed, options, backends), seed.backend == null);
   /** Any run on another agent: then every row names its agent (2.9c, as sessions do). */
   const runsMixed = runs.some((r) => r.backend !== "claude");
+  /** Worked out per render, like `ago`: nothing ticks to move a run from Today to Earlier. */
+  const groups = runGroups(runs, runQuery, Date.now());
+
+  /** Up/Down/Home/End on a run row, Down from the filter box: focus and show the next visible run (2.10d.3). */
+  const onRunsKey = (e: ReactKeyboardEvent<HTMLElement>) => {
+    if (e.ctrlKey || e.altKey || e.shiftKey || e.metaKey) return;
+    const target = e.target as HTMLElement;
+    const inFilter = target === runFilter.current;
+    if (!inFilter && !target.matches(".cmd-run")) return;
+    const rows = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>(".cmd-runs__list .cmd-run"));
+    const next = nextIndex(e.key, inFilter ? -1 : rows.indexOf(target as HTMLButtonElement), rows.length);
+    if (next === null) return;
+    e.preventDefault();
+    rows[next].focus();
+    arrowing.current = true;
+    rows[next].click();
+    arrowing.current = false;
+  };
 
   return (
-    <div className="cmd">
+    <div className="cmd" data-maximized={maximized || undefined}>
       <header className="cmd__bar" data-tauri-drag-region>
         <AgentMark />
         <span className="cmd__title" data-tauri-drag-region>
@@ -199,22 +268,46 @@ export function CommandApp() {
             </kbd>
           )
         )}
-        <button
-          className="cmd__close"
-          aria-label="Close"
-          title="Close (Esc)"
-          onClick={() => void commands.commandWindowHide().catch(() => {})}
-        >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round">
-            <path d="M4 4l8 8M12 4l-8 8" />
-          </svg>
-        </button>
+        <div className="cmd__btns">
+          <button
+            className="cmd__btn"
+            aria-label={maximized ? "Exit fullscreen (F11)" : "Fullscreen (F11)"}
+            title={maximized ? "Exit fullscreen (F11)" : "Fullscreen (F11)"}
+            onClick={toggleMaximize}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.4}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              {maximized ? (
+                <path d="M4 6.5h5.5V12H4zM6.5 4H12v5.5" />
+              ) : (
+                <rect x="4" y="4" width="8" height="8" rx="0.5" />
+              )}
+            </svg>
+          </button>
+          <button
+            className="cmd__btn"
+            aria-label="Close"
+            title="Close (Esc)"
+            onClick={() => void commands.commandWindowHide().catch(() => {})}
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round">
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        </div>
       </header>
       <div className="cmd__body">
         <nav className="cmd__runs" aria-label="Runs">
           <button
             className="cmd-new"
             aria-pressed={selected === null && editing === null}
+            title="New task (Ctrl+N)"
             onClick={() => {
               setEditing(null);
               setSelected(null);
@@ -225,6 +318,9 @@ export function CommandApp() {
             </svg>
             New task
           </button>
+          {showsStartHint(runsLoaded, routines.loaded, runs.length, routines.routines.length) && (
+            <p className="cmd-hint">Runs you start show here</p>
+          )}
           {asks.asks.length > 0 && (
             <section className="cmd-asks" aria-label="Waiting in sessions">
               <div className="cmd-routines__head">
@@ -251,7 +347,7 @@ export function CommandApp() {
             onStarted={showRun}
           />
           {runs.length > 0 && (
-            <section className="cmd-runs" aria-label="Runs">
+            <section className="cmd-runs" aria-label="Runs" onKeyDown={onRunsKey}>
               <div className="cmd-routines__head">
                 <span className="cmd-routines__label">Runs</span>
                 <span className="cmd__spacer" />
@@ -265,18 +361,65 @@ export function CommandApp() {
                   </button>
                 )}
               </div>
+              <div className="cmd-filter">
+                <svg className="cmd-filter__glyph" viewBox="0 0 16 16" aria-hidden="true">
+                  <circle cx="7" cy="7" r="4.25" fill="none" stroke="currentColor" strokeWidth={1.5} />
+                  <path d="M10.25 10.25L13 13" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+                </svg>
+                <input
+                  ref={runFilter}
+                  className="cmd-filter__input"
+                  type="text"
+                  placeholder="Filter runs"
+                  aria-label="Filter runs"
+                  title="Filter runs (Ctrl+F)"
+                  spellCheck={false}
+                  value={runQuery}
+                  onChange={(e) => setRunQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Esc clears the text first; only an empty box lets it hide the window.
+                    if (e.key === "Escape" && runQuery !== "") {
+                      e.preventDefault();
+                      setRunQuery("");
+                    }
+                  }}
+                />
+                {runQuery !== "" && (
+                  <button
+                    className="cmd-filter__clear"
+                    aria-label="Clear filter"
+                    title="Clear (Esc)"
+                    onClick={() => {
+                      setRunQuery("");
+                      runFilter.current?.focus();
+                    }}
+                  >
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" aria-hidden="true">
+                      <path d="M5 5l6 6M11 5l-6 6" />
+                    </svg>
+                  </button>
+                )}
+              </div>
               <ul className="cmd-runs__list">
-                {runs.map((r) => (
-                  <li key={r.runId}>
-                    <RunItem
-                      run={r}
-                      mixed={runsMixed}
-                      selected={editing === null && r.runId === runId}
-                      onSelect={() => showRun(r.runId)}
-                      onRemove={() => remove(r.runId)}
-                    />
+                {groups.map((g) => (
+                  <li key={g.label} className="cmd-runs__group">
+                    <span className="cmd-routines__label">{g.label}</span>
+                    <ul className="cmd-runs__grouplist">
+                      {g.runs.map((r) => (
+                        <li key={r.runId}>
+                          <RunItem
+                            run={r}
+                            mixed={runsMixed}
+                            selected={editing === null && r.runId === runId}
+                            onSelect={() => showRun(r.runId)}
+                            onRemove={() => remove(r.runId)}
+                          />
+                        </li>
+                      ))}
+                    </ul>
                   </li>
                 ))}
+                {groups.length === 0 && <li className="cmd-runs__none">No runs match</li>}
               </ul>
             </section>
           )}
@@ -285,7 +428,7 @@ export function CommandApp() {
           {dragging && <DropOverlay />}
           {/* Kept mounted (hidden) so a draft survives looking at a run. */}
           <div className="cmd__view" hidden={selected !== null || editing !== null}>
-            {options && (
+            {options ? (
               <NewTask
                 options={options}
                 backends={backends}
@@ -299,6 +442,8 @@ export function CommandApp() {
                 }}
                 onSaveAsRoutine={newRoutine}
               />
+            ) : (
+              <OptionsState error={optionsError} onRetry={refreshOptions} />
             )}
           </div>
           {runId && editing === null && (
@@ -307,8 +452,12 @@ export function CommandApp() {
                 key={runId}
                 runId={runId}
                 run={run}
+                runsLoaded={runsLoaded}
                 transcript={transcripts.get(runId)}
+                onRetry={() => transcripts.retry(runId)}
+                onNewTask={() => setSelected(null)}
                 focusTick={focusTick}
+                focusOnOpen={focusOnOpen}
                 dropInto={dropInto}
                 picking={picking}
                 onSaveAsRoutine={newRoutine}
@@ -323,6 +472,11 @@ export function CommandApp() {
                 loaded={asks.loaded}
                 mixed={mixedAgents(asks.asks)}
               />
+            </div>
+          )}
+          {editing && !options && (
+            <div className="cmd__view">
+              <OptionsState error={optionsError} onRetry={refreshOptions} />
             </div>
           )}
           {editing && options && (
@@ -346,6 +500,17 @@ export function CommandApp() {
         </main>
       </div>
     </div>
+  );
+}
+
+/** In place of a form while Cay's options load, or after they failed to (with Retry). */
+function OptionsState({ error, onRetry }: { error: string | null; onRetry: () => void }) {
+  return error ? (
+    <StateLine tone="error" detail={error} action={{ label: "Retry", onClick: onRetry }}>
+      Couldn't load Cay's agent options
+    </StateLine>
+  ) : (
+    <StateLine tone="loading">Loading…</StateLine>
   );
 }
 

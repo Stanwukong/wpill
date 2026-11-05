@@ -7,22 +7,28 @@ import type { AgentRun, AgentStatus } from "../../lib/types";
  * `useSessions`) so state survives the panel remounting; the command window uses it too.
  */
 export function useAgentRuns(): AgentRun[] {
-  const [runs, setRuns] = useState<AgentRun[]>([]);
+  return useAgentRunList().runs;
+}
+
+/** The runs and whether Rust's first list has arrived (the command window's empty and "gone" states, 2.10d.4). */
+export function useAgentRunList(): { runs: AgentRun[]; loaded: boolean } {
+  const [state, setState] = useState<{ runs: AgentRun[]; loaded: boolean }>({ runs: [], loaded: false });
 
   useEffect(() => {
     let alive = true;
     commands
       .agentRuns()
-      .then((r) => alive && setRuns(r.runs))
-      .catch(() => {});
-    const subscriptions = [on.agentRuns((r) => setRuns(r.runs))];
+      .then((r) => alive && setState({ runs: r.runs, loaded: true }))
+      // Nothing to wait for after a failure: the next `agent:runs` fills the list.
+      .catch(() => alive && setState((s) => ({ ...s, loaded: true })));
+    const subscriptions = [on.agentRuns((r) => setState({ runs: r.runs, loaded: true }))];
     return () => {
       alive = false;
       unlistenAll(subscriptions);
     };
   }, []);
 
-  return runs;
+  return state;
 }
 
 /** How long an ended run stays in the island's panel. */

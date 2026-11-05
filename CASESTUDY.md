@@ -1021,6 +1021,30 @@ copy (every agent must take those) and images as `image` blocks only when `initi
 *Alternatives:* reading pasted images in JS (`clipboardData.files`) and sending bytes; turning attachments off for
 agents without image support.
 
+### D54: The command window maximizes, remembers its place, and centres its content (2.10c)
+*What:* "Fullscreen" is native maximize (choice 5): a button left of Close, F11 and Tauri's own title-bar double-click,
+with Rust as the source of truth (`command:maximized` on every resize that changes it, so Win+Up and Snap keep the
+icon right) and Esc deciding in Rust (restore first, then hide). The window's restored rect is kept from its moves and
+resizes while it's neither maximized nor minimized, and saved with the maximized flag to `agent.window` when it hides.
+On creation the place is used only if a current monitor's work area holds at least 120 px of its title bar; then it's
+shrunk and moved fully inside that area (pure `fit`, tested), else the window centres as before. Wide windows keep the
+run list as a sidebar and put each view in a 760 px column through a container query on `.cmd__main`, so narrow
+windows render exactly as before. *Why:* the island keeps showing and the taskbar stays reachable (no `fullscreen.rs`
+change); saving on hide avoids writing settings on every drag; a title-bar test (not the whole rect) is what matters
+for a window you must be able to grab. *Alternatives:* `set_fullscreen`; `GetWindowPlacement`'s `rcNormalPosition`
+(workspace coordinates, off by the taskbar on a top/left taskbar); saving on every move.
+
+### D55: Command window polish without Rust (2.10d)
+*What:* the follow-up composer names the run's agent, model and next mode and keeps an unsent draft per run in a
+module-level store (`composerDrafts.ts`, capped at 50, lost when Cay quits); the run list sorts newest first into
+Today / Earlier with a word filter (`runList.ts`); Ctrl+N, Ctrl+F and arrow keys through the list (`listKeys.ts`),
+with an arrow-opened run leaving focus on its row (its composer only takes focus on a new focus tick); one
+`:where(...)`-weighted `:focus-visible` ring in amber; quiet one-line empty, loading (fades in after 300 ms, never
+loops) and error states with Retry (`viewStates.ts`, `StateLine`). A stopped run's dot became a hollow ring, which the
+island's panel shares. *Why:* all four bullets were React-only; pure modules keep the logic tested under `node --test`.
+Drafts aren't saved to disk because a prompt can hold anything the user typed. *Alternatives:* drafts in
+`settings.json`; a fuzzy filter; a spinner for loading.
+
 ### C8: The agent pipe refused every bridge's hello
 *Symptom:* the first real agent run failed with "MCP tool mcp__topbar__approve not found"; TopBar's log said it had
 refused two connections "without a valid run token". *Diagnosis:* the bridge writes its hello as soon as it connects,
@@ -1179,6 +1203,8 @@ so tests and Connect must both say which folder they touch; and a hook only prov
 | 2026-11-04 | **Stage 3a signed off** by the author (all 6 manual checks passed). In the live log the first refresh took ~577 ms (the exe-path cache filling: one `OpenProcess` per process), every later one 14–60 ms for ~340 processes, and none while the panel was closed. 3b (End Task) next. |
 | 2026-11-04 | Stage 3b.1 built (D50): `processes/end.rs` and `end_process_group`, the confirm box in Rust, two checks by creation time, `WM_CLOSE` then `TerminateProcess` children first, `prompted` for an app asking to save. 290 Rust tests; a live test ended a `cmd` → `ping` tree it started. Built with `CARGO_INCREMENTAL=0` and `cargo test --lib` (8.4 GB free, C14). |
 | 2026-11-04 | Stage 3b.2 built (motion-designer): the × End control in a fixed slot, "Ending…", result lines in the figure's type, ended rows fading out; End state in `useHeavyProcesses` so it survives the panel collapsing during the confirm box. Headless renders reviewed; 3b manual check written. |
+| 2026-11-05 | Stage 2.10d built (polish, D55) by the daily routine on the author's go-ahead before the 2.10c check: composer meta line and per-run drafts, run list groups and filter, Ctrl+N/Ctrl+F/arrows and one focus ring, empty/loading/error states. React only; 41 TS tests. Every Phase 2.10 task is built; manual checks pending. |
+| 2026-11-05 | Stage 2.10c built (the window, D54): maximize button, F11 and double-click with `command:maximized` from Rust, Esc restores first, `agent.window` remembered and fitted onto a current work area, a 760 px reading column when wide. 322 Rust and 16 TS tests. Manual check pending. |
 | 2026-11-05 | Stage 2.10b built (attachments, D53): Rust copies and scales, `--add-dir` for Claude Code, ACP `image`/`resource_link` blocks by `promptCapabilities`, clipboard (`CF_HDROP`, PNG, DIB) and drop commands, the Attach picker, chips, paste and drop in both composers. 317 Rust and 16 TS tests. Manual check pending. The routine resumed it after the author's VS Code session hit its usage limit mid-2.10b.2. |
 | 2026-11-05 | Phase 2.10 design agreed (D52, every recommendation). Stage 2.10a built by the daily routine: Markdown tables/links/strike/code (own parser, now pure and tested with `node --test`, no dependency), https links opened by Rust, the transcript as turns with folded tool groups and diffs, a summary card with duration, copy message/run, Jump to latest, and Claude's text streamed as drafts (`--include-partial-messages`, throttled to 10 Hz in `lifecycle.rs`, no `agent:runs` per delta). 296 Rust and 13 TS tests. Manual check pending. |
 | 2026-11-05 | Phase 2.10 design drafted by the daily routine (no code): findings on the transcript's gaps (tool input, 2,000-char results, no duration), Claude Code's image blocks in stream-json, ACP's baseline `resource_link`; six choices for the author (renderer, highlighting, streaming, files and `--add-dir`, maximize vs fullscreen, caps). |

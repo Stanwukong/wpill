@@ -18,7 +18,11 @@ export function useSessionAsks(): SessionAsksState {
     commands
       .sessionAsks()
       .then((a) => alive && setState({ asks: a.asks, loaded: true }))
-      .catch((err: unknown) => console.debug("session asks", err));
+      .catch((err: unknown) => {
+        console.debug("session asks", err);
+        // Nothing more to wait for: the next `sessions:asks` fills the list.
+        if (alive) setState((s) => ({ ...s, loaded: true }));
+      });
     const subscriptions = [on.sessionAsks((a) => setState({ asks: a.asks, loaded: true }))];
     return () => {
       alive = false;

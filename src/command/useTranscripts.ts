@@ -66,7 +66,17 @@ export function useTranscripts() {
       });
   }, []);
 
+  /** Loads a run's snapshot again after a failure (its live entries are in the new snapshot too). */
+  const retry = useCallback(
+    (runId: string) => {
+      if (store.current.get(runId)?.loading) return;
+      store.current.delete(runId);
+      load(runId);
+    },
+    [load],
+  );
+
   const get = useCallback((runId: string): Transcript | undefined => store.current.get(runId), []);
 
-  return { get, load };
+  return { get, load, retry };
 }
