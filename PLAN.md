@@ -464,6 +464,7 @@ names `cay-claude-…` and the hook marker.
 |---|---|---|---|
 | type | `AgentEvent` `tool` | `+ preview?: ApprovalPreview` | An edit's diff (`Edit`, `MultiEdit`, `Write`, a Codex patch), built from the input alone, ≤200 lines (`preview::for_transcript`). |
 | command | `agent_open_link` | `(url) → ()` | Opens a transcript link in the browser; https only (`agent/links.rs`), refused otherwise (`agentInvalid`). |
+| event | `agent:textDraft` | `{ runId, text }` | Command window only. Claude's whole text so far while it's written (`--include-partial-messages`; ACP chunks), at most every 100 ms (`lifecycle::DRAFT_EVERY_MS`); never in the transcript or audit, no `agent:runs` for it; the run's next `agent:output` entry replaces it. |
 | type | `AgentEvent` `result` | `+ durationMs: number \| null` | From the first message of the stretch that ended (Cay's own clock, every agent). |
 
 ### Reserved for later phases (names fixed now so they slot in)
@@ -1898,7 +1899,7 @@ run's own attachments folder. The tasks below are the work list; the stage bulle
         `durationMs` (Rust's own start-to-result time, the same for every agent); tests in `stream.rs`/`lifecycle.rs`.
   - [x] 2.10a.2 (23c920a) `Markdown.tsx`: tables, links (new `agent_open_link`, https only, checked in Rust), strikethrough,
         fence language label + Copy; unit tests for the parser (pure functions moved out of the component).
-  - [ ] 2.10a.3 `RunView`: turns, folded tool groups, results collapsed (errors open), `PreviewBlock` for edits, the
+  - [x] 2.10a.3 (e622e23) `RunView`: turns, folded tool groups, results collapsed (errors open), `PreviewBlock` for edits, the
         summary card, inline approvals (motion-designer).
   - [ ] 2.10a.4 Copy message / copy run as Markdown (pure `toMarkdown(entries)`, tested); pinned scroll + "Jump to
         latest" (motion-designer).
