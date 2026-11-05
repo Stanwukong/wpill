@@ -8,6 +8,7 @@ import type {
   AgentMode,
   AgentOptions,
   AgentOutput,
+  AgentTextDraft,
   AgentRuns,
   AgentStartRequest,
   AgentBackendsPayload,
@@ -45,6 +46,7 @@ const EVENTS = {
   agentSessions: "sessions:changed",
   agentRuns: "agent:runs",
   agentOutput: "agent:output",
+  agentTextDraft: "agent:textDraft",
   commandFocusRun: "command:focus-run",
   commandFocusAsk: "command:focus-ask",
   sessionAsks: "sessions:asks",
@@ -172,6 +174,9 @@ export const on = {
   /** Delivered to the command window only. */
   agentOutput: (cb: (payload: AgentOutput) => void): Promise<UnlistenFn> =>
     listen<AgentOutput>(EVENTS.agentOutput, (e) => cb(e.payload)),
+  /** Command window only (2.10a): Claude's text so far while it's written; the run's next entry replaces it. */
+  agentTextDraft: (cb: (payload: AgentTextDraft) => void): Promise<UnlistenFn> =>
+    listen<AgentTextDraft>(EVENTS.agentTextDraft, (e) => cb(e.payload)),
   /** Command window only: which run to show. */
   commandFocusRun: (cb: (runId: string) => void): Promise<UnlistenFn> =>
     listen<string>(EVENTS.commandFocusRun, (e) => cb(e.payload)),

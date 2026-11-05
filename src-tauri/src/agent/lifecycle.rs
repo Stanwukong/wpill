@@ -7,7 +7,7 @@
 
 use std::collections::VecDeque;
 
-use super::stream::{StreamEvent, TurnResult};
+use super::stream::{self, StreamEvent, TurnResult};
 use super::{describe, preview};
 use crate::ipc::{
     AgentEndReason, AgentEntry, AgentEvent, AgentMode, AgentRun, AgentRunRoutine, AgentStatus,
@@ -16,6 +16,8 @@ use crate::ipc::{
 /// Entries kept per run for the command window (oldest dropped first).
 const MAX_ENTRIES: usize = 400;
 const MAX_PROMPT: usize = 200;
+/// The command window's draft of Claude's text is sent at most this often (2.10a).
+pub const DRAFT_EVERY_MS: i64 = 100;
 
 #[derive(Debug)]
 pub struct Run {
@@ -47,6 +49,9 @@ pub struct Run {
     queued: u32,
     /// When the first of the queued messages was sent: the start of the stretch a `Result` entry times (2.10a).
     busy_since: Option<i64>,
+    /// Claude's text being written, and when it was last sent (2.10a).
+    draft: String,
+    draft_sent_ms: Option<i64>,
     /// Set by `stop`: the exit that follows is the user's doing.
     stopping: bool,
     transcript: VecDeque<AgentEntry>,
@@ -62,6 +67,8 @@ pub struct Applied {
     pub close_stdin: bool,
     /// The run just ended (offer `agentFinished`).
     pub finished: bool,
+    /// Claude's text so far, to show as it's written (throttled to `DRAFT_EVERY_MS`; never in the transcript).
+    pub draft: Option<String>,
 }
 
 impl Run {
@@ -88,6 +95,8 @@ impl Run {
             updated_at_ms: at_ms,
             queued: 0,
             busy_since: None,
+            draft: String::new(),
+            draft_sent_ms: None,
             stopping: false,
             transcript: VecDeque::new(),
             routine: None,
@@ -187,12 +196,26 @@ impl Run {
                     },
                 ));
             }
+            StreamEvent::TextDelta(piece) => {
+                if self.draft.len() < stream::MAX_TEXT {
+                    self.draft.push_str(&piece);
+                }
+                if self
+                    .draft_sent_ms
+                    .is_none_or(|sent| at_ms - sent >= DRAFT_EVERY_MS)
+                {
+                    self.draft_sent_ms = Some(at_ms);
+                    applied.draft = Some(self.draft.clone());
+                }
+            }
             StreamEvent::Text(text) => {
+                self.end_draft();
                 applied
                     .entries
                     .push(self.push(at_ms, AgentEvent::Text { text }));
             }
             StreamEvent::Tool { id, name, input } => {
+                self.end_draft();
                 let label = describe::step_label(&name, &input, &self.cwd);
                 self.step = Some(describe::step_line(&name, &input, &self.cwd));
                 if let Some(todos) = describe::todo_count(&name, &input) {
@@ -216,6 +239,7 @@ impl Run {
                     .push(self.push(at_ms, AgentEvent::ToolResult { id, is_error, text }));
             }
             StreamEvent::Result(result) => {
+                self.end_draft();
                 self.turns = self.turns.saturating_add(result.num_turns);
                 self.cost_usd = result.total_cost_usd.or(self.cost_usd);
                 self.queued = self.queued.saturating_sub(1);
@@ -283,6 +307,7 @@ impl Run {
         self.step = None;
         self.todos = None;
         self.queued = 0;
+        self.end_draft();
         let (status, reason) = if self.stopping {
             (AgentStatus::Stopped, AgentEndReason::Stopped)
         } else {
@@ -320,6 +345,12 @@ impl Run {
         ));
         applied.finished = true;
         applied
+    }
+
+    /// The text being written is complete (or abandoned): the next piece starts a new draft, sent at once.
+    fn end_draft(&mut self) {
+        self.draft.clear();
+        self.draft_sent_ms = None;
     }
 
     /// How long the stretch of work that just ended took, from its first message; ends the stretch.
@@ -542,6 +573,34 @@ mod tests {
         r.send("three", 10_000);
         let a = r.exited(Some(1), "boom", 10_250);
         assert_eq!(duration(&a), Some(250));
+    }
+
+    #[test]
+    fn drafts_are_throttled_and_end_with_the_text() {
+        let mut r = run();
+        r.send("hi", 0);
+        r.apply(init(), 1);
+        let delta =
+            |r: &mut Run, piece: &str, at: i64| r.apply(StreamEvent::TextDelta(piece.into()), at);
+        let a = delta(&mut r, "He", 10);
+        assert_eq!(
+            a.draft.as_deref(),
+            Some("He"),
+            "the first piece is sent at once"
+        );
+        assert!(a.entries.is_empty(), "never in the transcript");
+        assert_eq!(delta(&mut r, "llo", 50).draft, None, "within 100 ms");
+        assert_eq!(
+            delta(&mut r, " there", 110).draft.as_deref(),
+            Some("Hello there")
+        );
+        let a = r.apply(StreamEvent::Text("Hello there.".into()), 120);
+        assert!(matches!(&a.entries[0].event, AgentEvent::Text { text } if text == "Hello there."));
+        assert_eq!(
+            delta(&mut r, "Next", 130).draft.as_deref(),
+            Some("Next"),
+            "a new draft starts fresh and is sent at once"
+        );
     }
 
     #[test]

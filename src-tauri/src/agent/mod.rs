@@ -216,6 +216,7 @@ struct After {
     looks: Vec<LookJob>,
     signals: Vec<Signal>,
     outputs: Vec<AgentOutputPayload>,
+    drafts: Vec<crate::ipc::AgentTextDraft>,
     runs_changed: bool,
     routines_changed: bool,
 }
@@ -233,6 +234,11 @@ impl After {
         if let Some(tx) = agents.lock().signals.clone() {
             for signal in self.signals {
                 let _ = tx.send(signal);
+            }
+        }
+        for draft in self.drafts {
+            if let Err(e) = app.emit_to(window::command::LABEL, events::AGENT_TEXT_DRAFT, draft) {
+                log::debug!("emit {} failed: {e}", events::AGENT_TEXT_DRAFT);
             }
         }
         for output in self.outputs {
@@ -1838,6 +1844,10 @@ fn apply_events(inner: &mut Inner, run_id: &str, events: Vec<StreamEvent>, after
         let mut finished = false;
         let mut tools = Vec::new();
         let mut mail_read_now = false;
+        // Drafts alone change nothing the island shows: no `agent:runs` for them (tens a second while Claude writes).
+        let only_drafts = events
+            .iter()
+            .all(|e| matches!(e, stream::StreamEvent::TextDelta(_)));
         let Some(slot) = inner.slot(run_id) else {
             return;
         };
@@ -1858,6 +1868,12 @@ fn apply_events(inner: &mut Inner, run_id: &str, events: Vec<StreamEvent>, after
                 }
             }
             finished |= applied.finished;
+            if let Some(text) = applied.draft {
+                after.drafts.push(crate::ipc::AgentTextDraft {
+                    run_id: run_id.to_string(),
+                    text,
+                });
+            }
             for entry in applied.entries {
                 after.outputs.push(AgentOutputPayload {
                     run_id: run_id.to_string(),
@@ -1877,7 +1893,7 @@ fn apply_events(inner: &mut Inner, run_id: &str, events: Vec<StreamEvent>, after
         if finished {
             inner.finished(run_id, after);
         }
-        after.runs_changed = true;
+        after.runs_changed |= !only_drafts;
     }
 }
 

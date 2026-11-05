@@ -526,6 +526,12 @@ export interface AgentOutput {
   entry: AgentEntry;
 }
 
+/** `agent:textDraft` (2.10a): the whole draft so far, at most 10 times a second. */
+export interface AgentTextDraft {
+  runId: string;
+  text: string;
+}
+
 export interface AgentStartRequest {
   prompt: string;
   cwd: string;

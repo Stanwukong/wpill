@@ -84,6 +84,8 @@ pub fn args(l: &Launch, mcp_config: &Path) -> Vec<String> {
         "--output-format",
         "stream-json",
         "--verbose",
+        // Claude's text as it's written, for the command window's draft (2.10a).
+        "--include-partial-messages",
         "--permission-mode",
         mode::cli(l.mode),
     ]

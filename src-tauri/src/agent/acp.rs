@@ -488,12 +488,13 @@ impl Client {
         }
         match kind {
             "agent_message_chunk" => {
-                if let Some(text) = update.pointer("/content/text").and_then(Value::as_str) {
-                    if self.text.len() < MAX_TEXT * 2 {
+                match update.pointer("/content/text").and_then(Value::as_str) {
+                    Some(text) if self.text.len() < MAX_TEXT * 2 => {
                         self.text.push_str(text);
+                        vec![Out::Event(StreamEvent::TextDelta(text.to_string()))]
                     }
+                    _ => Vec::new(),
                 }
-                Vec::new()
             }
             "tool_call" | "tool_call_update" => {
                 let mut out = self.flush_text();
@@ -757,6 +758,16 @@ mod tests {
         (c, out)
     }
 
+    #[test]
+    fn message_chunks_are_drafts_until_the_text_is_flushed() {
+        let (mut c, _) = open(setup());
+        let out = feed(
+            &mut c,
+            json!({ "jsonrpc": "2.0", "method": "session/update", "params": { "sessionId": SID,
+            "update": { "sessionUpdate": "agent_message_chunk", "content": { "type": "text", "text": "Hi " } } } }),
+        );
+        assert_eq!(events(&out), vec![StreamEvent::TextDelta("Hi ".into())]);
+    }
     #[test]
     fn opens_a_session_then_sends_the_prompt() {
         let (mut c, out) = open(setup());

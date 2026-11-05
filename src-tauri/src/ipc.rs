@@ -15,6 +15,8 @@ pub mod events {
     pub const AGENT_RUNS: &str = "agent:runs";
     /// Sent to the `command` window only.
     pub const AGENT_OUTPUT: &str = "agent:output";
+    /// Claude's text as it's written (2.10a), command window only; the next `agent:output` entry replaces it.
+    pub const AGENT_TEXT_DRAFT: &str = "agent:textDraft";
     /// Sent to the `command` window only: which run to select when it opens.
     pub const COMMAND_FOCUS_RUN: &str = "command:focus-run";
     pub const ROUTINES_CHANGED: &str = "routines:changed";
@@ -818,6 +820,14 @@ pub enum AgentEvent {
 }
 
 /// `agent:output`.
+/// `agent:textDraft` (2.10a): the whole draft so far, at most 10 times a second.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentTextDraft {
+    pub run_id: String,
+    pub text: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentOutputPayload {

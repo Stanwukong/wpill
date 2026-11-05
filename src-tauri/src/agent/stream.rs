@@ -26,6 +26,9 @@ pub enum StreamEvent {
     ControlError(String),
     /// Claude's text in the main conversation (subagents' text is left out).
     Text(String),
+    /// A piece of that text while it's written (2.10a: `--include-partial-messages`, ACP's message chunks). Only for
+    /// the command window's draft; the whole `Text` follows and replaces it.
+    TextDelta(String),
     Tool {
         id: String,
         name: String,
@@ -72,6 +75,22 @@ pub fn parse(line: &[u8]) -> Vec<StreamEvent> {
         }
         Some("system") if m.get("subtype").and_then(Value::as_str) == Some("status") => {
             reported_mode(&m).into_iter().collect()
+        }
+        Some("stream_event") if main => {
+            let event = m.get("event").unwrap_or(&Value::Null);
+            let delta = event.get("delta").unwrap_or(&Value::Null);
+            match (
+                event.get("type").and_then(Value::as_str),
+                delta.get("type").and_then(Value::as_str),
+                delta.get("text").and_then(Value::as_str),
+            ) {
+                (Some("content_block_delta"), Some("text_delta"), Some(text))
+                    if !text.is_empty() =>
+                {
+                    vec![StreamEvent::TextDelta(text.to_string())]
+                }
+                _ => Vec::new(),
+            }
         }
         Some("control_response") => {
             let response = m.get("response").unwrap_or(&Value::Null);
@@ -190,6 +209,24 @@ mod tests {
     const TOOL: &str = r#"{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"..."},{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"touch probe.txt"}}]},"parent_tool_use_id":null,"session_id":"s"}"#;
     const DENIED: &str = r#"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"The user denied this from Cay.","is_error":true,"tool_use_id":"toolu_1"}]},"parent_tool_use_id":null}"#;
     const RESULT: &str = r#"{"type":"result","subtype":"error_max_turns","is_error":true,"num_turns":2,"total_cost_usd":0.0325,"errors":["Reached maximum number of turns (1)"],"terminal_reason":"max_turns"}"#;
+
+    #[test]
+    fn text_deltas_from_the_main_conversation_only() {
+        let delta = r#"{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hel"}},"parent_tool_use_id":null,"session_id":"s"}"#;
+        assert_eq!(
+            parse(delta.as_bytes()),
+            vec![StreamEvent::TextDelta("Hel".into())]
+        );
+        let subagent = delta.replace(
+            r#""parent_tool_use_id":null"#,
+            r#""parent_tool_use_id":"t1""#,
+        );
+        assert_eq!(parse(subagent.as_bytes()), vec![]);
+        let json = r#"{"type":"stream_event","event":{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{"}},"parent_tool_use_id":null}"#;
+        assert_eq!(parse(json.as_bytes()), vec![]);
+        let start = r#"{"type":"stream_event","event":{"type":"message_start","message":{}},"parent_tool_use_id":null}"#;
+        assert_eq!(parse(start.as_bytes()), vec![]);
+    }
 
     #[test]
     fn mode_reports_and_refused_switches() {
