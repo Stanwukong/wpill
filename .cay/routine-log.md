@@ -102,7 +102,7 @@
   inside the work area here (the plan's open question for choice 5).
 
 ## 2026-11-05 (night) | Phase 2.10: agent window UI, stage 2.10d
-- Status: COMPLETE (in review): every 2.10 task is built; the 2.10a–d manual checks are Femi's. Draft PR
+- Status: PARTIAL (every 2.10 task is built; what is left is the 2.10a–d manual checks, which are Femi's). Draft PR
   https://github.com/Stanwukong/wpill/pull/4 (now 2.10c + 2.10d).
 - Asked Femi in Cay whether to start 2.10d before the 2.10c check: "Start 2.10d now".
 - Tasks: ✅ 2.10d.1 1860dda (composer meta + per-run drafts) · ✅ 2.10d.2 4a55132 (Today/Earlier, filter, stopped ring)
