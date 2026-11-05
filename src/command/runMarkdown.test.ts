@@ -45,3 +45,18 @@ test("a run as Markdown", () => {
     ].join("\n\n") + "\n",
   );
 });
+
+test("attachments are named under your message", () => {
+  const md = toMarkdown([
+    e({
+      kind: "user",
+      text: "Look at these",
+      attachments: [
+        { name: "a.png", kind: "image", bytes: 1200 },
+        { name: "notes.txt", kind: "file", bytes: 40 },
+      ],
+    }),
+    e({ kind: "user", text: "And now?", attachments: [] }),
+  ]);
+  assert.equal(md, ["## You\n\nLook at these", "Attached: a.png, notes.txt", "## You\n\nAnd now?"].join("\n\n") + "\n");
+});

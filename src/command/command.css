@@ -567,6 +567,7 @@ textarea {
 }
 
 .cmd__main {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -2472,6 +2473,7 @@ textarea {
 
 .composer__box {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   gap: 6px;
   padding: 4px 4px 4px 12px;
@@ -2520,6 +2522,182 @@ textarea {
 .composer__send:disabled {
   background: rgba(255, 255, 255, 0.08);
   color: var(--island-muted);
+}
+
+/*
+ * Attachments (2.10b.4): chips with a glyph, the name (Cascadia, ellipsized), the size (tabular) and × to remove.
+ * In the follow-up box they sit inside the well above the text; in your transcript message, under it, read-only.
+ */
+.composer__attachments {
+  flex: 1 0 100%;
+  min-width: 0;
+  padding: 4px 4px 0 0;
+}
+
+.composer__note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--island-muted);
+}
+
+.attach-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task > .attach-chips {
+  flex: none;
+  margin-top: -6px;
+}
+
+.entry--user .attach-chips {
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.attach-chip {
+  min-width: 0;
+  max-width: 240px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px var(--island-border);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.attach-chip:has(.attach-chip__remove) {
+  padding-right: 3px;
+}
+
+.attach-chip__glyph {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--island-muted);
+}
+
+.attach-chip__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 2px;
+  font-family: var(--font-agent);
+  font-size: 11.5px;
+  color: var(--island-fg);
+}
+
+.attach-chip__size {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--island-muted);
+}
+
+.attach-chip__remove,
+.attach-btn--icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--island-muted);
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.attach-chip__remove {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+}
+
+.attach-chip__remove svg {
+  width: 12px;
+  height: 12px;
+}
+
+.attach-btn--icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.attach-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.attach-chip__remove:hover,
+.attach-btn--icon:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--island-fg);
+}
+
+.attach-chip__remove:focus-visible,
+.attach-btn--icon:focus-visible {
+  outline: 2px solid rgba(var(--agent-rgb), 0.55);
+  outline-offset: 1px;
+}
+
+/* In the new-task footer, Attach sits on the left, away from Run. */
+.task__footer .attach-btn {
+  margin-right: auto;
+  padding: 0 10px 0 6px;
+}
+
+/* Files over the window: the main area dims behind a hairline amber ring and one word. A fade, nothing else. */
+.drop-overlay {
+  position: absolute;
+  inset: 10px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(20, 20, 22, 0.8);
+  box-shadow: inset 0 0 0 1px rgba(var(--agent-rgb), 0.45);
+  pointer-events: none;
+  animation: drop-in 120ms ease-out;
+}
+
+.drop-overlay__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--island-fg);
+}
+
+.drop-overlay__label svg {
+  width: 18px;
+  height: 18px;
+  color: var(--agent);
+}
+
+@keyframes drop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drop-overlay {
+    animation: none;
+  }
+
+  .attach-chip__remove,
+  .attach-btn--icon {
+    transition: none;
+  }
 }
 
 /* Large Text size: the prompt gives way so the folder list stays in view. */

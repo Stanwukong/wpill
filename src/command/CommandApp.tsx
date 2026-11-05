@@ -6,6 +6,7 @@ import { ago, endLabel } from "../features/agent/labels";
 import { isLive, useAgentRuns } from "../features/agent/useAgentRuns";
 import { AgentTag, mixedAgents } from "../features/sessions/AgentTag";
 import { AgentMark, WorkingIndicator } from "../features/sessions/WorkingGlyphs";
+import { DropOverlay, type DropInto } from "./Attachments";
 import { NewTask } from "./NewTask";
 import { RoutineEditor } from "./RoutineEditor";
 import { RoutineList } from "./RoutineList";
@@ -92,6 +93,10 @@ export function CommandApp() {
   const [focusTick, setFocusTick] = useState(0);
   /** A native folder picker is open: Esc belongs to it. */
   const picking = useRef(false);
+  /** The visible composer's drop handler (2.10b.4); `null` while neither the new-task form nor a run shows. */
+  const dropInto: DropInto = useRef(null);
+  /** Files hover the window and a composer would take them. */
+  const [dragging, setDragging] = useState(false);
 
   const refreshOptions = useCallback(() => {
     commands
@@ -113,6 +118,13 @@ export function CommandApp() {
     const subscriptions = [
       on.commandFocusRun((runId) => select({ kind: "run", runId })),
       on.commandFocusAsk((requestId) => select({ kind: "ask", requestId })),
+      on.filesDrag((drag) => {
+        if (drag.type === "over") setDragging(dropInto.current !== null);
+        else {
+          setDragging(false);
+          if (drag.type === "drop") dropInto.current?.(drag.paths);
+        }
+      }),
     ];
     // A window created for a run or an ask missed that focus event; Rust hands it over once. No `alive` guard:
     // under StrictMode's double mount only the first call gets it.
@@ -270,6 +282,7 @@ export function CommandApp() {
           )}
         </nav>
         <main className="cmd__main">
+          {dragging && <DropOverlay />}
           {/* Kept mounted (hidden) so a draft survives looking at a run. */}
           <div className="cmd__view" hidden={selected !== null || editing !== null}>
             {options && (
@@ -277,6 +290,8 @@ export function CommandApp() {
                 options={options}
                 backends={backends}
                 focusTick={selected === null ? focusTick : -1}
+                active={selected === null && editing === null}
+                dropInto={dropInto}
                 picking={picking}
                 onStarted={(runId) => {
                   setSelected({ kind: "run", runId });
@@ -294,6 +309,8 @@ export function CommandApp() {
                 run={run}
                 transcript={transcripts.get(runId)}
                 focusTick={focusTick}
+                dropInto={dropInto}
+                picking={picking}
                 onSaveAsRoutine={newRoutine}
               />
             </div>

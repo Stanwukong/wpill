@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MutableRefObject } from "react";
 import { commands, errorMessage } from "../lib/ipc";
 import type { AgentBackendsPayload, AgentMode, AgentOptions } from "../lib/types";
+import { AttachButton, AttachmentChips, useAttachments, useDropTarget, type DropInto } from "./Attachments";
 import type { RoutineSeed } from "./routineLabels";
 import {
   AgentField,
@@ -17,12 +18,15 @@ import {
 
 /**
  * The new-task form: the prompt, the folder it runs in (recent folders, or Browse…), the agent, its permission mode, and the run's limits behind
- * an Options disclosure. Ctrl+Enter or Run starts it; "Save as routine" opens the routine editor with it.
+ * an Options disclosure. Ctrl+Enter or Run starts it; "Save as routine" opens the routine editor with it (without the
+ * attachments: routines take none).
  */
 export function NewTask({
   options,
   backends,
   focusTick,
+  active,
+  dropInto,
   picking,
   onStarted,
   onSaveAsRoutine,
@@ -32,6 +36,9 @@ export function NewTask({
   backends: AgentBackendsPayload | null;
   /** Changes when the window gains focus while this view shows; -1 while hidden. */
   focusTick: number;
+  /** This form shows: drops on the window come here. */
+  active: boolean;
+  dropInto: DropInto;
   picking: MutableRefObject<boolean>;
   onStarted: (runId: string) => void;
   onSaveAsRoutine: (seed: RoutineSeed) => void;
@@ -46,6 +53,8 @@ export function NewTask({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
+  const attachments = useAttachments(picking, setError);
+  useDropTarget(dropInto, active, attachments.addPaths);
 
   useEffect(() => {
     if (focusTick >= 0) promptRef.current?.focus();
@@ -70,8 +79,10 @@ export function NewTask({
         claudePath: backend === "claude" ? limits.claudePath || null : null,
         mode,
         backend,
+        attachments: attachments.items.length > 0 ? attachments.items.map((a) => a.path) : undefined,
       });
       setPrompt("");
+      attachments.clear();
       onStarted(runId);
     } catch (err) {
       setError(errorMessage(err));
@@ -110,7 +121,10 @@ export function NewTask({
         spellCheck={false}
         onChange={(e) => setPrompt(e.target.value)}
         onKeyDown={onPromptKey}
+        onPaste={attachments.onPaste}
       />
+
+      <AttachmentChips items={attachments.items} onRemove={attachments.remove} />
 
       <FolderField
         folders={folders}
@@ -137,6 +151,7 @@ export function NewTask({
       />
 
       <footer className="task__footer">
+        <AttachButton label onClick={() => void attachments.pick().then(() => promptRef.current?.focus())} />
         {error && (
           <span className="cmd-error" role="alert">
             {error}

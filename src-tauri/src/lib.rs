@@ -111,6 +111,7 @@ pub fn run() {
             agent::agent_open_link,
             agent::agent_paste_attachments,
             agent::agent_describe_attachments,
+            agent::agent_pick_attachments,
             agent::agent_decide,
             agent::agent_options,
             agent::agent_pick_folder,

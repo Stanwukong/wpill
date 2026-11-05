@@ -45,12 +45,19 @@ export function resultParts(r: Result): { outcome: string; details: string[] } {
   return { outcome: endLabel(r.status, r.reason), details };
 }
 
-/** The whole run as Markdown: your messages, Claude's text, tool calls as list items, notes and the outcome. */
+/**
+ * The whole run as Markdown: your messages (and what you attached, by name), Claude's text, tool calls as list items,
+ * notes and the outcome.
+ */
 export function toMarkdown(entries: AgentEntry[], title?: string): string {
   const out: string[] = [];
   if (title) out.push(`# ${title}`);
   for (const turn of turns(entries)) {
-    if (turn.user) out.push(`## You\n\n${turn.user.text.trim()}`);
+    if (turn.user) {
+      out.push(`## You\n\n${turn.user.text.trim()}`);
+      const attached = turn.user.attachments ?? [];
+      if (attached.length > 0) out.push(`Attached: ${attached.map((a) => a.name).join(", ")}`);
+    }
     if (turn.items.length > 0) out.push("## Claude");
     for (const item of turn.items) {
       switch (item.kind) {

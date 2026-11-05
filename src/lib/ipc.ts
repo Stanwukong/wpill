@@ -110,6 +110,8 @@ export const commands = {
   agentTranscript: (runId: string) => invoke<AgentEntry[]>("agent_transcript", { runId }),
   /** Ctrl+V (2.10b.3): the clipboard's files, or its image saved as a file by Rust; empty when it holds text. */
   agentPasteAttachments: () => invoke<AttachmentPick[]>("agent_paste_attachments"),
+  /** The Attach button (2.10b.4): the shell's file picker; empty if cancelled. */
+  agentPickAttachments: () => invoke<AttachmentPick[]>("agent_pick_attachments"),
   /** Dropped files' names, kinds and sizes (2.10b.3); errors for a folder or a missing file. */
   agentDescribeAttachments: (paths: string[]) =>
     invoke<AttachmentPick[]>("agent_describe_attachments", { paths }),

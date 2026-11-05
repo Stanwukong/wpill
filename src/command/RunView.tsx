@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MutableRefObject } from "react";
 import { commands, errorMessage } from "../lib/ipc";
 import type { AgentApprovalActivity, AgentEntry, AgentRun, Interaction } from "../lib/types";
 import { ClockGlyph, RiskGlyph, StopGlyph } from "../features/agent/AgentGlyphs";
@@ -9,6 +9,7 @@ import { decide, isLive, stopRun } from "../features/agent/useAgentRuns";
 import { AgentTag } from "../features/sessions/AgentTag";
 import { StepLabel } from "../features/sessions/StepLabel";
 import { WorkingIndicator } from "../features/sessions/WorkingGlyphs";
+import { AttachButton, AttachmentChips, useAttachments, useDropTarget, type DropInto } from "./Attachments";
 import { PlanView, QuestionForm } from "./InteractionViews";
 import { Markdown } from "./Markdown";
 import type { RoutineSeed } from "./routineLabels";
@@ -29,6 +30,8 @@ export function RunView({
   run,
   transcript,
   focusTick,
+  dropInto,
+  picking,
   onSaveAsRoutine,
 }: {
   runId: string;
@@ -36,6 +39,9 @@ export function RunView({
   run: AgentRun | undefined;
   transcript: Transcript | undefined;
   focusTick: number;
+  /** Drops on the window go to this run's follow-up box while it shows. */
+  dropInto: DropInto;
+  picking: MutableRefObject<boolean>;
   onSaveAsRoutine: (seed: RoutineSeed) => void;
 }) {
   const entries = transcript?.entries ?? [];
@@ -175,7 +181,14 @@ export function RunView({
         </ul>
       )}
 
-      <Composer runId={runId} live={live} focusTick={focusTick} />
+      <Composer
+        runId={runId}
+        live={live}
+        acceptsImages={run?.acceptsImages ?? null}
+        focusTick={focusTick}
+        dropInto={dropInto}
+        picking={picking}
+      />
     </div>
   );
 }
@@ -187,6 +200,7 @@ function TurnView({ turn, draft }: { turn: Turn; draft: string | null }) {
         <div className="entry entry--user" aria-label="You">
           <CopyMessage text={turn.user.text} />
           <Markdown source={turn.user.text} />
+          {turn.user.attachments && <AttachmentChips items={turn.user.attachments} />}
         </div>
       )}
       {(turn.items.length > 0 || draft != null) && (
@@ -481,12 +495,33 @@ function PendingApproval({ approval }: { approval: AgentApprovalActivity }) {
   );
 }
 
-/** Enter sends, Shift+Enter is a newline. Grows to about five lines. */
-function Composer({ runId, live, focusTick }: { runId: string; live: boolean; focusTick: number }) {
+/**
+ * Enter sends, Shift+Enter is a newline. Grows to about five lines. Attachments ride along as chips above the box;
+ * a refused send keeps them so one can be removed and the message sent again.
+ */
+function Composer({
+  runId,
+  live,
+  acceptsImages,
+  focusTick,
+  dropInto,
+  picking,
+}: {
+  runId: string;
+  live: boolean;
+  /** `false`: an ACP agent that gets images as file links; `null`: not known yet. */
+  acceptsImages: boolean | null;
+  focusTick: number;
+  dropInto: DropInto;
+  picking: MutableRefObject<boolean>;
+}) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const attachments = useAttachments(picking, setError);
+  useDropTarget(dropInto, true, attachments.addPaths);
+  const imagesAsFiles = acceptsImages === false && attachments.items.some((a) => a.kind === "image");
 
   useEffect(() => {
     ref.current?.focus();
@@ -505,8 +540,10 @@ function Composer({ runId, live, focusTick }: { runId: string; live: boolean; fo
     setBusy(true);
     setError(null);
     try {
-      await commands.agentSend(runId, value);
+      const paths = attachments.items.map((a) => a.path);
+      await commands.agentSend(runId, value, paths.length > 0 ? paths : undefined);
       setText("");
+      attachments.clear();
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -529,6 +566,12 @@ function Composer({ runId, live, focusTick }: { runId: string; live: boolean; fo
         </span>
       )}
       <div className="composer__box">
+        {attachments.items.length > 0 && (
+          <div className="composer__attachments">
+            <AttachmentChips items={attachments.items} onRemove={attachments.remove} />
+            {imagesAsFiles && <p className="composer__note">This agent gets images as files.</p>}
+          </div>
+        )}
         <textarea
           ref={ref}
           rows={1}
@@ -538,7 +581,9 @@ function Composer({ runId, live, focusTick }: { runId: string; live: boolean; fo
           spellCheck={false}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKey}
+          onPaste={attachments.onPaste}
         />
+        <AttachButton onClick={() => void attachments.pick().then(() => ref.current?.focus())} />
         <button
           className="composer__send"
           aria-label="Send"

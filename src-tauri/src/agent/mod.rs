@@ -2815,6 +2815,14 @@ pub fn agent_pick_folder(app: AppHandle) -> AppResult<Option<String>> {
     Ok(folder::pick(owner)?)
 }
 
+/// The Attach button (2.10b.4): the shell's file picker, owned by the command window (sync: main thread, STA).
+#[tauri::command]
+pub fn agent_pick_attachments(app: AppHandle) -> AppResult<Vec<crate::ipc::AttachmentPick>> {
+    let owner = window::command::hwnd(&app).ok_or(AppError::NoCommandWindow)?;
+    let paths = folder::pick_files(owner)?;
+    clipboard::describe(&paths).map_err(AppError::AgentInvalid)
+}
+
 #[tauri::command]
 pub async fn command_window_show(app: AppHandle, run_id: Option<String>) -> AppResult<()> {
     window::command::show(&app, run_id)
