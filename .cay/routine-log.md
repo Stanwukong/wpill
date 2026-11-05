@@ -94,3 +94,4 @@
   in `..\wpill-phase5`. If not, wait; don't redo the research. If PR #4 gets comments, those come first.
 - For Femi: pick choices 1–5 in PLAN.md's Phase 5 design; free disk space (e.g. delete `target\debug\incremental`
   with the dev Cay stopped); run the 2.10c/2.10d manual checks for PR #4.
+- PR: https://github.com/Stanwukong/wpill/pull/5 (draft)
