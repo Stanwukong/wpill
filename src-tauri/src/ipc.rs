@@ -26,6 +26,8 @@ pub mod events {
     pub const GOOGLE_STATE: &str = "google:state";
     /// Upcoming events and due tasks changed, or one changed phase (Phase 6a).
     pub const CALENDAR_UPCOMING: &str = "calendar:upcoming";
+    /// The memory-heavy apps, every 2 s while the panel is open and `processes.enabled` is on (Phase 3).
+    pub const PROCESSES_HEAVY: &str = "processes:heavy";
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -870,6 +872,82 @@ pub struct WindowInfo {
     pub exe_name: Option<String>,
     /// PNG data URL.
     pub icon: Option<String>,
+}
+
+/// `processes:heavy` and `list_heavy_processes` (Phase 3).
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeavyProcessesPayload {
+    /// `processes.enabled` in settings.json; the panel shows no section while it's off.
+    pub enabled: bool,
+    /// Biggest first.
+    pub groups: Vec<ProcessGroup>,
+}
+
+/// One app: its processes (same exe, plus helpers such as WebView2 it started), summed.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessGroup {
+    /// Stable across refreshes (the lowercased exe path).
+    pub key: String,
+    /// The exe's description ("Google Chrome"), else its file name without `.exe`.
+    pub name: String,
+    pub pids: Vec<ProcessId>,
+    /// Private working set, as Task Manager's "Memory" column.
+    pub memory_bytes: u64,
+    /// PNG data URL.
+    pub icon: Option<String>,
+    /// Cay never ends it (system, security, the desktop, services, Cay itself).
+    pub protected: bool,
+}
+
+/// A process, identified by pid *and* creation time so a reused pid is never mistaken for it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessId {
+    pub pid: u32,
+    /// FILETIME ticks as a decimal string (too big for a JS number).
+    pub created: String,
+}
+
+/// `end_process_group`'s reply (Phase 3b).
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EndResult {
+    /// You chose Cancel in the confirm box: nothing was done.
+    pub cancelled: bool,
+    /// One per pid asked for (none when cancelled).
+    pub outcomes: Vec<EndProcessOutcome>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EndProcessOutcome {
+    pub pid: u32,
+    pub created: String,
+    pub outcome: EndOutcome,
+}
+
+/// What happened to one process.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EndOutcome {
+    /// Cay ended it (`TerminateProcess`).
+    Ended,
+    /// It exited by itself after the app was asked to close.
+    Closed,
+    /// It runs as administrator (or is otherwise off limits): Cay can't end it.
+    AccessDenied,
+    /// The app has a protected member: Cay never ends it.
+    Protected,
+    /// It had already exited.
+    NotFound,
+    /// Not the process that was listed (its pid was reused), or not part of that app.
+    Changed,
+    /// The app is showing a dialog after being asked to close ("Save changes?"): left open for you.
+    Prompted,
+    /// Windows refused for another reason (logged).
+    Failed,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]

@@ -45,10 +45,12 @@ through a chained status line, the optional sound, D41) is signed off (2026-11-0
 (2026-11-03, D47); **stage 2.9a (agent-neutral sessions: Codex and OpenCode) is signed off (2026-11-04), all 20 manual checks
 passed.** **Stage 2.9b (ACP runs on OpenCode and Codex, D48) is signed off (2026-11-04)**; Goose waits for the
 author's other machine. **2.9c (settings, the agent and model picker, README) is signed off (2026-11-04), all 6 manual
-checks passed.** Next, per the roadmap: [Phase 3, memory-heavy apps](#phase-3-memory-heavy-apps-behind-a-settings-toggle)
-(kick-off prompt: [prompts/phase-3-memory-heavy.md](prompts/phase-3-memory-heavy.md)), then 5, the spikes, and last
-4a-5 (release). Then 3, 5, the spikes, and
-last 4a-5 (release).
+checks passed.**
+**Phase 3 (memory-heavy apps) is complete (2026-11-05): design agreed (D49), 3a (the read-only list) and 3b (End Task,
+D50) signed off, all manual checks passed (3b on the author's other machine).** Built on branch
+`self/phase-3-memory-heavy` (PR #2). Next, per the roadmap: [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
+[prompts/phase-5-utilities.md](prompts/phase-5-utilities.md)), then the spikes, and last 4a-5 (release). See
+[Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
 Verified automatically (by driving the cursor and inspecting the live HWND from outside):
@@ -439,12 +441,28 @@ Unchanged, because they're Claude Code's own: `claude_hooks_status` / `_install`
 `ClaudeInstall`, `agent.claudePath`, the `claude` block and `activities.claude` switch in `settings.json`, the pipe
 names `cay-claude-…` and the hook marker.
 
+### Phase 3a
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| command | `list_heavy_processes` | `(limit?) → { enabled, groups: ProcessGroup[] }` | The watcher's latest list (empty until the panel has been open once). |
+| event | `processes:heavy` | same payload | Every 2 s while the panel is open and the switch is on; nothing while it's closed. |
+| type | `ProcessGroup` | `{ key, name, pids: { pid, created }[], memoryBytes, icon, protected }` | `created`: FILETIME ticks as a string (beyond JS's 2^53). `memoryBytes`: private working set. |
+| switch | `processes.enabled`, `processes.limit` | `boolean` (false), `number` (6, 1–20) | In settings.json until Phase 4b. |
+
+### Phase 3b
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| command | `end_process_group` | `(key, pids: { pid, created }[]) → { cancelled, outcomes: { pid, created, outcome }[] }` | Async. Shows the native confirm box itself (OK / Cancel, Cancel the default); only pids Rust listed for `key` are touched. Errors `processGroupGone`, `processEndBusy` (one at a time). |
+| type | `EndOutcome` | `ended \| closed \| accessDenied \| protected \| notFound \| changed \| prompted \| failed` | `prompted`: the app showed a dialog after `WM_CLOSE` and was left open. Replaces the reserved `ok`. |
+
 ### Reserved for later phases (names fixed now so they slot in)
 
 | Phase | Kind | Name |
 |---|---|---|
-| 3 | command | `list_heavy_processes(limit) → ProcessGroup[]` (`{ name, pids, memoryBytes, icon, protected }`) |
-| 3 | command | `end_process_group(name, pids) → EndResult` (per pid: `ok \| accessDenied \| protected \| notFound`) |
+| 3 | command | `list_heavy_processes`: **in use since 3a** (see Phase 3a above) |
+| 3 | command | `end_process_group`: **in use since 3b.1** (see Phase 3b above) |
 | 4a | event | `monitor:changed` `{ scale }`: **in use since 4a-2**. The poller sends it when the island's monitor rect or DPI scale changes; `usePanelSizeReporter` measures again (it also does on a `devicePixelRatio` change, e.g. Text size) |
 | 4b | event | `settings:changed` |
 | 4b | command | `get_settings`, `set_settings` |
@@ -499,8 +517,8 @@ meaning; new phases slot in between.
 | 7 | **2.8 Agent UX** (complete 2026-11-02) | Approve terminal sessions from the island, see what you approve, questions and plans, a live step line, permission modes, trustworthy Connect | Proposed 2026-11-01 after a competitor survey (D34). Approving terminal sessions is the core of every rival; Cay only focuses the window. |
 | 8 | **6 Google Calendar and Gmail** (complete 2026-11-03; prompt [phase-6-google.md](prompts/phase-6-google.md)) | Upcoming events and tasks in the pill and panel; Gmail and Calendar tools for agent runs | Proposed 2026-11-01 (D35). Replaces the "calendar peek" spike. |
 | 9 | **2.9 Other agents and open models** (complete 2026-11-04, D47/D48; Goose deferred; prompt [phase-2.9-other-agents.md](prompts/phase-2.9-other-agents.md)) | Codex / OpenCode sessions in the island; agent runs through ACP (Goose + Ollama first) beside the native Claude Code path | Proposed 2026-11-01 after a competitor survey. Every rival watches several CLIs; none runs agents. Keeps Cay's lead (runs, routines, desktop tools) while closing the coverage gap. |
-| 10 | **3 Memory-heavy apps** (next; prompt [phase-3-memory-heavy.md](prompts/phase-3-memory-heavy.md)) | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
-| 11 | **5 Utilities** | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
+| 10 | **3 Memory-heavy apps** (complete 2026-11-05, D49/D50; prompt [phase-3-memory-heavy.md](prompts/phase-3-memory-heavy.md)) | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
+| 11 | **5 Utilities** (next; prompt [phase-5-utilities.md](prompts/phase-5-utilities.md)) | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
 | 12 | **Spikes** | Notifications mirror, live window previews (calendar peek moved to Phase 6) | Uncertain feasibility or needs sign-in; prototype before committing. |
 | 13 | **4a-5 Release v0.2** (deferred here 2026-11-02) | Full manual pass of every phase, the dock check, publish the installer with its SHA-256 | The author's call: release once every phase is in. |
 
@@ -1613,6 +1631,132 @@ our own pid) is refused in Rust, not just hidden in the UI. Access-denied (eleva
 gets a clear message explaining the app can't close elevated processes unless run as admin.
 Off by default.
 
+#### Phase 3 design: agreed (drafted by the daily routine, approved by the author 2026-11-04, D49)
+Research per [prompts/phase-3-memory-heavy.md](prompts/phase-3-memory-heavy.md). The author took every recommendation:
+grouping (b), a native confirm box (a), and no agent tool for now (a).
+
+**Findings**
+- **Measured on the dev PC (7.9 GB RAM, 339 processes):** one `NtQuerySystemInformation(SystemProcessInformation)`
+  call plus walking the buffer takes **3.5 ms** (best of 20). It needs no process handles, so it also reads elevated
+  and protected processes. `Get-Process` plus each exe path took ~3 s (opening every process), so exe paths must be
+  cached by `(pid, creation time)`, not re-read every refresh.
+- **Which number:** Task Manager's Processes tab "Memory" column is the *active private working set*. `sysinfo`
+  (not a dependency today) reports `WorkingSetSize` as `memory()` and `PagefileUsage` as `virtual_memory()`, neither of
+  which matches. `SYSTEM_PROCESS_INFORMATION` carries the private working set at offset 8 (in the windows crate's
+  `Reserved1[0..8]`; named `WorkingSetPrivateSize` in phnt), the creation time at offset 32 (`Reserved1[24..32]`) and
+  the parent pid (`Reserved2`). **Recommendation: no new dependency**; `windows` 0.62 already binds
+  `Wdk::System::SystemInformation::NtQuerySystemInformation` (add the `Wdk_System_SystemInformation` feature). The
+  layout is undocumented but stable since Vista. A unit test pins the offsets against the struct size.
+- **Grouping (choose):** (a) by exe name: simple, but merges every `msedgewebview2.exe` (Teams, WhatsApp, widgets) into
+  one row and splits nothing else usefully; (b) by exe *path*, then fold helper children (`msedgewebview2`,
+  `crashpad_handler`, `*-helper`) into their parent app: Chrome, Edge, VS Code and Teams come out as one row each,
+  close to Task Manager's "Apps" grouping (an app is a process with a window plus its process tree);
+  (c) the whole process tree: also folds a VS Code terminal's `node`/`powershell` into "VS Code", so End would kill
+  shells the user started. **Recommend (b)**, label and icon from `apps/` (window title owner / exe icon).
+  UWP apps (WhatsApp) group by their package's exe path like any other.
+- **Refresh:** only while the panel is open: the hover poller already knows the phase. A `processes` watcher thread
+  (through `activity::Watcher`) wakes on panel-open, refreshes every 2 s, and parks on close. Cost while closed: zero.
+- **Ending a group:** pids are revalidated by `(pid, creation time)` just before acting (as `sessions/process.rs`
+  does), so a reused pid is never ended. Order: `WM_CLOSE` to the group's top-level windows first (apps can prompt
+  to save), wait up to 5 s, then `TerminateProcess` per remaining pid, children before parents. `OpenProcess
+  (PROCESS_TERMINATE)` on an elevated target fails with `ERROR_ACCESS_DENIED`; the row then reads "Runs as
+  administrator; Cay can't end it" (no elevation prompt).
+- **Protected list, enforced in Rust:** PLAN's list (csrss, wininit, winlogon, services, lsass, smss, svchost, dwm,
+  explorer, System, Registry, Cay's own pid) plus `MsMpEng`, `NisSrv`, `SecurityHealthService`, `audiodg`,
+  `fontdrvhost`, `sihost`, `ctfmon`, `conhost`, `Memory Compression`, `Idle` (pid 0), and any process in session 0.
+  Protected rows can be shown (they're often big) but have no End button, and `end_process_group` refuses them anyway.
+- **Confirm (choose):** the island can't take focus (rule 2). (a) A native `MessageBoxW` like Connect's: "End
+  WhatsApp? 3 processes, 1.2 GB. Unsaved work may be lost." [End] [Cancel]; (b) the command window. **Recommend (a)**:
+  it's one question, needs no typing, and matches Connect.
+- **Agent tool (choose):** (a) nothing; (b) a read-only `list_heavy_processes` look tool (names and sizes only, asked
+  like the other looks), never an end-process tool. **Recommend (a) for Phase 3**, revisit later.
+
+**IPC (keeps the reserved names; payloads revised)**
+- `list_heavy_processes(limit) → ProcessGroup[]`: `{ key, name, pids: {pid, created}[], memoryBytes, icon, protected }`
+  (camelCase; `created` so the end call can revalidate).
+- `end_process_group(key, pids) → EndResult`: per pid `ok | closed | accessDenied | protected | notFound | changed`.
+- Event `processes:heavy` (the list, pushed by the watcher while the panel is open), so React runs no timer.
+- Switch: `processes.enabled` (default `false`) in `settings.json`, like `activities.*`, until Phase 4b.
+
+**Stages and tasks**
+- **3a: the list (read-only)**
+  - [x] 3a.1 `processes/snapshot.rs`: the `NtQuerySystemInformation` read (private WS, creation time, parent pid,
+        name), with an offset test. Exit: unit test + a debug log line with count and timing.
+  - [x] 3a.2 `processes/logic.rs` (pure): grouping per option (b), helper folding, sorting, protected flags. Exit:
+        unit tests with synthetic process tables (Chrome tree, WebView2 under two apps, svchost, pid reuse).
+  - [x] 3a.3 Watcher thread: refresh every 2 s only while the panel is open, exe path cache by `(pid, created)`,
+        `processes:heavy` event, `processes.enabled` switch. Exit: log shows no refresh while closed.
+  - [x] 3a.4 Panel section via `motion-designer` (after Agents/Calendar, inside D44's one scroller; icon, name,
+        memory figure in the panel's existing type scale; empty/off states; no new colours). Exit: `pnpm typecheck`,
+        headless render reviewed.
+  - Built 2026-11-04 (daily routine): 12 new Rust tests (the live one checks the private working set and the
+    creation-time offset against `GetProcessTimes`); `MemorySection` (heading "Memory", up to 6 rows: icon, name, a
+    hairline share bar, the figure in tabular numerals; renders nothing while off or before the first push).
+  - [x] 3a manual check (≈6 items: off by default, list matches Task Manager within ~10 %, refresh stops on close,
+        no focus stealing, click-through outside the panel, Text size 120 %). Signed off by the author 2026-11-04: the
+        first refresh took ~577 ms (filling the exe-path cache), later ones 14–60 ms for ~340 processes, only while the
+        panel was open; Cay saved the block back as `{ "enabled": true, "limit": 6 }` and kept every other key.
+- **3b: End Task**
+  - [x] 3b.1 `processes/end.rs`: revalidation, protected refusal, `WM_CLOSE` then `TerminateProcess`, per-pid
+        results, log of names and counts. Exit: tests on the pure parts; manual test only on a Notepad the test
+        started itself.
+  - Built 2026-11-04: `end_process_group` takes pids only from Rust's own latest list for that app, checks them
+        against a fresh snapshot before the confirm box and again after it, refuses the whole app if any member is
+        protected, then `WM_CLOSE` → up to 5 s → `TerminateProcess` children first, through a handle whose creation
+        time is checked (so a reused pid is never ended). An app whose window is disabled after `WM_CLOSE` (a "Save
+        changes?" dialog) is left open (`prompted`) instead of ended under the prompt. The confirm box lives in the
+        command, so the page can't skip it. 8 new tests (290 in all); a live `--ignored` test ends a windowless
+        `cmd` → `ping` tree it started (ping first). The `WM_CLOSE` and `prompted` paths need a window, so they're
+        in the 3b manual check, not tested yet.
+  - [x] 3b.2 Confirm box and row states (closing…, access denied, ended) via `motion-designer`.
+  - Built 2026-11-04: a quiet × in a fixed 22 px slot after the figure (shown on row hover; protected rows keep the
+        slot empty, so nothing shifts), "Ending…" in place of the figure while the command runs, then one line in the
+        figure's type: "Ended" (the row fades out with the next push), "Left open: it's asking you something",
+        "Runs as administrator; Cay can't end it", "Couldn't end it" / "No longer running". The state lives in
+        `useHeavyProcesses` (in `Island`), so it survives the panel collapsing while the confirm box is up; messages
+        clear when the group leaves the list or comes back with other pids, never on a timer. Headless renders at
+        640 and 420 px reviewed.
+  - [x] 3b manual check (≈6 items, throwaway processes only; never the author's apps without asking). Signed off by the
+        author 2026-11-05 (run on the other machine); on the dev PC one End on WhatsApp logged `8 processes: 8 Ended`
+        (it hides to the tray on `WM_CLOSE`, so all 8 were terminated after the 5 s wait).
+
+**Manual check (3b)** (`pnpm tauri dev` from the branch with `$env:RUST_LOG='info,cay_lib=debug'`; for the check set
+`"processes": { "enabled": true, "limit": 20 }` so small throwaway apps get a row, and put 6 back afterwards. Grouping
+is by exe path, so End ends *every* window of that app: use apps you don't otherwise have open.)
+1. **Protected rows:** Windows Explorer, Desktop Window Manager, Antimalware and the like have no ×; other rows show it
+   only while hovered, and nothing in the row moves when it appears.
+2. **Cancel:** open Paint, hover its row, click × → the confirm box ("End Paint? …", Cancel the default) appears in
+   front; Cancel → the row is back to normal and Paint still runs. The log has `end Paint: cancelled`.
+3. **Ended:** × on Paint with an empty canvas → OK → "Ending…", then Paint closes, the row fades out and the rows below
+   glide up. The log has `end Paint: N processes: …` with `Closed`/`Ended` counts, no titles.
+4. **Asking to save:** draw one stroke in a new Paint, × → OK → Paint shows its own "Save changes?" → the row reads
+   "Left open: it's asking you something" after ~5 s and Paint is still running (answer Paint's dialog yourself).
+5. **Administrator:** start Registry Editor (`regedit`, it always runs elevated) → × → OK → "Runs as administrator; Cay
+   can't end it", and regedit still runs.
+6. **Focus and collapse:** while the confirm box is up, move away so the panel collapses, then click OK; reopening the
+   panel shows the right row state. The island never takes focus, and clicks beside the panel still reach the app
+   underneath.
+
+**Manual check (3a)** (`pnpm tauri dev` from the branch with `$env:RUST_LOG='info,cay_lib=debug'`; quit any other Cay
+first)
+1. **Off by default:** with no `processes` block (or `"enabled": false`) the panel has no Memory section, and the log has
+   no `processes:` lines.
+2. **On:** set `"processes": { "enabled": true }` in `%APPDATA%\io.github.stanwukong.cay\settings.json`, restart Cay,
+   open the panel: within a moment "Memory" lists up to 6 apps, biggest first, with icons and names.
+3. **Matches Task Manager:** compare the top rows with Task Manager → Processes (Memory column, grouped apps): each
+   figure within ~10 %; Chrome/Edge/VS Code are one row each; Teams/WhatsApp include their WebView2.
+4. **Only while open:** the log shows a `processes: N read in … ms` line every ~2 s while the panel is open and none
+   after it closes.
+5. **No focus stealing, still click-through:** the foreground app keeps focus while the panel opens and refreshes;
+   clicks beside the panel and on the collapsed pill's margins reach the app underneath.
+6. **Text size 120 % / scale:** the section fits, names ellipsize, figures line up, and the panel's hover area still
+   matches its edges as rows reorder.
+
+**Sources:** Microsoft Learn: `NtQuerySystemInformation`, `SYSTEM_PROCESS_INFORMATION` (winternl.h), "Memory
+Performance Information" (working set vs private bytes); phnt `ntexapi.h` (field names behind the reserved bytes);
+`windows` 0.62.2 bindings (checked locally); `sysinfo` docs (`Process::memory` = working set on Windows);
+the 3.5 ms measurement above (PowerShell + C# P/Invoke, 2026-11-04).
+
 ### Phase 4b: settings
 A settings window (a normal, focusable window, separate from the island) for: activities on/off,
 Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `tauri-plugin-store`.
@@ -1647,6 +1791,11 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
   OpenCode and Codex ignore Cay's turn and budget limits, change mode from the next message, and stop after 10 silent
   minutes. OpenCode's Auto is a list of allowed commands, not a reviewer. Codex's "reject once" ends its whole turn.
   Desktop actions in Auto aren't judged by a classifier on those agents. Goose and local models aren't wired yet.
+- Memory-heavy apps (3, D49/D50): off by default (`processes.enabled`). End ends every process of that exe path, so
+  every window of the app. An app that hides to the tray on `WM_CLOSE` (WhatsApp) is terminated after 5 s, so anything
+  it hadn't saved is lost; an app showing a dialog is left open. Apps run as administrator can't be ended. Packaged
+  apps whose exe has no description show its file name (WhatsApp as "WhatsApp.Root"). Only the top `processes.limit`
+  apps (6) are listed.
 - Single instance is keyed on the bundle identifier, so a dev build and the installed release build
   can't run at the same time. Quit one from the tray first.
 - Icons are cached per HICON/exe path. An app that changes its window icon at runtime may show a stale icon.

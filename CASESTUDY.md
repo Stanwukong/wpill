@@ -955,6 +955,42 @@ invalid JSON escape, so the forwarder (correctly) dropped the input. *Fix:* gene
 script and pipe those. *Lesson:* test the boundary with bytes you've inspected (`od -c`); a quiet forwarder is the
 design, so "nothing happened" needs a trace build, not guesses.
 
+### D49: Memory-heavy apps from one kernel snapshot, grouped by exe path, refreshed only while the panel is open (Phase 3)
+*What:* the panel's "Memory" section (off by default, `processes.enabled`) lists the apps using the most memory.
+One `NtQuerySystemInformation(SystemProcessInformation)` call reads every process (3.5 ms for 339 on the dev PC) with
+no process handles, so elevated and system processes are read too; the figure is the *private working set*, Task
+Manager's "Memory" column. Processes group by exe path, with helper processes (WebView2, crash handlers) folded into the
+app that started them, so Teams and WhatsApp carry their WebView2 and Chrome is one row; other children (a VS Code
+terminal's shell) keep their own row. A `processes-watcher` thread waits on a condvar until the hover poller says the
+panel is open, then refreshes every 2 s and pushes `processes:heavy`; while closed it costs nothing. The protected list
+is enforced in Rust (PLAN's list plus Defender, `audiodg`, `fontdrvhost`, `sihost`, `ctfmon`, `conhost`, Memory
+Compression, every session-0 process and Cay itself), and a whole group is protected if any member is. End Task (3b)
+will confirm in a native message box, close windows before terminating, and revalidate `(pid, creation time)`.
+*Why:* the author approved the routine's draft as recommended (2026-11-04).
+*Alternatives:* `sysinfo` (a new dependency, and it reports the working set and commit, neither of which is Task
+Manager's figure); grouping by exe name (one giant "msedgewebview2" row) or by process tree (would end a terminal the
+user started from VS Code); the command window as the confirm; a read-only agent tool (later, maybe).
+*Costs:* no new crate, one `windows` feature (`Wdk_System_SystemInformation`). The entry's layout is undocumented
+(phnt's names behind the crate's `Reserved*` fields, stable since Vista); a live test pins the private working set and
+the creation-time offset against `GetProcessTimes`. Exe paths are cached by `(pid, created)` (opening every process
+took ~3 s from PowerShell), display names (`FileDescription`) by path.
+
+### D50: Ending an app: Rust confirms, checks twice, and never ends an app that's asking to save (Phase 3b)
+*What:* `end_process_group(key, pids)` shows the native confirm box itself ("End WhatsApp? 3 processes, 1.2 GB…",
+OK / Cancel with Cancel the default) rather than leaving the confirm to the page. It only touches pids Rust listed for
+that app in its latest push (anything else reads `changed`), checks them against a fresh snapshot before the box and
+again after it (the box can stay open a while), and refuses the whole app if any member is protected. Each
+`TerminateProcess` goes through a handle opened first and checked for the listed creation time, so the pid can't be
+reused between the check and the call. One addition to D49: if an app's window is disabled after `WM_CLOSE`, it is
+showing a dialog ("Save changes?"), so Cay leaves it open (`prompted`) instead of ending it under the prompt after 5 s.
+The reserved `ok` outcome became `ended`, and `prompted` and `failed` were added.
+*Why:* the island page is untrusted as far as ending processes goes: a confirm in React could be skipped by a bug, and
+pids from the page could be stale or arbitrary. Ending an app that just asked "Save changes?" would lose exactly the
+work `WM_CLOSE` was meant to protect.
+*Alternatives:* confirm in React and keep the command a bare "end these pids" (rejected: the page decides); a
+TaskDialog with an "End" button (needs Common Controls 6 in Cay's manifest; MessageBox matches Connect); always
+terminating after 5 s as the design said (rejected for the reason above).
+
 ### C8: The agent pipe refused every bridge's hello
 *Symptom:* the first real agent run failed with "MCP tool mcp__topbar__approve not found"; TopBar's log said it had
 refused two connections "without a valid run token". *Diagnosis:* the bridge writes its hello as soon as it connects,
@@ -1109,6 +1145,11 @@ so tests and Connect must both say which folder they touch; and a hook only prov
 | 2026-11-04 | **Stage 2.9b signed off** by the author (OpenCode and Codex runs); Goose deferred to the other machine. 2.9c started. |
 | 2026-11-04 | Stage 2.9c built: `agent.defaultBackend` and `agent.backends` in settings.json, routines with an agent, `agent_backends` (installed agents and their models: `opencode models`, Codex's model cache), the command window's agent and model picker with turns and budget for Claude Code only, agent tags on runs and routines (motion-designer), and the README's section on other agents. Manual checks pending. |
 | 2026-11-04 | Stage 2.9c signed off by the author (all 6 manual checks passed): **Phase 2.9 complete**, Goose deferred to the other machine. Phase 3 (memory-heavy apps) kick-off prompt written. |
+| 2026-11-04 | Phase 3 research and design drafted by the daily routine and approved by the author (D49). Stage 3a built on branch `self/phase-3-memory-heavy` in a separate worktree (the live `pnpm tauri dev` would have restarted on Rust edits): kernel snapshot, grouping, the panel-open-only watcher, `processes:heavy`, the Memory section (motion-designer). Manual check pending. |
+| 2026-11-04 | **Stage 3a signed off** by the author (all 6 manual checks passed). In the live log the first refresh took ~577 ms (the exe-path cache filling: one `OpenProcess` per process), every later one 14–60 ms for ~340 processes, and none while the panel was closed. 3b (End Task) next. |
+| 2026-11-04 | Stage 3b.1 built (D50): `processes/end.rs` and `end_process_group`, the confirm box in Rust, two checks by creation time, `WM_CLOSE` then `TerminateProcess` children first, `prompted` for an app asking to save. 290 Rust tests; a live test ended a `cmd` → `ping` tree it started. Built with `CARGO_INCREMENTAL=0` and `cargo test --lib` (8.4 GB free, C14). |
+| 2026-11-04 | Stage 3b.2 built (motion-designer): the × End control in a fixed slot, "Ending…", result lines in the figure's type, ended rows fading out; End state in `useHeavyProcesses` so it survives the panel collapsing during the confirm box. Headless renders reviewed; 3b manual check written. |
+| 2026-11-05 | **Stage 3b signed off** by the author (manual check run on the other machine): **Phase 3 complete**. On the dev PC one End on WhatsApp ended all 8 processes after the 5 s wait (it hides to the tray instead of closing), and the row read "WhatsApp.Root" (its exe has no description): both in Known limitations. Phase 5 (utilities) kick-off prompt written. |
 | 2026-11-03 | Stage 2.9a, step 1: the rename (`claude/` → `sessions/`, session IPC names, `features/sessions/`, `--font-agent`, `data-agent`), no behaviour change; 230 Rust tests, clippy and typecheck clean. Codex updated to 0.166.0. |
 
 ## 7. Results & metrics

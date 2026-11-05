@@ -42,6 +42,10 @@ pub enum AppError {
     Google(String),
     #[error("That event or task is no longer listed.")]
     CalendarItemGone,
+    #[error("That app is no longer listed.")]
+    ProcessGroupGone,
+    #[error("Cay is already ending an app.")]
+    ProcessEndBusy,
     #[error(transparent)]
     Win32(#[from] windows::core::Error),
     #[error(transparent)]
@@ -69,6 +73,8 @@ impl AppError {
             Self::NoCommandWindow => "noCommandWindow",
             Self::Google(_) => "google",
             Self::CalendarItemGone => "calendarItemGone",
+            Self::ProcessGroupGone => "processGroupGone",
+            Self::ProcessEndBusy => "processEndBusy",
             Self::Win32(_) => "win32",
             Self::Tauri(_) => "tauri",
         }

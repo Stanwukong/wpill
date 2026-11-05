@@ -11,6 +11,7 @@ mod hover;
 mod ipc;
 mod media;
 mod migrate;
+mod processes;
 mod sessions;
 mod tray;
 mod win32;
@@ -61,6 +62,7 @@ pub fn run() {
         .manage(sessions::Asks::default())
         .manage(agent::Agents::default())
         .manage(google::Google::default())
+        .manage(processes::Processes::default())
         .setup(|app| {
             let handle = app.handle().clone();
             migrate::from_topbar(&handle);
@@ -72,6 +74,7 @@ pub fn run() {
             sessions::spawn(&handle, &app.state::<activity::Activities>());
             agent::spawn(&handle, &app.state::<activity::Activities>());
             google::spawn(&handle, &app.state::<activity::Activities>());
+            processes::spawn(&handle, &app.state::<activity::Activities>());
             tray::create(&handle)?;
             Ok(())
         })
@@ -128,6 +131,8 @@ pub fn run() {
             google::google_disconnect,
             google::calendar_open,
             google::calendar_join,
+            processes::list_heavy_processes,
+            processes::end_process_group,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Cay")

@@ -46,6 +46,7 @@ features = [
   "Devices_Enumeration",
   "Media_Control",
   "Storage_Streams",
+  "Wdk_System_SystemInformation",
   "Win32_Devices_FunctionDiscovery",
   "Win32_Foundation",
   "Win32_Graphics_Dwm",

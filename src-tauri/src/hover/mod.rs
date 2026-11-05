@@ -255,6 +255,10 @@ fn flush(app: &AppHandle, island: &Island, activities: &Activities, out: &mut Ve
                         s.rect = None;
                     }
                 }
+                // The memory section refreshes only while the panel is open (Phase 3).
+                if let Some(processes) = app.try_state::<crate::processes::Processes>() {
+                    processes.panel(expanded);
+                }
                 let event = if expanded {
                     events::HOVER_ENTER
                 } else {
