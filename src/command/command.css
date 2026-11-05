@@ -131,6 +131,13 @@ textarea {
   }
 }
 
+/* A wide or maximized window (2.10c): the list grows a little; the rest goes to the run's margins. */
+@media (min-width: 1200px) {
+  .cmd__runs {
+    width: 256px;
+  }
+}
+
 .cmd-new,
 .cmd-run {
   width: 100%;
@@ -577,12 +584,19 @@ textarea {
   color: var(--island-muted);
 }
 
+/*
+ * The main area is a size container so its views can keep a reading column (2.10c): `--col` is the margin either side
+ * of a 760 px column, 0 until the area is wider than that. Views take max(their own padding, --col), so a narrow window
+ * is unchanged and a wide one centres the content while scroll containers (and their scrollbars) stay full width.
+ */
 .cmd__main {
   position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  container-type: inline-size;
+  --col: max(0px, (100cqi - 760px) / 2);
 }
 
 .cmd__view {
@@ -716,7 +730,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 16px 22px;
+  padding: 16px max(22px, var(--col));
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -945,8 +959,8 @@ textarea {
   flex: none;
   position: sticky;
   bottom: -16px;
-  margin: auto -22px -16px;
-  padding: 12px 22px 16px;
+  margin: auto calc(-1 * max(22px, var(--col))) -16px;
+  padding: 12px max(22px, var(--col)) 16px;
   background: #141416;
   display: flex;
   align-items: center;
@@ -1299,7 +1313,7 @@ textarea {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 0 14px 0 22px;
+  padding: 0 max(14px, var(--col)) 0 max(22px, var(--col));
   line-height: 44px;
   border-bottom: 1px solid var(--island-border);
   white-space: nowrap;
@@ -1379,7 +1393,7 @@ textarea {
   min-height: 0;
   overflow-y: auto;
   /* The left side is wider: Copy and the writing wave sit in it, beside Claude's text. */
-  padding: 16px 22px 8px 28px;
+  padding: 16px max(22px, var(--col)) 8px max(28px, var(--col));
   scrollbar-width: thin;
   user-select: text;
   cursor: text;
@@ -1831,7 +1845,7 @@ textarea {
   scrollbar-width: thin;
   list-style: none;
   margin: 0;
-  padding: 8px 18px 0;
+  padding: 8px max(18px, var(--col)) 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1974,7 +1988,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 16px 22px;
+  padding: 16px max(22px, var(--col));
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -2027,7 +2041,7 @@ textarea {
 
 .ask__gone--alone {
   margin: 0;
-  padding: 16px 22px;
+  padding: 16px max(22px, var(--col));
   text-align: left;
 }
 
@@ -2479,7 +2493,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px 18px 16px;
+  padding: 10px max(18px, var(--col)) 16px;
 }
 
 .composer__box {
