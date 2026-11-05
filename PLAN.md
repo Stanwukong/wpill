@@ -1893,7 +1893,7 @@ run's own attachments folder. The tasks below are the work list; the stage bulle
 
 **Proposed tasks (once agreed)**
 - **2.10a: transcript**
-  - [x] 2.10a.1 Rust: `Tool` entries carry an optional preview (from the input, no file read); `Result` carries
+  - [x] 2.10a.1 (0a6b91a) Rust: `Tool` entries carry an optional preview (from the input, no file read); `Result` carries
         `durationMs` (Rust's own start-to-result time, the same for every agent); tests in `stream.rs`/`lifecycle.rs`.
   - [ ] 2.10a.2 `Markdown.tsx`: tables, links (new `agent_open_link`, https only, checked in Rust), strikethrough,
         fence language label + Copy; unit tests for the parser (pure functions moved out of the component).
