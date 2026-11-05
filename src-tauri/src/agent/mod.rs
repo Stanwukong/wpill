@@ -28,6 +28,7 @@ mod attachments;
 mod audit;
 mod backend;
 mod bridge;
+mod clipboard;
 mod describe;
 mod folder;
 mod google_tools;
@@ -2603,6 +2604,34 @@ pub fn agent_runs(agents: State<'_, Agents>) -> AgentRunsPayload {
 pub fn agent_open_link(url: String) -> AppResult<()> {
     let url = links::checked(&url).map_err(AppError::AgentInvalid)?;
     crate::desktop::open_link(&url).map_err(|e| AppError::AgentInvalid(links::why(e)))
+}
+
+/// Ctrl+V in the command window (2.10b.3): the clipboard's files, or its image saved as a file; empty for text.
+#[tauri::command]
+pub async fn agent_paste_attachments(
+    agents: State<'_, Agents>,
+) -> AppResult<Vec<crate::ipc::AttachmentPick>> {
+    let folder = agents
+        .lock()
+        .audit
+        .as_ref()
+        .map(|a| a.dir().join(clipboard::PASTED))
+        .unwrap_or_else(|| std::env::temp_dir().join("cay-pasted"));
+    tauri::async_runtime::spawn_blocking(move || clipboard::paste(&folder))
+        .await
+        .map_err(|e| AppError::AgentInvalid(e.to_string()))?
+        .map_err(AppError::AgentInvalid)
+}
+
+/// Files dropped on the command window (2.10b.3): their names, kinds and sizes for the chips.
+#[tauri::command]
+pub async fn agent_describe_attachments(
+    paths: Vec<String>,
+) -> AppResult<Vec<crate::ipc::AttachmentPick>> {
+    tauri::async_runtime::spawn_blocking(move || clipboard::describe(&paths))
+        .await
+        .map_err(|e| AppError::AgentInvalid(e.to_string()))?
+        .map_err(AppError::AgentInvalid)
 }
 
 #[tauri::command]

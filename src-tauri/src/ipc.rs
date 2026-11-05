@@ -781,6 +781,17 @@ pub struct AgentAttachment {
     pub bytes: u64,
 }
 
+/// A file picked for a message before it's sent (2.10b.3): dropped, pasted or copied in Explorer. Only its path
+/// crosses IPC, never its bytes.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentPick {
+    pub path: String,
+    pub name: String,
+    pub kind: AttachmentKind,
+    pub bytes: u64,
+}
+
 /// One transcript entry: what the command window shows for a run.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -518,6 +518,18 @@ export interface AgentAttachment {
   bytes: number;
 }
 
+/** A file picked for a message before it's sent (2.10b.3): dropped, pasted or copied in Explorer. Only its path
+ *  crosses IPC, never its bytes. */
+export interface AttachmentPick {
+  path: string;
+  name: string;
+  kind: "image" | "file";
+  bytes: number;
+}
+
+/** Files dragged over the command window (2.10b.3): `over` while they hover, then `drop` with their paths. */
+export type FilesDrag = { type: "over" } | { type: "drop"; paths: string[] } | { type: "leave" };
+
 export type AgentEvent =
   | { kind: "user"; text: string; attachments?: AgentAttachment[] }
   | { kind: "text"; text: string }

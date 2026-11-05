@@ -129,6 +129,32 @@ pub fn scale_image(path: std::path::PathBuf) -> Result<Encoded, String> {
         .unwrap_or_else(|_| Err("scaling the image took too long".into()))
 }
 
+/// Pixels (32bpp BGR, top-down) encoded like a capture (2.10b.3: an image pasted from the clipboard).
+pub fn encode_pixels(width: u32, height: u32, pixels: Vec<u8>) -> Result<Encoded, String> {
+    let (tx, rx) = mpsc::channel();
+    std::thread::Builder::new()
+        .name("paste-image".into())
+        .spawn(move || {
+            // SAFETY: COM for this thread only (WIC); balanced below.
+            let com = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.is_ok();
+            let bitmap = capture::Bitmap {
+                width,
+                height,
+                pixels,
+            };
+            let result = encode::encode(&bitmap).map_err(|e| e.message());
+            drop(bitmap);
+            if com {
+                // SAFETY: balances the CoInitializeEx above; every COM object is dropped by now.
+                unsafe { CoUninitialize() };
+            }
+            let _ = tx.send(result);
+        })
+        .map_err(|e| e.to_string())?;
+    rx.recv_timeout(LOOK_TIMEOUT)
+        .unwrap_or_else(|_| Err("encoding the image took too long".into()))
+}
+
 /// Runs `look`. `expect_pid` is the target's process when it was approved (a reused HWND is refused).
 pub fn run(look: Look, expect_pid: Option<u32>) -> Result<Outcome, LookError> {
     let (tx, rx) = mpsc::channel();
