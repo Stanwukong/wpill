@@ -32,7 +32,7 @@
 ## 2026-11-05 | Phase 2.10: agent window UI (research and design only)
 - Status: BLOCKED on design approval. Phase 3 is merged (PR #2); 2.10 is next and its design was "to be agreed", so
   this run researched and drafted it in PLAN.md ("Phase 2.10 design: DRAFT – needs Femi's OK"). No code was run or
-  written. Branch `self/phase-2.10-agent-window`, draft PR (see below).
+  written. Branch `self/phase-2.10-agent-window`, draft PR https://github.com/Stanwukong/wpill/pull/3.
 - Tasks: none run (2.10a.1–2.10d proposed).
 - Desktop build: the running Cay is `pnpm tauri dev`; `target\debug\cay.exe` was built 2026-11-05 12:06, after
   b894f09 (the last code commit on main; later commits are docs only), so it matches main. No installed release; nothing rebuilt.
