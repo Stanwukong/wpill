@@ -49,7 +49,8 @@ checks passed.**
 **Phase 3 (memory-heavy apps) is complete (2026-11-05): design agreed (D49), 3a (the read-only list) and 3b (End Task,
 D50) signed off, all manual checks passed (3b on the author's other machine).** Built on branch
 `self/phase-3-memory-heavy` (PR #2). Next, per the roadmap: [Phase 2.10, agent window UI](#phase-210-agent-window-ui-design-agreed-2026-11-05-d51-d52)
-(added 2026-11-05, D51; design agreed 2026-11-05, D52; built on branch `self/phase-2.10-agent-window`, PR #3), then [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
+(added 2026-11-05, D51; design agreed 2026-11-05, D52; built on branch `self/phase-2.10-agent-window`, PR #3).
+**Stage 2.10a (readable transcript) is built (2026-11-05); its manual check is pending.** 2.10b–d not started. After 2.10: [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
 [prompts/phase-5-utilities.md](prompts/phase-5-utilities.md)), the spikes, and last 4a-5 (release). See
 [Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
@@ -1901,10 +1902,22 @@ run's own attachments folder. The tasks below are the work list; the stage bulle
         fence language label + Copy; unit tests for the parser (pure functions moved out of the component).
   - [x] 2.10a.3 (e622e23) `RunView`: turns, folded tool groups, results collapsed (errors open), `PreviewBlock` for edits, the
         summary card, inline approvals (motion-designer).
-  - [ ] 2.10a.4 Copy message / copy run as Markdown (pure `toMarkdown(entries)`, tested); pinned scroll + "Jump to
+  - [x] 2.10a.4 (e6623dd) Copy message / copy run as Markdown (pure `toMarkdown(entries)`, tested); pinned scroll + "Jump to
         latest" (motion-designer).
-  - [ ] 2.10a.5 (if 3a) streaming drafts: `stream.rs` deltas, coalescing in `mod.rs`, `agent:textDraft` in
+  - [x] 2.10a.5 (797dd6e, e6623dd) (if 3a) streaming drafts: `stream.rs` deltas, coalescing in `mod.rs`, `agent:textDraft` in
         `ipc.rs`/`ipc.ts`, drawn as the turn's last block.
+  - [ ] **2.10a manual check (Femi)**: from this branch (`pnpm tauri dev`), haiku runs in a scratch folder:
+        1. A reply with a table, a link, `~~strike~~` and a fenced code block renders as such; Copy copies the code;
+           clicking the https link opens the browser, and an `http://` link is plain text.
+        2. Claude's text appears while it's written (the amber wave in the gutter) and doesn't jump when it's done.
+        3. A run that reads several files shows one folded row ("Read 3 files"), and opens to the calls and results.
+        4. An Edit shows its diff under the call; a failing command opens its group with the error shown.
+        5. An Ask-mode approval shows inline as "Asked … Allowed by you"; the card at the end shows status, turns,
+           time and cost.
+        6. Copy (header) pastes the run as Markdown; a message's Copy pastes its Markdown.
+        7. Scroll up while a run writes: "Jump to latest" appears, and clicking it pins again.
+        8. An OpenCode or Codex run (ACP) streams too and shows the same turns.
+        9. The island is unchanged (no `agent:runs` flood while text streams: the panel's Agents row doesn't flicker).
 - **2.10b: attachments**
   - [ ] 2.10b.1 Rust: an `attachments` module (pure: kinds, caps, prompt lines, content blocks; tested), copy and
         scale, `--add-dir` at spawn, Claude Code's user line as a content array, the audit (names, types, sizes).

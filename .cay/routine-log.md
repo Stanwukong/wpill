@@ -41,3 +41,21 @@
   stage bullets and start 2.10a.1 (Rust, in a worktree beside the live dev Cay). If not, wait; don't redo the research.
 - For Femi: pick choices 1–6 in PLAN.md's Phase 2.10 design. Choice 4 adds `--add-dir` to runs, which widens what a
   run can read; it needs your explicit OK, since it sits next to the protected permission rules.
+
+## 2026-11-05 (continued) | Phase 2.10: agent window UI, stage 2.10a
+- Status: PARTIAL. Femi approved the design ("proceed": every recommendation, including `--add-dir` for the run's
+  attachments folder, D52). Stage 2.10a is built and its checks pass; the 2.10a manual check is Femi's. Draft PR
+  https://github.com/Stanwukong/wpill/pull/3.
+- Tasks: ✅ 2.10a.1 0a6b91a · ✅ 2.10a.2 23c920a · ✅ 2.10a.3 e622e23 · ✅ 2.10a.4 e6623dd · ✅ 2.10a.5 797dd6e+e6623dd ·
+  ⏳ 2.10a manual check (Femi) · 2.10b–d not started (they wait for 2.10a's sign-off).
+- Checks: cargo fmt --check, clippy --lib --tests -D warnings, cargo test --lib (296 passed, 2 ignored), pnpm typecheck,
+  pnpm test (13, new: `node --test`), pnpm build: all clean. Claude Code 2.1.123's `--include-partial-messages` output
+  checked by hand against the parser (text_delta picked up, thinking deltas ignored).
+- How: shell + the motion-designer agent for every UI change (Femi was at the machine), not the VS Code extension. Rust
+  in the worktree `..\wpill-phase210`, building into the main checkout's `target` (`CARGO_TARGET_DIR`) to reuse its
+  compiled deps; the main checkout stays on `main`, so the desktop dev Cay still matches main.
+- Next run: if Femi signed off 2.10a, start 2.10b.1 (attachments, Rust) in `..\wpill-phase210`. If the check found
+  problems, fix those first.
+- For Femi: run the 2.10a manual check in PLAN.md (stop the dev Cay on main, then `pnpm tauri dev` in
+  `..\wpill-phase210`, or check out the branch). Gotcha seen twice today: Python heredocs in Git Bash turn `\a` and
+  `\n` inside Rust/TS string literals into control characters; write such code with the Write/Edit tools.
