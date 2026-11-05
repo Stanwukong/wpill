@@ -162,6 +162,52 @@ pub fn content(text: &str, images: &[ImageBlock]) -> Value {
     Value::Array(blocks)
 }
 
+/// One attachment for an ACP agent's prompt (2.10b.2): its copy, and the scaled image when it is one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AcpItem {
+    pub name: String,
+    /// The copy in the run's attachments folder.
+    pub path: String,
+    pub bytes: u64,
+    pub image: Option<ImageBlock>,
+}
+
+/// A `file:` URI for a Windows path: `C:\Users\A B\x.txt` → `file:///C:/Users/A%20B/x.txt`.
+pub fn file_uri(path: &str) -> String {
+    let path = path
+        .strip_prefix(r"\\?\")
+        .unwrap_or(path)
+        .replace('\\', "/");
+    let mut out = String::from("file:///");
+    for b in path.trim_start_matches('/').bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' | b':' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+/// An ACP `session/prompt`'s blocks: the text, then each attachment. Every agent must take `resource_link`s, so
+/// files go as links to their copies; images go as `image` blocks when the agent takes them (`images`), else as
+/// links too.
+pub fn acp_blocks(text: &str, items: &[AcpItem], images: bool) -> Value {
+    let mut blocks = vec![json!({ "type": "text", "text": text })];
+    for item in items {
+        match (&item.image, images) {
+            (Some(image), true) => blocks.push(json!({
+                "type": "image", "mimeType": image.mime, "data": image.base64,
+            })),
+            _ => blocks.push(json!({
+                "type": "resource_link", "name": item.name, "uri": file_uri(&item.path), "size": item.bytes,
+            })),
+        }
+    }
+    Value::Array(blocks)
+}
+
 /// What the audit records about a message's attachments: names, kinds and sizes, never their content or paths.
 pub fn for_audit(attachments: &[AgentAttachment]) -> Value {
     Value::Array(
@@ -265,6 +311,55 @@ mod tests {
         assert_eq!(v[0]["source"]["media_type"], "image/png");
         assert_eq!(v[0]["source"]["data"], "AAAA");
         assert_eq!(v[1], json!({ "type": "text", "text": "what's this?" }));
+    }
+
+    #[test]
+    fn file_uris() {
+        assert_eq!(
+            file_uri(r"C:\Users\DELL 7300\AppData\a#1.txt"),
+            "file:///C:/Users/DELL%207300/AppData/a%231.txt"
+        );
+        assert_eq!(file_uri(r"\\?\C:\x\é.md"), "file:///C:/x/%C3%A9.md");
+    }
+
+    #[test]
+    fn acp_prompt_blocks() {
+        let items = [
+            AcpItem {
+                name: "shot.png".into(),
+                path: r"C:\r\attachments\shot.png".into(),
+                bytes: 900,
+                image: Some(ImageBlock {
+                    mime: "image/png",
+                    base64: "AAAA".into(),
+                }),
+            },
+            AcpItem {
+                name: "notes.txt".into(),
+                path: r"C:\r\attachments\notes.txt".into(),
+                bytes: 5,
+                image: None,
+            },
+        ];
+        let v = acp_blocks("look", &items, true);
+        assert_eq!(v[0], json!({ "type": "text", "text": "look" }));
+        assert_eq!(
+            v[1],
+            json!({ "type": "image", "mimeType": "image/png", "data": "AAAA" })
+        );
+        assert_eq!(
+            v[2],
+            json!({ "type": "resource_link", "name": "notes.txt",
+                    "uri": "file:///C:/r/attachments/notes.txt", "size": 5 })
+        );
+        // An agent that doesn't take images gets a link to the image's copy.
+        let v = acp_blocks("look", &items, false);
+        assert_eq!(v[1]["type"], "resource_link");
+        assert_eq!(v[1]["uri"], "file:///C:/r/attachments/shot.png");
+        assert_eq!(
+            acp_blocks("hi", &[], true),
+            json!([{ "type": "text", "text": "hi" }])
+        );
     }
 
     #[test]

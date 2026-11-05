@@ -10,15 +10,24 @@ use std::path::{Path, PathBuf};
 use base64::Engine;
 use serde_json::Value;
 
-use super::attachments::{self, Candidate, ImageBlock};
+use super::attachments::{self, AcpItem, Candidate, ImageBlock};
 use crate::ipc::{AgentAttachment, AttachmentKind};
 
 /// A file copied for the run: where it came from and where the copy is.
 #[derive(Debug, Clone)]
 struct Copied {
-    name: String,
     source: PathBuf,
     dest: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+struct Item {
+    name: String,
+    bytes: u64,
+    /// Scaled, for an image.
+    image: Option<ImageBlock>,
+    /// Every file has a copy; an image only for ACP agents (a link to it when they don't take images).
+    copy: Option<Copied>,
 }
 
 /// A message's attachments, ready to send.
@@ -26,37 +35,63 @@ struct Copied {
 pub struct Prepared {
     /// What the transcript and the audit show.
     pub list: Vec<AgentAttachment>,
-    images: Vec<ImageBlock>,
-    files: Vec<Copied>,
+    items: Vec<Item>,
 }
 
 impl Prepared {
-    /// The user message's `content`: the images, then the text with the copies' paths listed.
+    /// Claude Code's user message `content`: the images, then the text with the files' copies listed.
     pub fn content(&self, text: &str) -> Value {
+        let images: Vec<ImageBlock> = self.items.iter().filter_map(|i| i.image.clone()).collect();
         let files: Vec<(String, String)> = self
-            .files
+            .items
             .iter()
-            .map(|f| (f.name.clone(), f.dest.to_string_lossy().into_owned()))
+            .filter(|i| i.image.is_none())
+            .filter_map(|i| {
+                let copy = i.copy.as_ref()?;
+                Some((i.name.clone(), copy.dest.to_string_lossy().into_owned()))
+            })
             .collect();
-        attachments::content(&attachments::prompt_text(text, &files), &self.images)
+        attachments::content(&attachments::prompt_text(text, &files), &images)
+    }
+
+    /// An ACP agent's attachments (2.10b.2): each with its copy, and the scaled image when it is one.
+    pub fn acp_items(&self) -> Vec<AcpItem> {
+        self.items
+            .iter()
+            .map(|i| AcpItem {
+                name: i.name.clone(),
+                path: i
+                    .copy
+                    .as_ref()
+                    .map(|c| c.dest.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+                bytes: i.bytes,
+                image: i.image.clone(),
+            })
+            .collect()
     }
 
     /// Copies again any file whose copy is gone (the run's process exited and took its folder with it).
     pub fn restore(&self) -> Result<(), String> {
-        for f in self.files.iter().filter(|f| !f.dest.exists()) {
-            if let Some(parent) = f.dest.parent() {
+        for (name, c) in self
+            .items
+            .iter()
+            .filter_map(|i| Some((&i.name, i.copy.as_ref()?)))
+            .filter(|(_, c)| !c.dest.exists())
+        {
+            if let Some(parent) = c.dest.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
             }
-            std::fs::copy(&f.source, &f.dest)
-                .map_err(|e| format!("Couldn't copy {}: {e}", f.name))?;
+            std::fs::copy(&c.source, &c.dest).map_err(|e| format!("Couldn't copy {name}: {e}"))?;
         }
         Ok(())
     }
 }
 
 /// Checks `paths` against the caps, scales the images and copies the other files into `folder` (the run's
-/// attachments folder). Errors are sentences for the command window.
-pub fn prepare(folder: &Path, paths: &[String]) -> Result<Prepared, String> {
+/// attachments folder); with `copy_images` (ACP agents) the images are copied too. Errors are sentences for the
+/// command window.
+pub fn prepare(folder: &Path, paths: &[String], copy_images: bool) -> Result<Prepared, String> {
     let mut found = Vec::with_capacity(paths.len());
     for raw in paths {
         let path = PathBuf::from(raw.trim());
@@ -94,28 +129,33 @@ pub fn prepare(folder: &Path, paths: &[String]) -> Result<Prepared, String> {
         .unwrap_or_default();
     for (path, name, bytes) in found {
         let kind = attachments::kind_of(&name);
-        match kind {
+        let image = match kind {
             AttachmentKind::Image => {
                 let encoded = crate::desktop::scale_image(path.clone())
                     .map_err(|_| format!("{name} isn't an image Cay can read."))?;
-                prepared.images.push(ImageBlock {
+                Some(ImageBlock {
                     mime: encoded.mime,
                     base64: base64::engine::general_purpose::STANDARD.encode(&encoded.bytes),
-                });
+                })
             }
-            AttachmentKind::File => {
-                std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
-                let copy = attachments::copy_name(&name, &taken);
-                taken.insert(copy.to_lowercase());
-                let dest = folder.join(&copy);
-                std::fs::copy(&path, &dest).map_err(|e| format!("Couldn't copy {name}: {e}"))?;
-                prepared.files.push(Copied {
-                    name: name.clone(),
-                    source: path,
-                    dest,
-                });
-            }
-        }
+            AttachmentKind::File => None,
+        };
+        let copy = if image.is_none() || copy_images {
+            std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
+            let copy = attachments::copy_name(&name, &taken);
+            taken.insert(copy.to_lowercase());
+            let dest = folder.join(&copy);
+            std::fs::copy(&path, &dest).map_err(|e| format!("Couldn't copy {name}: {e}"))?;
+            Some(Copied { source: path, dest })
+        } else {
+            None
+        };
+        prepared.items.push(Item {
+            name: name.clone(),
+            bytes,
+            image,
+            copy,
+        });
         prepared.list.push(AgentAttachment { name, kind, bytes });
     }
     Ok(prepared)
@@ -153,7 +193,12 @@ mod tests {
         let b = sub.join("notes.txt");
         std::fs::write(&b, "again").unwrap();
 
-        let p = prepare(&folder, &[a.display().to_string(), b.display().to_string()]).unwrap();
+        let p = prepare(
+            &folder,
+            &[a.display().to_string(), b.display().to_string()],
+            false,
+        )
+        .unwrap();
         assert_eq!(p.list.len(), 2);
         assert_eq!(p.list[0].kind, AttachmentKind::File);
         assert_eq!(p.list[0].bytes, 5);
@@ -184,15 +229,15 @@ mod tests {
         let src = scratch("bad");
         let folder = src.join("attachments");
         let missing = src.join("gone.txt").display().to_string();
-        assert!(prepare(&folder, &[missing])
+        assert!(prepare(&folder, &[missing], false)
             .unwrap_err()
             .contains("gone.txt"));
-        assert!(prepare(&folder, &[src.display().to_string()])
+        assert!(prepare(&folder, &[src.display().to_string()], false)
             .unwrap_err()
             .contains("folder"));
         let fake = src.join("fake.png");
         std::fs::write(&fake, "not an image").unwrap();
-        assert!(prepare(&folder, &[fake.display().to_string()])
+        assert!(prepare(&folder, &[fake.display().to_string()], false)
             .unwrap_err()
             .contains("isn't an image"));
         assert!(!folder.exists(), "nothing was copied");
@@ -219,7 +264,12 @@ mod tests {
         bmp.extend_from_slice(&pixels);
         std::fs::write(&path, &bmp).unwrap();
 
-        let p = prepare(&src.join("attachments"), &[path.display().to_string()]).unwrap();
+        let folder = src.join("attachments");
+        let p = prepare(&folder, &[path.display().to_string()], false).unwrap();
+        assert!(
+            !folder.join("dot.png").exists(),
+            "Claude Code gets the image, not a copy"
+        );
         assert_eq!(p.list[0].kind, AttachmentKind::Image);
         let content = p.content("what colour?");
         assert_eq!(content[0]["type"], "image");
@@ -230,6 +280,13 @@ mod tests {
             .unwrap();
         assert!(png.starts_with(b"\x89PNG"));
         assert_eq!(content[1]["text"], "what colour?");
+
+        // An ACP agent also gets a copy, for a link when it doesn't take images.
+        let p = prepare(&folder, &[path.display().to_string()], true).unwrap();
+        let items = p.acp_items();
+        assert!(items[0].image.is_some());
+        assert_eq!(items[0].path, folder.join("dot.png").display().to_string());
+        assert!(folder.join("dot.png").exists());
         let _ = std::fs::remove_dir_all(&src);
     }
 }

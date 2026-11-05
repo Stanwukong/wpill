@@ -58,6 +58,8 @@ pub struct Run {
     transcript: VecDeque<AgentEntry>,
     /// The routine that started it (2.7e).
     pub routine: Option<AgentRunRoutine>,
+    /// An ACP agent's `promptCapabilities.image` once it has answered `initialize` (2.10b.2).
+    pub images: Option<bool>,
 }
 
 /// What `apply` asks the owner to do.
@@ -101,6 +103,7 @@ impl Run {
             stopping: false,
             transcript: VecDeque::new(),
             routine: None,
+            images: None,
         }
     }
 
@@ -144,6 +147,7 @@ impl Run {
     }
 
     /// A prompt or follow-up is being written to the process.
+    #[cfg(test)]
     pub fn send(&mut self, text: &str, at_ms: i64) -> AgentEntry {
         self.send_with(text, Vec::new(), at_ms)
     }
@@ -400,6 +404,11 @@ impl Run {
             started_at_ms: self.started_at_ms,
             updated_at_ms: self.updated_at_ms,
             routine: self.routine.clone(),
+            // Claude Code always takes images; an ACP agent says so in `initialize`.
+            accepts_images: match self.backend {
+                crate::ipc::AgentBackend::Claude => Some(true),
+                _ => self.images,
+            },
         }
     }
 
@@ -676,5 +685,15 @@ mod tests {
         );
         let plain = serde_json::to_value(r.send("again", 2)).unwrap();
         assert!(plain.get("attachments").is_none());
+    }
+
+    #[test]
+    fn accepts_images_is_claudes_or_what_the_acp_agent_said() {
+        let mut r = run();
+        assert_eq!(r.ipc(Vec::new()).accepts_images, Some(true));
+        r.backend = crate::ipc::AgentBackend::Opencode;
+        assert_eq!(r.ipc(Vec::new()).accepts_images, None);
+        r.images = Some(false);
+        assert_eq!(r.ipc(Vec::new()).accepts_images, Some(false));
     }
 }

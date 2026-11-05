@@ -611,6 +611,8 @@ pub struct AgentRun {
     pub updated_at_ms: i64,
     /// The routine that started it (2.7e), if any.
     pub routine: Option<AgentRunRoutine>,
+    /// Whether images go to the agent as images (2.10b.2); `None` until an ACP agent has said. Files always go.
+    pub accepts_images: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

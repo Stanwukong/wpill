@@ -1611,7 +1611,7 @@ fn run_routine(app: &AppHandle, id: &str, trigger: RoutineTrigger) -> AppResult<
 }
 
 /// Starts `slot`'s next process (the first, or a `--resume` follow-up) and writes `text` to it, with what's
-/// `attached` (2.10b; only Claude Code runs have attachments).
+/// `attached` (2.10b).
 fn start_process(
     app: &AppHandle,
     inner: &mut Inner,
@@ -1630,7 +1630,7 @@ fn start_process(
     let generation = slot.generation;
     std::fs::create_dir_all(&slot.dir).map_err(|e| AppError::AgentStart(e.to_string()))?;
     if slot.run.backend != AgentBackend::Claude {
-        return start_acp(app, inner, run_id, text, &exe_path, after);
+        return start_acp(app, inner, run_id, text, attached, &exe_path, after);
     }
     let config = slot.dir.join("mcp.json");
     let mcp = json!({ "mcpServers": { mcp::SERVER_NAME: {
@@ -1678,9 +1678,12 @@ fn start_acp(
     inner: &mut Inner,
     run_id: &str,
     text: &str,
+    attached: &attach::Prepared,
     cay_exe: &std::path::Path,
     after: &mut After,
 ) -> AppResult<()> {
+    // A follow-up that resumes an ended run copies its files again (the folder went with the process).
+    attached.restore().map_err(AppError::AgentInvalid)?;
     let slot = inner.slot(run_id).ok_or(AppError::AgentRunGone)?;
     let generation = slot.generation;
     let kind = slot.run.backend;
@@ -1731,14 +1734,15 @@ fn start_acp(
     process
         .write(&first)
         .map_err(|e| AppError::AgentStart(e.to_string()))?;
-    let entry = slot.run.send(text, now_ms());
+    let entry = slot.run.send_with(text, attached.list.clone(), now_ms());
     // ACP has no system prompt: the first message carries what Claude Code gets with `--append-system-prompt`.
     let message = if generation == 1 {
         format!("{}\n\n{text}", backend::ACP_GUIDANCE)
     } else {
         text.to_string()
     };
-    let outs = client.prompt(&message);
+    // Images go as images only if the agent says it takes them, decided when the prompt is sent (2.10b.2).
+    let outs = client.prompt_with(&message, attached.acp_items());
     slot.acp = Some(client);
     slot.process = Some(process);
     slot.heard = Instant::now();
@@ -1835,6 +1839,12 @@ fn on_line(app: &AppHandle, run_id: &str, generation: u32, line: &[u8]) {
         match slot.acp.as_mut() {
             Some(client) => {
                 let outs = client.on_line(line);
+                let images = client.accepts_images();
+                if slot.run.images != images {
+                    // What the agent takes, for the Attach button (2.10b.2).
+                    slot.run.images = images;
+                    after.runs_changed = true;
+                }
                 acp_outs(&mut inner, run_id, outs, &mut after);
             }
             None => {
@@ -2291,12 +2301,14 @@ fn start_run(
     let attachments_dir = dir.join(attachments::FOLDER);
     let attached = if request.attachments.is_empty() {
         attach::Prepared::default()
-    } else if kind != AgentBackend::Claude || routine.is_some() {
+    } else if routine.is_some() {
         return Err(AppError::AgentInvalid(
-            "Attachments work with Claude Code runs for now.".into(),
+            "Routines take no attachments.".into(),
         ));
     } else {
-        attach::prepare(&attachments_dir, &request.attachments).map_err(|e| {
+        // ACP agents also get a copy of each image, linked when the agent doesn't take images (2.10b.2).
+        let copy_images = kind != AgentBackend::Claude;
+        attach::prepare(&attachments_dir, &request.attachments, copy_images).map_err(|e| {
             let _ = std::fs::remove_dir_all(&dir);
             AppError::AgentInvalid(e)
         })?
@@ -2314,8 +2326,9 @@ fn start_run(
         desktop_tools: routine.as_ref().is_none_or(|r| r.desktop_tools),
         google_tools: routine.as_ref().is_none_or(|r| r.google_tools),
         mode: request.mode.unwrap_or(settings.default_mode),
-        // Only the copies Cay makes for this run; routines take no attachments.
-        attachments_dir: (kind == AgentBackend::Claude && routine.is_none())
+        // Only the copies Cay makes for this run (`--add-dir` for Claude Code); routines take no attachments.
+        attachments_dir: routine
+            .is_none()
             .then(|| attachments_dir.to_string_lossy().into_owned()),
     };
     let mut after = After::default();
@@ -2412,16 +2425,16 @@ pub async fn agent_send(
         let folder = {
             let mut inner = agents.lock();
             let slot = inner.slot(&run_id).ok_or(AppError::AgentRunGone)?;
+            let copy_images = slot.run.backend != AgentBackend::Claude;
             slot.launch
                 .attachments_dir
                 .clone()
-                .filter(|_| slot.run.backend == AgentBackend::Claude)
+                .map(|f| (f, copy_images))
         };
-        let folder = folder.ok_or_else(|| {
-            AppError::AgentInvalid("Attachments work with Claude Code runs for now.".into())
-        })?;
+        let (folder, copy_images) =
+            folder.ok_or_else(|| AppError::AgentInvalid("Routines take no attachments.".into()))?;
         tauri::async_runtime::spawn_blocking(move || {
-            attach::prepare(std::path::Path::new(&folder), &attachments)
+            attach::prepare(std::path::Path::new(&folder), &attachments, copy_images)
         })
         .await
         .map_err(|e| AppError::AgentStart(e.to_string()))?
@@ -2439,11 +2452,12 @@ pub async fn agent_send(
         let writable =
             slot.run.is_live() && slot.process.as_ref().is_some_and(|p| p.stdin.is_some());
         if writable && slot.acp.is_some() {
-            let entry = slot.run.send(&text, now_ms());
+            attached.restore().map_err(AppError::AgentInvalid)?;
+            let entry = slot.run.send_with(&text, attached.list.clone(), now_ms());
             let outs = slot
                 .acp
                 .as_mut()
-                .map(|c| c.prompt(&text))
+                .map(|c| c.prompt_with(&text, attached.acp_items()))
                 .unwrap_or_default();
             after.outputs.push(AgentOutputPayload {
                 run_id: run_id.clone(),

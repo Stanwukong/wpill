@@ -408,6 +408,8 @@ export interface AgentRun {
   updatedAtMs: number;
   /** The routine that started it (2.7e). */
   routine: AgentRunRoutine | null;
+  /** Whether images go to the agent as images (2.10b.2); null until an ACP agent has said. Files always go. */
+  acceptsImages: boolean | null;
 }
 
 export interface AgentRunRoutine {
@@ -551,7 +553,7 @@ export interface AgentStartRequest {
   mode?: AgentMode | null;
   /** The agent (2.9b); omitted is Claude Code. */
   backend?: AgentBackend | null;
-  /** Files to attach to the first message (2.10b): paths, never bytes. Claude Code runs only for now. */
+  /** Files to attach to the first message (2.10b): paths, never bytes. Not for routines. */
   attachments?: string[];
 }
 
