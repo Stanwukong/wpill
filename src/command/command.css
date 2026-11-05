@@ -221,6 +221,120 @@ textarea {
   scrollbar-width: thin;
 }
 
+/* Runs grouped by day (2.10d): the same quiet labels as the section heads, inside the scroll. */
+.cmd-runs__group {
+  display: flex;
+  flex-direction: column;
+}
+
+.cmd-runs__group > .cmd-routines__label {
+  padding: 8px 10px 4px;
+  font-size: 11px;
+}
+
+.cmd-runs__group:first-child > .cmd-routines__label {
+  padding-top: 2px;
+}
+
+.cmd-runs__grouplist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cmd-runs__none {
+  padding: 6px 10px;
+  font-size: 11px;
+  color: rgba(245, 245, 247, 0.4);
+}
+
+/* The runs' filter: a small well under the head, like the form's inputs; a clear button while it holds text. */
+.cmd-filter {
+  flex: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 0 0 6px;
+}
+
+.cmd-filter__glyph {
+  position: absolute;
+  left: 9px;
+  width: 12px;
+  height: 12px;
+  color: var(--island-muted);
+  pointer-events: none;
+}
+
+.cmd-filter__input {
+  width: 100%;
+  height: 26px;
+  padding: 0 26px 0 27px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px var(--island-border);
+  outline: none;
+  font-size: 11.5px;
+  transition:
+    box-shadow 120ms ease,
+    background-color 120ms ease;
+}
+
+.cmd-filter__input::placeholder {
+  color: rgba(245, 245, 247, 0.32);
+}
+
+.cmd-filter__input:hover,
+.cmd-filter__input:focus {
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.cmd-filter__input:focus {
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--agent-rgb), 0.4),
+    0 0 0 3px rgba(var(--agent-rgb), 0.1);
+}
+
+.cmd-filter__clear {
+  position: absolute;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--island-muted);
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.cmd-filter__clear svg {
+  width: 11px;
+  height: 11px;
+}
+
+.cmd-filter__clear:hover {
+  color: var(--island-fg);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cmd-filter__clear:focus-visible {
+  outline: 2px solid rgba(var(--agent-rgb), 0.55);
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cmd-filter__input,
+  .cmd-filter__clear {
+    transition: none;
+  }
+}
+
 .cmd-run {
   position: relative;
   display: flex;

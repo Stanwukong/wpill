@@ -11,6 +11,7 @@ import { NewTask } from "./NewTask";
 import { RoutineEditor } from "./RoutineEditor";
 import { RoutineList } from "./RoutineList";
 import { nameFromPrompt, WORKDAYS, type RoutineSeed } from "./routineLabels";
+import { runGroups } from "./runList";
 import { RunView } from "./RunView";
 import { SessionAskView } from "./SessionAskView";
 import { useSessionAsks } from "./useSessionAsks";
@@ -99,6 +100,10 @@ export function CommandApp() {
   const [dragging, setDragging] = useState(false);
   /** Native maximize (2.10c): Rust reports every change, including double-clicks on the bar and Snap. */
   const [maximized, setMaximized] = useState(false);
+  /** The run list's filter (2.10d); the selected run stays selected while filtered out of view. */
+  const [runQuery, setRunQuery] = useState("");
+  /** The filter box, for Ctrl+F (2.10d.3). */
+  const runFilter = useRef<HTMLInputElement>(null);
 
   const refreshOptions = useCallback(() => {
     commands
@@ -198,6 +203,8 @@ export function CommandApp() {
     options && editRoutine(newDraft(seed, options, backends), seed.backend == null);
   /** Any run on another agent: then every row names its agent (2.9c, as sessions do). */
   const runsMixed = runs.some((r) => r.backend !== "claude");
+  /** Worked out per render, like `ago`: nothing ticks to move a run from Today to Earlier. */
+  const groups = runGroups(runs, runQuery, Date.now());
 
   return (
     <div className="cmd" data-maximized={maximized || undefined}>
@@ -307,18 +314,64 @@ export function CommandApp() {
                   </button>
                 )}
               </div>
+              <div className="cmd-filter">
+                <svg className="cmd-filter__glyph" viewBox="0 0 16 16" aria-hidden="true">
+                  <circle cx="7" cy="7" r="4.25" fill="none" stroke="currentColor" strokeWidth={1.5} />
+                  <path d="M10.25 10.25L13 13" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+                </svg>
+                <input
+                  ref={runFilter}
+                  className="cmd-filter__input"
+                  type="text"
+                  placeholder="Filter runs"
+                  aria-label="Filter runs"
+                  spellCheck={false}
+                  value={runQuery}
+                  onChange={(e) => setRunQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Esc clears the text first; only an empty box lets it hide the window.
+                    if (e.key === "Escape" && runQuery !== "") {
+                      e.preventDefault();
+                      setRunQuery("");
+                    }
+                  }}
+                />
+                {runQuery !== "" && (
+                  <button
+                    className="cmd-filter__clear"
+                    aria-label="Clear filter"
+                    title="Clear (Esc)"
+                    onClick={() => {
+                      setRunQuery("");
+                      runFilter.current?.focus();
+                    }}
+                  >
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" aria-hidden="true">
+                      <path d="M5 5l6 6M11 5l-6 6" />
+                    </svg>
+                  </button>
+                )}
+              </div>
               <ul className="cmd-runs__list">
-                {runs.map((r) => (
-                  <li key={r.runId}>
-                    <RunItem
-                      run={r}
-                      mixed={runsMixed}
-                      selected={editing === null && r.runId === runId}
-                      onSelect={() => showRun(r.runId)}
-                      onRemove={() => remove(r.runId)}
-                    />
+                {groups.map((g) => (
+                  <li key={g.label} className="cmd-runs__group">
+                    <span className="cmd-routines__label">{g.label}</span>
+                    <ul className="cmd-runs__grouplist">
+                      {g.runs.map((r) => (
+                        <li key={r.runId}>
+                          <RunItem
+                            run={r}
+                            mixed={runsMixed}
+                            selected={editing === null && r.runId === runId}
+                            onSelect={() => showRun(r.runId)}
+                            onRemove={() => remove(r.runId)}
+                          />
+                        </li>
+                      ))}
+                    </ul>
                   </li>
                 ))}
+                {groups.length === 0 && <li className="cmd-runs__none">No runs match</li>}
               </ul>
             </section>
           )}

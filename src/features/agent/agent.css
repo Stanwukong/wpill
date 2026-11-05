@@ -32,6 +32,12 @@
   background: var(--danger);
 }
 
+/* Stopped (by you or a limit) is a hollow ring, so it never reads as done (filled, muted). */
+.agent-dot[data-status="stopped"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--island-muted);
+}
+
 @keyframes agent-breathe {
   0%,
   100% {
