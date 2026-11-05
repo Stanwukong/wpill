@@ -1,19 +1,20 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { commands, errorMessage } from "../lib/ipc";
-import type { AgentApprovalActivity, AgentEntry, AgentEvent, AgentRun, Interaction } from "../lib/types";
+import type { AgentApprovalActivity, AgentEntry, AgentRun, Interaction } from "../lib/types";
 import { ClockGlyph, RiskGlyph, StopGlyph } from "../features/agent/AgentGlyphs";
-import { endLabel, RISK_LABEL, runLabel } from "../features/agent/labels";
+import { RISK_LABEL, runLabel } from "../features/agent/labels";
 import { changePreview, PreviewBlock } from "../features/agent/PreviewBlock";
 import { ModeChip } from "../features/agent/ModeChip";
 import { decide, isLive, stopRun } from "../features/agent/useAgentRuns";
 import { AgentTag } from "../features/sessions/AgentTag";
 import { StepLabel } from "../features/sessions/StepLabel";
 import { PlanView, QuestionForm } from "./InteractionViews";
+import { Markdown } from "./Markdown";
 import type { RoutineSeed } from "./routineLabels";
+import { decisionText, resultParts } from "./runMarkdown";
+import { turns, type Call, type Turn, type TurnItem } from "./transcriptTurns";
 import { useWholePreview } from "./useSessionAsks";
 import type { Transcript } from "./useTranscripts";
-
-type Decision = Extract<AgentEvent, { kind: "decision" }>;
 
 /** Distance from the bottom (CSS px) that still counts as "at the bottom" for auto-scroll. */
 const STICK_PX = 24;
@@ -47,15 +48,7 @@ export function RunView({
     if (el && atBottom.current) el.scrollTop = el.scrollHeight;
   }, [entries, run?.pending.length]);
 
-  const decisions = useMemo(() => {
-    const byRequest = new Map<number, Decision>();
-    for (const e of entries) if (e.kind === "decision") byRequest.set(e.requestId, e);
-    return byRequest;
-  }, [entries]);
-  const asked = useMemo(
-    () => new Set(entries.flatMap((e) => (e.kind === "approval" ? [e.requestId] : []))),
-    [entries],
-  );
+  const shaped = useMemo(() => turns(entries), [entries]);
 
   return (
     <div className="run">
@@ -112,8 +105,8 @@ export function RunView({
         }}
       >
         {transcript?.error && <p className="entry entry--error">{transcript.error}</p>}
-        {entries.map((entry, i) => (
-          <Entry key={i} entry={entry} decisions={decisions} asked={asked} />
+        {shaped.map((turn, i) => (
+          <TurnView key={turn.user ? `turn:${turn.user.atMs}:${i}` : `turn:start`} turn={turn} />
         ))}
         {transcript?.loading && entries.length === 0 && <p className="run__empty">Loading…</p>}
       </div>
@@ -133,101 +126,158 @@ export function RunView({
   );
 }
 
-function Entry({
-  entry,
-  decisions,
-  asked,
-}: {
-  entry: AgentEntry;
-  decisions: Map<number, Decision>;
-  asked: Set<number>;
-}) {
-  switch (entry.kind) {
-    case "user":
-      return <p className="entry entry--user">{entry.text}</p>;
+function TurnView({ turn }: { turn: Turn }) {
+  return (
+    <section className="turn">
+      {turn.user && (
+        <div className="entry entry--user" aria-label="You">
+          <Markdown source={turn.user.text} />
+        </div>
+      )}
+      {turn.items.length > 0 && (
+        <div className="turn__agent">
+          {turn.items.map((item, i) => (
+            <Item key={itemKey(item, i)} item={item} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Stable across appends: an item's first entry never changes once it's in the transcript. */
+function itemKey(item: TurnItem, i: number): string {
+  if (item.kind === "tools") {
+    const first = item.calls[0];
+    return `tools:${first?.tool?.id ?? first?.result?.id ?? i}`;
+  }
+  return `${item.kind}:${item.entry.atMs}:${i}`;
+}
+
+function Item({ item }: { item: TurnItem }) {
+  switch (item.kind) {
     case "text":
-      return <p className="entry entry--text">{entry.text}</p>;
-    case "tool":
       return (
-        <p className="entry entry--tool">
-          <span className="entry__chevron" aria-hidden="true">
-            ›
-          </span>
-          {entry.label}
-        </p>
+        <div className="entry entry--text">
+          <Markdown source={item.entry.text} />
+        </div>
       );
-    case "toolResult":
-      return <ToolResult isError={entry.isError} text={entry.text} />;
+    case "tools":
+      return item.calls.length === 1 ? (
+        <div className="entry entry--calls">
+          <CallView call={item.calls[0]} />
+        </div>
+      ) : (
+        <ToolGroup calls={item.calls} summary={item.summary} failed={item.failed} />
+      );
     case "approval": {
-      const d = decisions.get(entry.requestId);
+      const d = item.decision;
       return (
         <p className="entry entry--note" data-outcome={d ? (d.allow ? "allowed" : "denied") : "waiting"}>
           <span className="entry__note-label">Asked</span>
           <span className="entry__note-what">
-            {entry.tool} {entry.summary}
+            {item.entry.tool} {item.entry.summary}
           </span>
           <span className="entry__note-outcome">{d ? decisionText(d) : "Waiting for you"}</span>
         </p>
       );
     }
     case "decision":
-      // Shown with its approval; stand alone only if the approval isn't in the transcript.
-      if (asked.has(entry.requestId)) return null;
       return (
-        <p className="entry entry--note" data-outcome={entry.allow ? "allowed" : "denied"}>
-          <span className="entry__note-outcome">{decisionText(entry)}</span>
+        <p className="entry entry--note" data-outcome={item.entry.allow ? "allowed" : "denied"}>
+          <span className="entry__note-outcome">{decisionText(item.entry)}</span>
         </p>
       );
-    case "result":
+    case "result": {
+      const { outcome, details } = resultParts(item.entry);
       return (
-        <p className="entry entry--result" data-status={entry.status}>
-          {[
-            endLabel(entry.status, entry.reason),
-            `${entry.turns} ${entry.turns === 1 ? "turn" : "turns"}`,
-            entry.costUsd != null ? `$${entry.costUsd.toFixed(4)}` : null,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
+        <p className="entry entry--result" data-status={item.entry.status}>
+          <span className="entry__result-outcome">{outcome}</span>
+          <span className="entry__result-details">{details.join(" · ")}</span>
         </p>
       );
+    }
     case "error":
-      return <p className="entry entry--error">{entry.message}</p>;
+      return <p className="entry entry--error">{item.entry.message}</p>;
   }
 }
 
-function decisionText(d: Decision): string {
-  switch (d.by) {
-    case "user":
-      return d.allow ? "Allowed by you" : "Denied by you";
-    case "remembered":
-      return d.allow ? "Allowed for this run" : "Denied (remembered)";
-    case "timeout":
-      return "Denied (timed out)";
-    case "runEnded":
-      return "Cancelled (run ended)";
-    case "answered":
-      return "Answered by you";
-    case "approved":
-      return "Plan approved by you";
-    case "feedback":
-      return "Sent back with your feedback";
-  }
-}
-
-/** Tool output: collapsed to one muted line ("Output · 12 lines"), expandable. */
-function ToolResult({ isError, text }: { isError: boolean; text: string }) {
-  const [open, setOpen] = useState(false);
-  const lines = text === "" ? 0 : text.split("\n").length;
-  const label = isError ? "Error" : "Output";
+/** Consecutive tool calls as one row ("Read 3 files, ran 2 commands"); open by default when one of them failed. */
+function ToolGroup({ calls, summary, failed }: { calls: Call[]; summary: string; failed: boolean }) {
+  const [open, setOpen] = useState(failed);
+  const failures = calls.filter((c) => c.result?.isError).length;
   return (
-    <div className="entry entry--result-block" data-error={isError}>
+    <div className="entry entry--tools" data-failed={failed}>
+      <button className="tools__head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <Chevron />
+        <span className="tools__summary">{summary}</span>
+        {failures > 0 && <span className="tools__failed">{failures} failed</span>}
+      </button>
+      {open && (
+        <div className="tools__calls">
+          {calls.map((c, i) => (
+            <CallView key={c.tool?.id ?? c.result?.id ?? i} call={c} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One call: its label, an edit's diff under it, then its result folded to one line (errors open). */
+function CallView({ call }: { call: Call }) {
+  const preview = changePreview(call.tool?.preview ?? null);
+  return (
+    <div className="call">
+      {call.tool && (
+        <p className="call__label">
+          <span className="entry__chevron" aria-hidden="true">
+            ›
+          </span>
+          {call.tool.label}
+        </p>
+      )}
+      {preview && (
+        <div className="cmd-preview call__preview">
+          <PreviewBlock preview={preview} />
+        </div>
+      )}
+      {call.result && <ToolResult isError={call.result.isError} text={call.result.text} />}
+    </div>
+  );
+}
+
+function Chevron() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" aria-hidden="true">
+      <path d="M6.5 4l4 4-4 4" />
+    </svg>
+  );
+}
+
+/** Lines a result shows before "Show all" (results are cut to 2,000 chars by Rust, so "all" stays small). */
+const RESULT_LINES = 20;
+
+/** Tool output: collapsed to one muted line ("Output · 12 lines"), expandable; errors start open. */
+function ToolResult({ isError, text }: { isError: boolean; text: string }) {
+  const [open, setOpen] = useState(isError);
+  const [whole, setWhole] = useState(false);
+  const all = text === "" ? [] : text.split("\n");
+  const lines = all.length;
+  const label = isError ? "Error" : "Output";
+  const cut = !whole && lines > RESULT_LINES;
+  return (
+    <div className="entry--result-block" data-error={isError}>
       <button className="entry__toggle" aria-expanded={open} disabled={lines === 0} onClick={() => setOpen((v) => !v)}>
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round">
-          <path d="M6.5 4l4 4-4 4" />
-        </svg>
+        <Chevron />
         {lines === 0 ? `${label} · empty` : `${label} · ${lines} ${lines === 1 ? "line" : "lines"}`}
       </button>
-      {open && <pre className="entry__output">{text}</pre>}
+      {open && lines > 0 && <pre className="entry__output">{cut ? all.slice(0, RESULT_LINES).join("\n") : text}</pre>}
+      {open && cut && (
+        <button className="entry__more" onClick={() => setWhole(true)}>
+          Show all · {lines - RESULT_LINES} more {lines - RESULT_LINES === 1 ? "line" : "lines"}
+        </button>
+      )}
     </div>
   );
 }
