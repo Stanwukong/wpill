@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { commands, on, unlistenAll } from "../lib/ipc";
 import type { AgentBackendsPayload, AgentOptions, AgentRun, SessionApprovalActivity, RoutineDraft, RoutineView } from "../lib/types";
 import { ClockGlyph, RunDot } from "../features/agent/AgentGlyphs";
@@ -11,6 +11,7 @@ import { NewTask } from "./NewTask";
 import { RoutineEditor } from "./RoutineEditor";
 import { RoutineList } from "./RoutineList";
 import { nameFromPrompt, WORKDAYS, type RoutineSeed } from "./routineLabels";
+import { nextIndex } from "./listKeys";
 import { runGroups } from "./runList";
 import { RunView } from "./RunView";
 import { SessionAskView } from "./SessionAskView";
@@ -104,6 +105,9 @@ export function CommandApp() {
   const [runQuery, setRunQuery] = useState("");
   /** The filter box, for Ctrl+F (2.10d.3). */
   const runFilter = useRef<HTMLInputElement>(null);
+  /** Set while an arrow key shows a run: its follow-up box then leaves focus on the row, so the next arrow works. */
+  const arrowing = useRef(false);
+  const [focusOnOpen, setFocusOnOpen] = useState(true);
 
   const refreshOptions = useCallback(() => {
     commands
@@ -161,6 +165,19 @@ export function CommandApp() {
       } else if (e.key === "F11") {
         e.preventDefault();
         toggleMaximize();
+      } else if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+        // Ctrl+N / Ctrl+F (2.10d.3); preventDefault keeps WebView2's own new window and find bar shut.
+        const key = e.key.toLowerCase();
+        if (key === "n") {
+          e.preventDefault();
+          setEditing(null);
+          setSelected(null);
+          onFocus();
+        } else if (key === "f") {
+          e.preventDefault();
+          runFilter.current?.focus();
+          runFilter.current?.select();
+        }
       }
     };
     window.addEventListener("focus", onFocus);
@@ -185,6 +202,8 @@ export function CommandApp() {
 
   const showRun = (runId: string) => {
     setEditing(null);
+    setFocusOnOpen(!arrowing.current);
+    arrowing.current = false;
     setSelected({ kind: "run", runId });
   };
   const showAsk = (requestId: number) => {
@@ -205,6 +224,22 @@ export function CommandApp() {
   const runsMixed = runs.some((r) => r.backend !== "claude");
   /** Worked out per render, like `ago`: nothing ticks to move a run from Today to Earlier. */
   const groups = runGroups(runs, runQuery, Date.now());
+
+  /** Up/Down/Home/End on a run row, Down from the filter box: focus and show the next visible run (2.10d.3). */
+  const onRunsKey = (e: ReactKeyboardEvent<HTMLElement>) => {
+    if (e.ctrlKey || e.altKey || e.shiftKey || e.metaKey) return;
+    const target = e.target as HTMLElement;
+    const inFilter = target === runFilter.current;
+    if (!inFilter && !target.matches(".cmd-run")) return;
+    const rows = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>(".cmd-runs__list .cmd-run"));
+    const next = nextIndex(e.key, inFilter ? -1 : rows.indexOf(target as HTMLButtonElement), rows.length);
+    if (next === null) return;
+    e.preventDefault();
+    rows[next].focus();
+    arrowing.current = true;
+    rows[next].click();
+    arrowing.current = false;
+  };
 
   return (
     <div className="cmd" data-maximized={maximized || undefined}>
@@ -264,6 +299,7 @@ export function CommandApp() {
           <button
             className="cmd-new"
             aria-pressed={selected === null && editing === null}
+            title="New task (Ctrl+N)"
             onClick={() => {
               setEditing(null);
               setSelected(null);
@@ -300,7 +336,7 @@ export function CommandApp() {
             onStarted={showRun}
           />
           {runs.length > 0 && (
-            <section className="cmd-runs" aria-label="Runs">
+            <section className="cmd-runs" aria-label="Runs" onKeyDown={onRunsKey}>
               <div className="cmd-routines__head">
                 <span className="cmd-routines__label">Runs</span>
                 <span className="cmd__spacer" />
@@ -325,6 +361,7 @@ export function CommandApp() {
                   type="text"
                   placeholder="Filter runs"
                   aria-label="Filter runs"
+                  title="Filter runs (Ctrl+F)"
                   spellCheck={false}
                   value={runQuery}
                   onChange={(e) => setRunQuery(e.target.value)}
@@ -404,6 +441,7 @@ export function CommandApp() {
                 run={run}
                 transcript={transcripts.get(runId)}
                 focusTick={focusTick}
+                focusOnOpen={focusOnOpen}
                 dropInto={dropInto}
                 picking={picking}
                 onSaveAsRoutine={newRoutine}

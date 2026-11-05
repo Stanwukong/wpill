@@ -19,6 +19,16 @@ textarea {
   color: inherit;
 }
 
+/*
+ * Keyboard focus (2.10d.3): one amber ring for everything you can tab to, only for keyboard focus (never on a
+ * click). `:where` keeps it at class weight, so the few controls that need a different offset (rows that fill the
+ * sidebar, the segmented control's inset) override it below. Text fields keep their own soft amber halo.
+ */
+.cmd :where(button, a, summary, [tabindex]):focus-visible {
+  outline: 2px solid rgba(var(--agent-rgb), 0.55);
+  outline-offset: 1px;
+}
+
 .cmd {
   height: 100%;
   display: flex;
@@ -321,11 +331,6 @@ textarea {
 .cmd-filter__clear:hover {
   color: var(--island-fg);
   background: rgba(255, 255, 255, 0.08);
-}
-
-.cmd-filter__clear:focus-visible {
-  outline: 2px solid rgba(var(--agent-rgb), 0.55);
-  outline-offset: -2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1196,6 +1201,7 @@ textarea {
 }
 
 .seg__item:focus-visible {
+  outline: none;
   box-shadow: inset 0 0 0 1.5px rgba(var(--agent-rgb), 0.55);
 }
 
@@ -1480,11 +1486,6 @@ textarea {
   align-self: center;
 }
 
-.mode-chip:focus-visible {
-  outline: 1px solid rgba(var(--agent-rgb), 0.7);
-  outline-offset: 1px;
-}
-
 .run__stop {
   align-self: center;
   height: 26px;
@@ -1627,11 +1628,6 @@ textarea {
   color: var(--island-fg);
 }
 
-.entry__copy:focus-visible {
-  outline: 1px solid rgba(255, 255, 255, 0.4);
-  outline-offset: 1px;
-}
-
 .entry__copy svg {
   width: 13px;
   height: 13px;
@@ -1736,13 +1732,6 @@ textarea {
 .tools__head:hover {
   color: var(--island-fg);
   background: rgba(255, 255, 255, 0.05);
-}
-
-.tools__head:focus-visible,
-.entry__toggle:focus-visible,
-.entry__more:focus-visible {
-  outline: 1px solid rgba(255, 255, 255, 0.4);
-  outline-offset: 1px;
 }
 
 .tools__head svg {
@@ -2517,12 +2506,6 @@ textarea {
   background: rgba(255, 255, 255, 0.06);
 }
 
-.md__copy:focus-visible,
-.md__link:focus-visible {
-  outline: 2px solid rgba(var(--agent-rgb), 0.55);
-  outline-offset: 1px;
-}
-
 /* Links: the text's own color with a faint underline that firms up on hover (no accent in this window). */
 .md__link {
   border-radius: 2px;
@@ -2831,12 +2814,6 @@ textarea {
 .attach-btn--icon:hover {
   background: rgba(255, 255, 255, 0.08);
   color: var(--island-fg);
-}
-
-.attach-chip__remove:focus-visible,
-.attach-btn--icon:focus-visible {
-  outline: 2px solid rgba(var(--agent-rgb), 0.55);
-  outline-offset: 1px;
 }
 
 /* In the new-task footer, Attach sits on the left, away from Run. */

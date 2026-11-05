@@ -31,6 +31,7 @@ export function RunView({
   run,
   transcript,
   focusTick,
+  focusOnOpen,
   dropInto,
   picking,
   onSaveAsRoutine,
@@ -40,6 +41,8 @@ export function RunView({
   run: AgentRun | undefined;
   transcript: Transcript | undefined;
   focusTick: number;
+  /** `false` when opened from the run list by an arrow key: the row keeps focus until the window's focus changes. */
+  focusOnOpen: boolean;
   /** Drops on the window go to this run's follow-up box while it shows. */
   dropInto: DropInto;
   picking: MutableRefObject<boolean>;
@@ -188,6 +191,7 @@ export function RunView({
         acceptsImages={run?.acceptsImages ?? null}
         meta={run ? composerMeta(run) : null}
         focusTick={focusTick}
+        focusOnOpen={focusOnOpen}
         dropInto={dropInto}
         picking={picking}
       />
@@ -519,6 +523,7 @@ function Composer({
   acceptsImages,
   meta,
   focusTick,
+  focusOnOpen,
   dropInto,
   picking,
 }: {
@@ -529,6 +534,7 @@ function Composer({
   /** The run's agent, model and mode; `null` until the run is known. */
   meta: ComposerMeta | null;
   focusTick: number;
+  focusOnOpen: boolean;
   dropInto: DropInto;
   picking: MutableRefObject<boolean>;
 }) {
@@ -540,8 +546,10 @@ function Composer({
   useDropTarget(dropInto, true, attachments.addPaths);
   const imagesAsFiles = acceptsImages === false && attachments.items.some((a) => a.kind === "image");
 
+  // Compared with the tick it opened at (not a "mounted" flag), so StrictMode's second run of the effect agrees.
+  const openTick = useRef(focusTick);
   useEffect(() => {
-    ref.current?.focus();
+    if (focusOnOpen || focusTick !== openTick.current) ref.current?.focus();
   }, [focusTick]);
 
   useLayoutEffect(() => {
