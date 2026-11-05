@@ -2,12 +2,16 @@
 //! is at most `MAX_EDGE`, then PNG, or JPEG when PNG is over `MAX_IMAGE_BYTES` (photos, video). Needs COM on the
 //! calling thread.
 
-use windows::core::{GUID, PWSTR};
+use std::os::windows::ffi::OsStrExt;
+use std::path::Path;
+
+use windows::core::{Interface, GUID, PCWSTR, PWSTR};
+use windows::Win32::Foundation::GENERIC_READ;
 use windows::Win32::Graphics::Imaging::{
     CLSID_WICImagingFactory, GUID_ContainerFormatJpeg, GUID_ContainerFormatPng,
     GUID_WICPixelFormat24bppBGR, GUID_WICPixelFormat32bppBGR, IWICBitmapFrameEncode,
-    IWICImagingFactory, WICBitmapDitherTypeNone, WICBitmapEncoderNoCache,
-    WICBitmapInterpolationModeFant, WICBitmapPaletteTypeCustom,
+    IWICBitmapSource, IWICImagingFactory, WICBitmapDitherTypeNone, WICBitmapEncoderNoCache,
+    WICBitmapInterpolationModeFant, WICBitmapPaletteTypeCustom, WICDecodeMetadataCacheOnDemand,
 };
 use windows::Win32::System::Com::StructuredStorage::{IPropertyBag2, PROPBAG2};
 use windows::Win32::System::Com::{
@@ -27,7 +31,6 @@ pub struct Encoded {
 }
 
 pub fn encode(bitmap: &Bitmap) -> windows::core::Result<Encoded> {
-    let (width, height) = fit(bitmap.width, bitmap.height, MAX_EDGE);
     // SAFETY: plain WIC calls on COM smart pointers; `bitmap.pixels` holds width*height*4 bytes and WIC copies
     // them in CreateBitmapFromMemory.
     unsafe {
@@ -40,8 +43,46 @@ pub fn encode(bitmap: &Bitmap) -> windows::core::Result<Encoded> {
             bitmap.width * 4,
             &bitmap.pixels,
         )?;
+        encode_source(&factory, &source.cast()?, bitmap.width, bitmap.height)
+    }
+}
+
+/// An image file (an attachment, 2.10b) scaled and encoded the same way: the first frame only, and no metadata
+/// (EXIF, GPS) survives. Transparent areas come out black, as in a capture.
+pub fn encode_file(path: &Path) -> windows::core::Result<Encoded> {
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+    // SAFETY: plain WIC calls on COM smart pointers; `wide` is NUL-terminated and outlives the call.
+    unsafe {
+        let factory: IWICImagingFactory =
+            CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)?;
+        let decoder = factory.CreateDecoderFromFilename(
+            PCWSTR(wide.as_ptr()),
+            None,
+            GENERIC_READ,
+            WICDecodeMetadataCacheOnDemand,
+        )?;
+        let frame = decoder.GetFrame(0)?;
+        let (mut width, mut height) = (0u32, 0u32);
+        frame.GetSize(&mut width, &mut height)?;
+        if width == 0 || height == 0 {
+            return Err(windows::core::Error::empty());
+        }
+        encode_source(&factory, &frame.cast()?, width, height)
+    }
+}
+
+/// Scales `source` so its long edge is at most `MAX_EDGE`, then encodes it (PNG, else JPEG) to fit.
+unsafe fn encode_source(
+    factory: &IWICImagingFactory,
+    source: &IWICBitmapSource,
+    source_width: u32,
+    source_height: u32,
+) -> windows::core::Result<Encoded> {
+    let (width, height) = fit(source_width, source_height, MAX_EDGE);
+    // SAFETY: the caller's COM objects; every object made here is released on drop.
+    unsafe {
         let scaler = factory.CreateBitmapScaler()?;
-        scaler.Initialize(&source, width, height, WICBitmapInterpolationModeFant)?;
+        scaler.Initialize(source, width, height, WICBitmapInterpolationModeFant)?;
         // The encoders take 24-bit BGR (the capture's fourth byte is padding, not alpha).
         let converter = factory.CreateFormatConverter()?;
         converter.Initialize(
@@ -54,7 +95,7 @@ pub fn encode(bitmap: &Bitmap) -> windows::core::Result<Encoded> {
         )?;
         let mut last = None;
         for &encoding in ENCODINGS {
-            let bytes = write(&factory, &converter, width, height, encoding)?;
+            let bytes = write(factory, &converter, width, height, encoding)?;
             let fits = bytes.len() <= MAX_IMAGE_BYTES;
             last = Some(Encoded {
                 bytes,

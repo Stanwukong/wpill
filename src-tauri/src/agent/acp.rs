@@ -14,6 +14,7 @@ use std::collections::{HashMap, VecDeque};
 
 use serde_json::{json, Map, Value};
 
+use super::attachments::{self, AcpItem};
 use super::stream::{cut, StreamEvent, TurnResult, MAX_TEXT, MAX_TOOL_RESULT};
 
 pub const PROTOCOL_VERSION: u64 = 1;
@@ -100,7 +101,9 @@ pub struct Client {
     calls: HashMap<u64, Call>,
     session: Option<String>,
     can_load: bool,
-    queued: VecDeque<String>,
+    /// `promptCapabilities.image` from `initialize` (2.10b.2); `None` until the agent has answered.
+    images: Option<bool>,
+    queued: VecDeque<(String, Vec<AcpItem>)>,
     prompting: bool,
     /// Config changes sent and not answered yet: the first prompt waits for them.
     configuring: u32,
@@ -132,6 +135,7 @@ impl Client {
             calls: HashMap::new(),
             session: None,
             can_load: false,
+            images: None,
             queued: VecDeque::new(),
             prompting: false,
             configuring: 0,
@@ -160,23 +164,39 @@ impl Client {
     }
 
     /// A message from you. Sent now if the session is open and idle, else after the current turn.
+    #[cfg(test)]
     pub fn prompt(&mut self, text: &str) -> Vec<Out> {
-        self.queued.push_back(text.to_string());
+        self.prompt_with(text, Vec::new())
+    }
+
+    /// A message with attachments (2.10b.2): files as links to their copies, images as images when the agent
+    /// takes them (decided when it's sent, after `initialize`).
+    pub fn prompt_with(&mut self, text: &str, items: Vec<AcpItem>) -> Vec<Out> {
+        self.queued.push_back((text.to_string(), items));
         self.next_prompt()
+    }
+
+    /// Whether the agent takes images in a prompt; `None` until it has answered `initialize`.
+    pub fn accepts_images(&self) -> Option<bool> {
+        self.images
     }
 
     fn next_prompt(&mut self) -> Vec<Out> {
         if self.phase != Phase::Ready || self.prompting || self.configuring > 0 {
             return Vec::new();
         }
-        let (Some(text), Some(session)) = (self.queued.pop_front(), self.session.clone()) else {
+        let (Some((text, items)), Some(session)) = (self.queued.pop_front(), self.session.clone())
+        else {
             return Vec::new();
         };
         self.prompting = true;
         let bytes = self.request(
             Call::Prompt,
             "session/prompt",
-            json!({ "sessionId": session, "prompt": [{ "type": "text", "text": text }] }),
+            json!({
+                "sessionId": session,
+                "prompt": attachments::acp_blocks(&text, &items, self.images.unwrap_or(false)),
+            }),
         );
         vec![Out::Write(bytes)]
     }
@@ -267,6 +287,12 @@ impl Client {
                     .pointer("/agentCapabilities/loadSession")
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
+                self.images = Some(
+                    result
+                        .pointer("/agentCapabilities/promptCapabilities/image")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                );
                 self.open()
             }
             (Call::New | Call::Load, None) => {
@@ -488,12 +514,13 @@ impl Client {
         }
         match kind {
             "agent_message_chunk" => {
-                if let Some(text) = update.pointer("/content/text").and_then(Value::as_str) {
-                    if self.text.len() < MAX_TEXT * 2 {
+                match update.pointer("/content/text").and_then(Value::as_str) {
+                    Some(text) if self.text.len() < MAX_TEXT * 2 => {
                         self.text.push_str(text);
+                        vec![Out::Event(StreamEvent::TextDelta(text.to_string()))]
                     }
+                    _ => Vec::new(),
                 }
-                Vec::new()
             }
             "tool_call" | "tool_call_update" => {
                 let mut out = self.flush_text();
@@ -758,6 +785,16 @@ mod tests {
     }
 
     #[test]
+    fn message_chunks_are_drafts_until_the_text_is_flushed() {
+        let (mut c, _) = open(setup());
+        let out = feed(
+            &mut c,
+            json!({ "jsonrpc": "2.0", "method": "session/update", "params": { "sessionId": SID,
+            "update": { "sessionUpdate": "agent_message_chunk", "content": { "type": "text", "text": "Hi " } } } }),
+        );
+        assert_eq!(events(&out), vec![StreamEvent::TextDelta("Hi ".into())]);
+    }
+    #[test]
     fn opens_a_session_then_sends_the_prompt() {
         let (mut c, out) = open(setup());
         assert_eq!(
@@ -953,6 +990,71 @@ mod tests {
         assert!(!feed(&mut ask, read)
             .iter()
             .any(|o| matches!(o, Out::Unasked { .. })));
+    }
+
+    /// `initialize` replies recorded 2026-11-05 (trimmed to the capabilities).
+    const OPENCODE_INIT: &str = r#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":true,"mcpCapabilities":{"http":true,"sse":true},"promptCapabilities":{"embeddedContext":true,"image":true},"sessionCapabilities":{"close":{},"fork":{},"list":{},"resume":{}}},"agentInfo":{"name":"OpenCode","version":"1.19.5"}}}"#;
+    const CODEX_INIT: &str = r#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentInfo":{"name":"@agentclientprotocol/codex-acp","title":"Codex","version":"2.5.0"},"agentCapabilities":{"loadSession":true,"promptCapabilities":{"embeddedContext":true,"image":true},"mcpCapabilities":{"acp":false,"http":true,"sse":false}}}}"#;
+
+    fn attached() -> Vec<AcpItem> {
+        vec![
+            AcpItem {
+                name: "shot.png".into(),
+                path: r"C:\r\attachments\shot.png".into(),
+                bytes: 900,
+                image: Some(attachments::ImageBlock {
+                    mime: "image/png",
+                    base64: "AAAA".into(),
+                }),
+            },
+            AcpItem {
+                name: "notes.txt".into(),
+                path: r"C:\r\attachments\notes.txt".into(),
+                bytes: 5,
+                image: None,
+            },
+        ]
+    }
+
+    /// The first prompt's blocks for an agent that answered `initialize` with `init`.
+    fn first_prompt(init: &str) -> (Option<bool>, Value) {
+        let (mut c, _) = Client::new(setup());
+        assert_eq!(c.accepts_images(), None);
+        // Queued before the agent has answered: the blocks are decided when it's sent.
+        assert!(c.prompt_with("look", attached()).is_empty());
+        c.on_line(init.as_bytes());
+        let out = feed(
+            &mut c,
+            json!({ "jsonrpc": "2.0", "id": 2, "result": { "sessionId": SID } }),
+        );
+        let prompt = written(&out)
+            .into_iter()
+            .find(|l| l["method"] == json!("session/prompt"))
+            .unwrap();
+        (c.accepts_images(), prompt["params"]["prompt"].clone())
+    }
+
+    #[test]
+    fn attachments_follow_the_agents_prompt_capabilities() {
+        for init in [OPENCODE_INIT, CODEX_INIT] {
+            let (images, blocks) = first_prompt(init);
+            assert_eq!(images, Some(true));
+            assert_eq!(blocks[0]["text"], json!("look"));
+            assert_eq!(blocks[1]["type"], json!("image"));
+            assert_eq!(blocks[1]["mimeType"], json!("image/png"));
+            assert_eq!(blocks[2]["type"], json!("resource_link"));
+            assert_eq!(
+                blocks[2]["uri"],
+                json!("file:///C:/r/attachments/notes.txt")
+            );
+        }
+        // No promptCapabilities: only text and links, so the image goes as a link to its copy.
+        let (images, blocks) = first_prompt(
+            r#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":true}}}"#,
+        );
+        assert_eq!(images, Some(false));
+        assert_eq!(blocks[1]["type"], json!("resource_link"));
+        assert_eq!(blocks[1]["name"], json!("shot.png"));
     }
 
     #[test]

@@ -408,6 +408,8 @@ export interface AgentRun {
   updatedAtMs: number;
   /** The routine that started it (2.7e). */
   routine: AgentRunRoutine | null;
+  /** Whether images go to the agent as images (2.10b.2); null until an ACP agent has said. Files always go. */
+  acceptsImages: boolean | null;
 }
 
 export interface AgentRunRoutine {
@@ -508,14 +510,34 @@ export interface AgentRuns {
   runs: AgentRun[];
 }
 
+/** An attachment as the transcript shows it (2.10b): never its content or where it came from. */
+export interface AgentAttachment {
+  name: string;
+  kind: "image" | "file";
+  /** The original file's size. */
+  bytes: number;
+}
+
+/** A file picked for a message before it's sent (2.10b.3): dropped, pasted or copied in Explorer. Only its path
+ *  crosses IPC, never its bytes. */
+export interface AttachmentPick {
+  path: string;
+  name: string;
+  kind: "image" | "file";
+  bytes: number;
+}
+
+/** Files dragged over the command window (2.10b.3): `over` while they hover, then `drop` with their paths. */
+export type FilesDrag = { type: "over" } | { type: "drop"; paths: string[] } | { type: "leave" };
+
 export type AgentEvent =
-  | { kind: "user"; text: string }
+  | { kind: "user"; text: string; attachments?: AgentAttachment[] }
   | { kind: "text"; text: string }
-  | { kind: "tool"; id: string; name: string; label: string }
+  | { kind: "tool"; id: string; name: string; label: string; preview?: ApprovalPreview }
   | { kind: "toolResult"; id: string; isError: boolean; text: string }
   | { kind: "approval"; requestId: number; tool: string; summary: string; risk: AgentRisk }
   | { kind: "decision"; requestId: number; allow: boolean; by: "user" | "remembered" | "timeout" | "runEnded" | "answered" | "approved" | "feedback" }
-  | { kind: "result"; status: AgentStatus; reason: AgentEndReason; turns: number; costUsd: number | null }
+  | { kind: "result"; status: AgentStatus; reason: AgentEndReason; turns: number; costUsd: number | null; durationMs: number | null }
   | { kind: "error"; message: string };
 
 export type AgentEntry = AgentEvent & { atMs: number };
@@ -524,6 +546,12 @@ export type AgentEntry = AgentEvent & { atMs: number };
 export interface AgentOutput {
   runId: string;
   entry: AgentEntry;
+}
+
+/** `agent:textDraft` (2.10a): the whole draft so far, at most 10 times a second. */
+export interface AgentTextDraft {
+  runId: string;
+  text: string;
 }
 
 export interface AgentStartRequest {
@@ -537,6 +565,8 @@ export interface AgentStartRequest {
   mode?: AgentMode | null;
   /** The agent (2.9b); omitted is Claude Code. */
   backend?: AgentBackend | null;
+  /** Files to attach to the first message (2.10b): paths, never bytes. Not for routines. */
+  attachments?: string[];
 }
 
 export interface ClaudeInstall {

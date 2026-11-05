@@ -6,6 +6,8 @@ export interface Transcript {
   entries: AgentEntry[];
   loading: boolean;
   error: string | null;
+  /** Claude's text while it's written (2.10a, `agent:textDraft`); cleared by the run's next entry. */
+  draft: string | null;
 }
 
 interface Slot extends Transcript {
@@ -29,6 +31,13 @@ export function useTranscripts() {
         if (!slot) return;
         if (slot.loading) slot.buffered.push(entry);
         else slot.entries = [...slot.entries, entry];
+        slot.draft = null;
+        bump();
+      }),
+      on.agentTextDraft(({ runId, text }) => {
+        const slot = store.current.get(runId);
+        if (!slot) return;
+        slot.draft = text;
         bump();
       }),
     ];
@@ -37,7 +46,7 @@ export function useTranscripts() {
 
   const load = useCallback((runId: string) => {
     if (store.current.has(runId)) return;
-    const slot: Slot = { entries: [], loading: true, error: null, buffered: [] };
+    const slot: Slot = { entries: [], loading: true, error: null, buffered: [], draft: null };
     store.current.set(runId, slot);
     bump();
     commands

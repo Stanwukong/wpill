@@ -48,8 +48,9 @@ author's other machine. **2.9c (settings, the agent and model picker, README) is
 checks passed.**
 **Phase 3 (memory-heavy apps) is complete (2026-11-05): design agreed (D49), 3a (the read-only list) and 3b (End Task,
 D50) signed off, all manual checks passed (3b on the author's other machine).** Built on branch
-`self/phase-3-memory-heavy` (PR #2). Next, per the roadmap: [Phase 2.10, agent window UI](#phase-210-agent-window-ui-proposed-2026-11-05-d51-design-to-be-agreed)
-(added 2026-11-05, D51), then [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
+`self/phase-3-memory-heavy` (PR #2). Next, per the roadmap: [Phase 2.10, agent window UI](#phase-210-agent-window-ui-design-agreed-2026-11-05-d51-d52)
+(added 2026-11-05, D51; design agreed 2026-11-05, D52; built on branch `self/phase-2.10-agent-window`, PR #3).
+**Stages 2.10a (readable transcript) and 2.10b (attachments) are built (2026-11-05); their manual checks are pending.** 2.10c–d not started. After 2.10: [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
 [prompts/phase-5-utilities.md](prompts/phase-5-utilities.md)), the spikes, and last 4a-5 (release). See
 [Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
@@ -457,6 +458,18 @@ names `cay-claude-…` and the hook marker.
 |---|---|---|---|
 | command | `end_process_group` | `(key, pids: { pid, created }[]) → { cancelled, outcomes: { pid, created, outcome }[] }` | Async. Shows the native confirm box itself (OK / Cancel, Cancel the default); only pids Rust listed for `key` are touched. Errors `processGroupGone`, `processEndBusy` (one at a time). |
 | type | `EndOutcome` | `ended \| closed \| accessDenied \| protected \| notFound \| changed \| prompted \| failed` | `prompted`: the app showed a dialog after `WM_CLOSE` and was left open. Replaces the reserved `ok`. |
+
+### Phase 2.10a
+
+| Kind | Name | Payload / signature | Notes |
+|---|---|---|---|
+| type | `AgentEvent` `tool` | `+ preview?: ApprovalPreview` | An edit's diff (`Edit`, `MultiEdit`, `Write`, a Codex patch), built from the input alone, ≤200 lines (`preview::for_transcript`). |
+| command | `agent_open_link` | `(url) → ()` | Opens a transcript link in the browser; https only (`agent/links.rs`), refused otherwise (`agentInvalid`). |
+| command | `agent_paste_attachments` | `() → AttachmentPick[]` | 2.10b.3. Ctrl+V: the clipboard's files (`CF_HDROP`), or its image saved as a file in `agent\pasted`; `[]` for text. |
+| command | `agent_describe_attachments` | `(paths) → AttachmentPick[]` | 2.10b.3. Dropped files' names, kinds and sizes; a folder or missing file is `agentInvalid`. |
+| command | `agent_pick_attachments` | `() → AttachmentPick[]` | 2.10b.4. The Attach button's multi-file picker (sync, main thread); `[]` if cancelled. |
+| event | `agent:textDraft` | `{ runId, text }` | Command window only. Claude's whole text so far while it's written (`--include-partial-messages`; ACP chunks), at most every 100 ms (`lifecycle::DRAFT_EVERY_MS`); never in the transcript or audit, no `agent:runs` for it; the run's next `agent:output` entry replaces it. |
+| type | `AgentEvent` `result` | `+ durationMs: number \| null` | From the first message of the stretch that ended (Cay's own clock, every agent). |
 
 ### Reserved for later phases (names fixed now so they slot in)
 
@@ -1759,7 +1772,7 @@ Performance Information" (working set vs private bytes); phnt `ntexapi.h` (field
 `windows` 0.62.2 bindings (checked locally); `sysinfo` docs (`Process::memory` = working set on Windows);
 the 3.5 ms measurement above (PowerShell + C# P/Invoke, 2026-11-04).
 
-### Phase 2.10: agent window UI (proposed 2026-11-05, D51; design to be agreed)
+### Phase 2.10: agent window UI (design agreed 2026-11-05, D51, D52)
 The command window is where agent runs are read and steered, and it reads like a log: Claude's replies are plain
 paragraphs (raw `**`, `#`, backticks and tables show as typed), tool calls and their results are a flat list of lines,
 and there is no way to give a run an image or a file. This phase makes it a structured, readable conversation, adds
@@ -1822,6 +1835,117 @@ attachments, and lets the window go fullscreen. The island's Agents section is u
         `--agent` amber only for "working"), through `motion-designer`, reduced motion respected.
 - Each stage ends with `pnpm typecheck`, cargo checks where Rust changed, headless renders reviewed and a manual check
   list (real runs with `haiku` in a scratch folder; attachments only with files the test made itself).
+
+#### Phase 2.10 design: agreed (drafted by the daily routine, approved by the author 2026-11-05, D52)
+The author took every recommendation (the first option of each **(choose)** item), including `--add-dir` for the
+run's own attachments folder. The tasks below are the work list; the stage bullets above are their goals.
+
+**Findings (code)**
+- **The transcript lacks what the new views need.** `AgentEvent::Tool` carries only `name` and a one-line `label`, not
+  the input, so an edit can't show its diff in the transcript yet. `ToolResult.text` is already cut to 2,000 chars
+  (`stream::MAX_TOOL_RESULT`), so "Show all" can only show up to that. The transcript is kept in memory and capped at
+  400 entries (`lifecycle::MAX_ENTRIES`). `Result` has no duration. All four need Rust changes (`ipc.rs`, `stream.rs`,
+  `acp.rs`, `lifecycle.rs`) before the React side.
+- **Diffs:** `agent/preview.rs` already builds an `ApprovalPreview` from a tool's input (its one file read is
+  `read_existing`). For the transcript, build it from the input alone (no file read, so it can't show the old text of a
+  Write) and attach it to the `Tool` entry. That's display only: the approval flow and `approvals.rs` stay as they are.
+- **Markdown:** `Markdown.tsx` (227 lines, no dependencies) lacks tables, links, strikethrough and code-fence
+  languages. Links need a Rust command that opens https only (like `calendar_open`, which opens by id; here it's a
+  checked URL from the transcript).
+- **Prompts:** Claude Code takes the user line as `"content": text` (`stream.rs:174`). ACP sends
+  `[{type:"text"}]` and reads only `agentCapabilities.loadSession` from `initialize` (`acp.rs:267`).
+- **Window:** undecorated (`window/command.rs:88`), with a drag region already in `cmd__bar`. In Tauri a double-click
+  on a `data-tauri-drag-region` toggles maximize by default.
+
+**Findings (docs, 2026-11-05)**
+- **Claude Code's streaming input takes images:** a user message's `content` can be an array of `{type:"text"}` and
+  `{type:"image", source:{type:"base64", media_type:"image/png", data}}` blocks (Agent SDK, "Streaming Input"). An
+  image block without a `source` doesn't error: Claude gets a text note in its place. Images go to stdin, not
+  the agent pipe, so the 4 MiB pipe cap doesn't apply. They do end up in Claude Code's session transcript under
+  `~/.claude/projects`, as desktop looks already do.
+- **ACP content:** every agent MUST accept `text` and `resource_link`; `image` (`data` base64, `mimeType`), `audio`
+  and embedded `resource` need `promptCapabilities.image` / `.audio` / `.embeddedContext`. So **files can go to every
+  ACP agent as `resource_link`s**, and only images depend on the agent.
+- `--include-partial-messages` adds `stream_event` lines (`content_block_delta`, a few tokens each, so tens of lines
+  per second while Claude writes). ACP already streams `agent_message_chunk`s.
+
+**(choose) 1. Markdown renderer.** (a) **Extend `Markdown.tsx`** (GFM tables, links and autolinks, strikethrough,
+  fence language; ~150 more lines plus tests): no dependency, still React elements only. (b) `react-markdown` +
+  `remark-gfm`: also React elements (no raw HTML unless `rehype-raw` is added), but about 40 kB gzipped and dozens of
+  transitive packages for a window that renders one kind of text.
+**(choose) 2. Syntax highlighting.** (a) **None in 2.10**: a language label and Copy only. (b) `prism-react-renderer`
+  (renders tokens as React elements, a few languages). highlight.js and shiki produce HTML strings, so the rule rules
+  them out.
+**(choose) 3. Streaming text.** (a) **Yes, as 2.10a's last task:** Rust coalesces deltas into an `agent:textDraft`
+  event at most 10 times a second. Drafts never go into the transcript or the audit, and the whole `assistant` message
+  replaces the draft. ACP chunks use the same event. (b) Defer to a later phase.
+**(choose) 4. Files.** (a) **Copy into the run's own `attachments` folder** (under `agent\runs\<runId>\`) and pass
+  that folder with `--add-dir` from spawn, so a follow-up's files are reachable without restarting. The prompt lists
+  their paths. Claude sees only copies, and nothing outside the project folder is opened up. Caveat: the run folder is
+  deleted when the process exits today, so a follow-up that resumes an ended run needs its files copied again (the
+  same as a first send). (b) Reference files where they are and `--add-dir` each parent folder: no copy, but that opens
+  up the whole folder (often Downloads or Desktop) for the rest of the run. Either way **`--add-dir` widens what a run
+  can read**, so Femi should sign it off, since it sits next to the permission rules (D40) even though it isn't a mode.
+**(choose) 5. "Fullscreen".** (a) **Native maximize** (`window.maximize()`): fills the work area, so the taskbar stays
+  visible. It's also what Win+Up, Snap and double-clicking the title bar already do, and the island keeps
+  showing (`fullscreen.rs` doesn't hide for maximized windows). (b) True fullscreen (`set_fullscreen`): covers the
+  taskbar, and `fullscreen.rs` would then hide the island while the command window is in front. To verify in the
+  task: Tao's maximize of an undecorated window stays inside the work area on this machine.
+**(choose) 6. Caps.** (a) **4 images per message** (each scaled with `desktop/encode.rs` to ≤1568 px and ≤500 KB, as
+  looks are), **10 files of ≤25 MB each, 50 MB per message**. (b) Other numbers.
+- Not a choice, noted: pasted *files* (Explorer's Copy) reach a webview without paths, so Rust reads the clipboard on
+  Ctrl+V (`CF_HDROP` for files, `CF_DIBV5`/PNG for images) through one command. Drag-and-drop uses Tauri's
+  drag-drop event on the command window, which gives paths. Nothing pasted as image bytes crosses IPC.
+
+**Proposed tasks (once agreed)**
+- **2.10a: transcript**
+  - [x] 2.10a.1 (0a6b91a) Rust: `Tool` entries carry an optional preview (from the input, no file read); `Result` carries
+        `durationMs` (Rust's own start-to-result time, the same for every agent); tests in `stream.rs`/`lifecycle.rs`.
+  - [x] 2.10a.2 (23c920a) `Markdown.tsx`: tables, links (new `agent_open_link`, https only, checked in Rust), strikethrough,
+        fence language label + Copy; unit tests for the parser (pure functions moved out of the component).
+  - [x] 2.10a.3 (e622e23) `RunView`: turns, folded tool groups, results collapsed (errors open), `PreviewBlock` for edits, the
+        summary card, inline approvals (motion-designer).
+  - [x] 2.10a.4 (e6623dd) Copy message / copy run as Markdown (pure `toMarkdown(entries)`, tested); pinned scroll + "Jump to
+        latest" (motion-designer).
+  - [x] 2.10a.5 (797dd6e, e6623dd) (if 3a) streaming drafts: `stream.rs` deltas, coalescing in `mod.rs`, `agent:textDraft` in
+        `ipc.rs`/`ipc.ts`, drawn as the turn's last block.
+  - [ ] **2.10a manual check (Femi)**: from this branch (`pnpm tauri dev`), haiku runs in a scratch folder:
+        1. A reply with a table, a link, `~~strike~~` and a fenced code block renders as such; Copy copies the code;
+           clicking the https link opens the browser, and an `http://` link is plain text.
+        2. Claude's text appears while it's written (the amber wave in the gutter) and doesn't jump when it's done.
+        3. A run that reads several files shows one folded row ("Read 3 files"), and opens to the calls and results.
+        4. An Edit shows its diff under the call; a failing command opens its group with the error shown.
+        5. An Ask-mode approval shows inline as "Asked … Allowed by you"; the card at the end shows status, turns,
+           time and cost.
+        6. Copy (header) pastes the run as Markdown; a message's Copy pastes its Markdown.
+        7. Scroll up while a run writes: "Jump to latest" appears, and clicking it pins again.
+        8. An OpenCode or Codex run (ACP) streams too and shows the same turns.
+        9. The island is unchanged (no `agent:runs` flood while text streams: the panel's Agents row doesn't flicker).
+- **2.10b: attachments**
+  - [x] 2.10b.1 (3795ff3) Rust: an `attachments` module (pure: kinds, caps, prompt lines, content blocks; tested), copy and
+        scale, `--add-dir` at spawn, Claude Code's user line as a content array, the audit (names, types, sizes).
+  - [x] 2.10b.2 (0da7c8d) ACP: read `promptCapabilities`, send `image` / `resource_link` blocks, report what an agent accepts to
+        React; tests on recorded `initialize` replies.
+  - [x] 2.10b.3 (fc7a749) Clipboard and drag-and-drop commands (paths, never bytes over IPC). `agent/clipboard.rs`:
+        `CF_HDROP` → paths; a `PNG` or `CF_DIBV5`/`CF_DIB` image → a file in `agent\pasted` (pruned after a day);
+        dropped paths described. The Attach button's multi-file picker is `folder::pick_files` (09dc6e8).
+  - [x] 2.10b.4 (09dc6e8) UI: Attach button, chips, paste and drop in the new-task form and follow-up box, chips in the
+        transcript, the "off for this agent" note (motion-designer).
+  - [ ] **2.10b manual check (Femi)**: from this branch, a scratch folder:
+        1. Attach (paperclip/button) opens the file picker; chips show icon, name, size and ×.
+        2. Ctrl+V of a Win+Shift+S screenshot adds an image chip; Explorer's Copy of files adds file chips; plain
+           text still pastes as text. Dragging files over the window shows "Drop to attach"; dropping adds chips.
+        3. A haiku run with an image and a text file: Claude describes the image and reads the file (from the run's
+           `attachments` copy, without asking for the folder); the transcript shows the chips; the audit has names and
+           sizes only.
+        4. Five images: the cap error shows and the chips stay. A follow-up with attachments after the run ended works.
+        5. An OpenCode or Codex run with an image and a file (images as images; files as links).
+- **2.10c: window**
+  - [ ] 2.10c.1 Fullscreen button + F11 + double-click (per choice 5); Esc leaves it first.
+  - [ ] 2.10c.2 Remember size, position and state in `settings.json` (`agent.window`); restore only on a current
+        monitor's work area (D31), else centre.
+  - [ ] 2.10c.3 Wide layout: run list as a sidebar, transcript at ~760 px (motion-designer).
+- **2.10d: polish**: the four bullets above, one task each (composer; run list; keyboard; states).
 
 ### Phase 4b: settings
 A settings window (a normal, focusable window, separate from the island) for: activities on/off,

@@ -72,6 +72,8 @@ pub struct Launch {
     pub google_tools: bool,
     /// The permission mode to start in (2.8e): one of the four Cay offers, never `bypassPermissions`.
     pub mode: AgentMode,
+    /// The run's own attachments folder (2.10b), readable by the run (`--add-dir`); `None` for routines.
+    pub attachments_dir: Option<String>,
 }
 
 /// The arguments after `claude.exe`. The run's mode (2.8e) decides what Claude Code asks about; whatever it asks
@@ -84,6 +86,8 @@ pub fn args(l: &Launch, mcp_config: &Path) -> Vec<String> {
         "--output-format",
         "stream-json",
         "--verbose",
+        // Claude's text as it's written, for the command window's draft (2.10a).
+        "--include-partial-messages",
         "--permission-mode",
         mode::cli(l.mode),
     ]
@@ -124,6 +128,11 @@ pub fn args(l: &Launch, mcp_config: &Path) -> Vec<String> {
     if let Some(name) = l.name.as_deref().filter(|n| !n.trim().is_empty()) {
         a.push("--name".into());
         a.push(name.trim().into());
+    }
+    if let Some(dir) = &l.attachments_dir {
+        // Only the copies Cay made for this run: its folder's mcp.json (with the bridge token) stays out.
+        a.push("--add-dir".into());
+        a.push(dir.clone());
     }
     a.push("--max-turns".into());
     a.push(l.max_turns.max(1).to_string());
@@ -273,6 +282,7 @@ mod tests {
             desktop_tools: true,
             google_tools: true,
             mode: AgentMode::Default,
+            attachments_dir: None,
         }
     }
 
@@ -314,6 +324,23 @@ mod tests {
             Path::new("m.json"),
         );
         assert!(has_pair(&auto, "--permission-mode", "auto"));
+        assert!(!a.contains(&"--add-dir".to_string()));
+    }
+
+    #[test]
+    fn the_attachments_folder_is_added() {
+        let dir = r"C:\Users\me\AppData\Roaming\cay\agent\runs\r1\attachments";
+        let a = args(
+            &Launch {
+                attachments_dir: Some(dir.into()),
+                ..launch()
+            },
+            Path::new("m.json"),
+        );
+        assert!(has_pair(&a, "--add-dir", dir));
+        // `--add-dir` takes several folders: the next argument must be a flag.
+        let i = a.iter().position(|x| x == "--add-dir").unwrap();
+        assert!(a[i + 2].starts_with("--"));
     }
 
     #[test]

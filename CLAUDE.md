@@ -412,3 +412,13 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
 - **Building while Cay runs from `pnpm tauri dev`:** if this session runs inside that Cay (an agent run), editing Rust in
   the main checkout restarts Cay and ends the run. Work in a git worktree beside it (`git worktree add ../wpill-<x>
   <branch>`, `pnpm install` there; its own `target`, ~5 min cold for `cargo test --lib` with `CARGO_INCREMENTAL=0`).
+- **Frontend unit tests (2.10a):** `pnpm test` runs `node --test` on `src/**/*.test.ts` (Node 24 strips the types; no
+  test dependency). Tested modules are pure `.ts` files that import each other with explicit `.ts` extensions
+  (`allowImportingTsExtensions`) and only `import type` from elsewhere; `*.test.ts` is excluded from `tsc` (no
+  `@types/node`). Examples: `src/command/markdownParse.ts`, `transcriptTurns.ts`, `runMarkdown.ts`.
+- **Layout, Phase 2.10b (attachments):** `agent/attachments.rs` (pure: kinds, caps, copy names, Claude Code content
+  arrays, ACP blocks, `file_uri`, audit), `agent/attach.rs` (`prepare`: caps, scaling via `desktop::scale_image`, copies
+  into the run's `attachments` folder; `restore` re-copies after the run folder is gone), `agent/clipboard.rs` (Ctrl+V:
+  `CF_HDROP`, `PNG`, DIB → a file in `agent\pasted`; pure `parse_dib`; `describe` for drops), `folder::pick_files` (the
+  Attach picker). `src/command/Attachments.tsx` + `attachmentList.ts` hold the chips, paste and drop. Attachment bytes
+  never cross IPC, and the pasted test never writes the real clipboard (it would replace the user's).

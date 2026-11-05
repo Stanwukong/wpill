@@ -7,15 +7,18 @@
 
 use std::collections::VecDeque;
 
-use super::describe;
-use super::stream::{StreamEvent, TurnResult};
+use super::stream::{self, StreamEvent, TurnResult};
+use super::{describe, preview};
 use crate::ipc::{
-    AgentEndReason, AgentEntry, AgentEvent, AgentMode, AgentRun, AgentRunRoutine, AgentStatus,
+    AgentAttachment, AgentEndReason, AgentEntry, AgentEvent, AgentMode, AgentRun, AgentRunRoutine,
+    AgentStatus,
 };
 
 /// Entries kept per run for the command window (oldest dropped first).
 const MAX_ENTRIES: usize = 400;
 const MAX_PROMPT: usize = 200;
+/// The command window's draft of Claude's text is sent at most this often (2.10a).
+pub const DRAFT_EVERY_MS: i64 = 100;
 
 #[derive(Debug)]
 pub struct Run {
@@ -45,11 +48,18 @@ pub struct Run {
     updated_at_ms: i64,
     /// Messages written to the current process that have no `result` yet.
     queued: u32,
+    /// When the first of the queued messages was sent: the start of the stretch a `Result` entry times (2.10a).
+    busy_since: Option<i64>,
+    /// Claude's text being written, and when it was last sent (2.10a).
+    draft: String,
+    draft_sent_ms: Option<i64>,
     /// Set by `stop`: the exit that follows is the user's doing.
     stopping: bool,
     transcript: VecDeque<AgentEntry>,
     /// The routine that started it (2.7e).
     pub routine: Option<AgentRunRoutine>,
+    /// An ACP agent's `promptCapabilities.image` once it has answered `initialize` (2.10b.2).
+    pub images: Option<bool>,
 }
 
 /// What `apply` asks the owner to do.
@@ -60,6 +70,8 @@ pub struct Applied {
     pub close_stdin: bool,
     /// The run just ended (offer `agentFinished`).
     pub finished: bool,
+    /// Claude's text so far, to show as it's written (throttled to `DRAFT_EVERY_MS`; never in the transcript).
+    pub draft: Option<String>,
 }
 
 impl Run {
@@ -85,9 +97,13 @@ impl Run {
             started_at_ms: at_ms,
             updated_at_ms: at_ms,
             queued: 0,
+            busy_since: None,
+            draft: String::new(),
+            draft_sent_ms: None,
             stopping: false,
             transcript: VecDeque::new(),
             routine: None,
+            images: None,
         }
     }
 
@@ -131,7 +147,18 @@ impl Run {
     }
 
     /// A prompt or follow-up is being written to the process.
+    #[cfg(test)]
     pub fn send(&mut self, text: &str, at_ms: i64) -> AgentEntry {
+        self.send_with(text, Vec::new(), at_ms)
+    }
+
+    /// A message with attachments (2.10b): the transcript keeps their names, kinds and sizes.
+    pub fn send_with(
+        &mut self,
+        text: &str,
+        attachments: Vec<AgentAttachment>,
+        at_ms: i64,
+    ) -> AgentEntry {
         if self.prompt.is_empty() {
             self.prompt = describe::truncate(text.trim(), MAX_PROMPT);
         }
@@ -142,12 +169,16 @@ impl Run {
             self.error = None;
             self.stopping = false;
         }
+        if self.queued == 0 || self.busy_since.is_none() {
+            self.busy_since = Some(at_ms);
+        }
         self.queued += 1;
         self.updated_at_ms = at_ms;
         self.push(
             at_ms,
             AgentEvent::User {
                 text: text.to_string(),
+                attachments,
             },
         )
     }
@@ -181,21 +212,42 @@ impl Run {
                     },
                 ));
             }
+            StreamEvent::TextDelta(piece) => {
+                if self.draft.len() < stream::MAX_TEXT {
+                    self.draft.push_str(&piece);
+                }
+                if self
+                    .draft_sent_ms
+                    .is_none_or(|sent| at_ms - sent >= DRAFT_EVERY_MS)
+                {
+                    self.draft_sent_ms = Some(at_ms);
+                    applied.draft = Some(self.draft.clone());
+                }
+            }
             StreamEvent::Text(text) => {
+                self.end_draft();
                 applied
                     .entries
                     .push(self.push(at_ms, AgentEvent::Text { text }));
             }
             StreamEvent::Tool { id, name, input } => {
+                self.end_draft();
                 let label = describe::step_label(&name, &input, &self.cwd);
                 self.step = Some(describe::step_line(&name, &input, &self.cwd));
                 if let Some(todos) = describe::todo_count(&name, &input) {
                     self.todos = Some(todos);
                 }
+                let preview = preview::for_transcript(&name, &input, &self.cwd);
                 let name = describe::display_tool(&name);
-                applied
-                    .entries
-                    .push(self.push(at_ms, AgentEvent::Tool { id, name, label }));
+                applied.entries.push(self.push(
+                    at_ms,
+                    AgentEvent::Tool {
+                        id,
+                        name,
+                        label,
+                        preview,
+                    },
+                ));
             }
             StreamEvent::ToolResult { id, is_error, text } => {
                 applied
@@ -203,6 +255,7 @@ impl Run {
                     .push(self.push(at_ms, AgentEvent::ToolResult { id, is_error, text }));
             }
             StreamEvent::Result(result) => {
+                self.end_draft();
                 self.turns = self.turns.saturating_add(result.num_turns);
                 self.cost_usd = result.total_cost_usd.or(self.cost_usd);
                 self.queued = self.queued.saturating_sub(1);
@@ -225,6 +278,7 @@ impl Run {
                     self.reason = Some(reason);
                     let turns = self.turns;
                     let cost_usd = self.cost_usd;
+                    let duration_ms = self.took(at_ms);
                     applied.entries.push(self.push(
                         at_ms,
                         AgentEvent::Result {
@@ -232,6 +286,7 @@ impl Run {
                             reason,
                             turns,
                             cost_usd,
+                            duration_ms,
                         },
                     ));
                 } else if self.status == AgentStatus::Starting {
@@ -268,6 +323,7 @@ impl Run {
         self.step = None;
         self.todos = None;
         self.queued = 0;
+        self.end_draft();
         let (status, reason) = if self.stopping {
             (AgentStatus::Stopped, AgentEndReason::Stopped)
         } else {
@@ -292,6 +348,7 @@ impl Run {
         self.status = status;
         self.reason = Some(reason);
         let (turns, cost_usd) = (self.turns, self.cost_usd);
+        let duration_ms = self.took(at_ms);
         applied.entries.push(self.push(
             at_ms,
             AgentEvent::Result {
@@ -299,10 +356,22 @@ impl Run {
                 reason,
                 turns,
                 cost_usd,
+                duration_ms,
             },
         ));
         applied.finished = true;
         applied
+    }
+
+    /// The text being written is complete (or abandoned): the next piece starts a new draft, sent at once.
+    fn end_draft(&mut self) {
+        self.draft.clear();
+        self.draft_sent_ms = None;
+    }
+
+    /// How long the stretch of work that just ended took, from its first message; ends the stretch.
+    fn took(&mut self, at_ms: i64) -> Option<i64> {
+        self.busy_since.take().map(|since| (at_ms - since).max(0))
     }
 
     /// A line for the transcript that isn't from the stream (approvals, decisions, start failures).
@@ -335,6 +404,11 @@ impl Run {
             started_at_ms: self.started_at_ms,
             updated_at_ms: self.updated_at_ms,
             routine: self.routine.clone(),
+            // Claude Code always takes images; an ACP agent says so in `initialize`.
+            accepts_images: match self.backend {
+                crate::ipc::AgentBackend::Claude => Some(true),
+                _ => self.images,
+            },
         }
     }
 
@@ -474,6 +548,83 @@ mod tests {
     }
 
     #[test]
+    fn results_are_timed_from_the_first_message_and_edits_carry_their_diff() {
+        let mut r = run();
+        r.send("one", 1_000);
+        r.apply(init(), 1_100);
+        let a = r.apply(
+            StreamEvent::Tool {
+                id: "e".into(),
+                name: "Edit".into(),
+                input: json!({ "file_path": "a.txt", "old_string": "a", "new_string": "b" }),
+            },
+            1_200,
+        );
+        let AgentEvent::Tool { preview, .. } = &a.entries[0].event else {
+            panic!("a tool entry");
+        };
+        let Some(crate::ipc::ApprovalPreview::Diff(d)) = preview else {
+            panic!("an edit has its diff");
+        };
+        assert_eq!(
+            (d.file.as_str(), d.added, d.removed),
+            ("a.txt", Some(1), Some(1))
+        );
+        let a = r.apply(
+            StreamEvent::Tool {
+                id: "b".into(),
+                name: "Bash".into(),
+                input: json!({ "command": "dir" }),
+            },
+            1_300,
+        );
+        assert!(matches!(
+            &a.entries[0].event,
+            AgentEvent::Tool { preview: None, .. }
+        ));
+        r.send("two", 2_000);
+        r.apply(result("success", 1, 0.01), 3_000);
+        let a = r.apply(result("success", 1, 0.02), 4_500);
+        let duration = |a: &Applied| match a.entries.last().map(|e| &e.event) {
+            Some(AgentEvent::Result { duration_ms, .. }) => *duration_ms,
+            other => panic!("a result, got {other:?}"),
+        };
+        assert_eq!(duration(&a), Some(3_500), "from the first queued message");
+        // A follow-up after the end is timed on its own, and so is an exit.
+        r.send("three", 10_000);
+        let a = r.exited(Some(1), "boom", 10_250);
+        assert_eq!(duration(&a), Some(250));
+    }
+
+    #[test]
+    fn drafts_are_throttled_and_end_with_the_text() {
+        let mut r = run();
+        r.send("hi", 0);
+        r.apply(init(), 1);
+        let delta =
+            |r: &mut Run, piece: &str, at: i64| r.apply(StreamEvent::TextDelta(piece.into()), at);
+        let a = delta(&mut r, "He", 10);
+        assert_eq!(
+            a.draft.as_deref(),
+            Some("He"),
+            "the first piece is sent at once"
+        );
+        assert!(a.entries.is_empty(), "never in the transcript");
+        assert_eq!(delta(&mut r, "llo", 50).draft, None, "within 100 ms");
+        assert_eq!(
+            delta(&mut r, " there", 110).draft.as_deref(),
+            Some("Hello there")
+        );
+        let a = r.apply(StreamEvent::Text("Hello there.".into()), 120);
+        assert!(matches!(&a.entries[0].event, AgentEvent::Text { text } if text == "Hello there."));
+        assert_eq!(
+            delta(&mut r, "Next", 130).draft.as_deref(),
+            Some("Next"),
+            "a new draft starts fresh and is sent at once"
+        );
+    }
+
+    #[test]
     fn limits_and_errors() {
         let mut r = run();
         r.send("x", 1);
@@ -514,5 +665,35 @@ mod tests {
         assert_eq!(r.reason, None);
         assert_eq!(r.session.as_deref(), Some("sid"));
         assert_eq!(r.ipc(vec![]).prompt, "x");
+    }
+
+    #[test]
+    fn a_message_keeps_its_attachments() {
+        let mut r = Run::new("r".into(), r"C:\p".into(), None, 0);
+        let files = vec![AgentAttachment {
+            name: "a.png".into(),
+            kind: crate::ipc::AttachmentKind::Image,
+            bytes: 3,
+        }];
+        let entry = r.send_with("look", files.clone(), 1);
+        assert_eq!(
+            entry.event,
+            AgentEvent::User {
+                text: "look".into(),
+                attachments: files
+            }
+        );
+        let plain = serde_json::to_value(r.send("again", 2)).unwrap();
+        assert!(plain.get("attachments").is_none());
+    }
+
+    #[test]
+    fn accepts_images_is_claudes_or_what_the_acp_agent_said() {
+        let mut r = run();
+        assert_eq!(r.ipc(Vec::new()).accepts_images, Some(true));
+        r.backend = crate::ipc::AgentBackend::Opencode;
+        assert_eq!(r.ipc(Vec::new()).accepts_images, None);
+        r.images = Some(false);
+        assert_eq!(r.ipc(Vec::new()).accepts_images, Some(false));
     }
 }

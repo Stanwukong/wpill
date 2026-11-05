@@ -2,12 +2,16 @@
 // Mirrors src-tauri/src/ipc.rs; change both together.
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type {
   ActivityHidePayload,
   AgentEntry,
+  AttachmentPick,
+  FilesDrag,
   AgentMode,
   AgentOptions,
   AgentOutput,
+  AgentTextDraft,
   AgentRuns,
   AgentStartRequest,
   AgentBackendsPayload,
@@ -45,6 +49,7 @@ const EVENTS = {
   agentSessions: "sessions:changed",
   agentRuns: "agent:runs",
   agentOutput: "agent:output",
+  agentTextDraft: "agent:textDraft",
   commandFocusRun: "command:focus-run",
   commandFocusAsk: "command:focus-ask",
   sessionAsks: "sessions:asks",
@@ -95,12 +100,23 @@ export const commands = {
   /** 2.9c: the agents the picker offers; the first call may take a few seconds (OpenCode's model list). */
   agentBackends: () => invoke<AgentBackendsPayload>("agent_backends"),
   /** A follow-up: queued into the running turn, or resumes a finished run. */
-  agentSend: (runId: string, text: string) => invoke<void>("agent_send", { runId, text }),
+  /** A follow-up; `attachments` are file paths (2.10b), never bytes. */
+  agentSend: (runId: string, text: string, attachments?: string[]) =>
+    invoke<void>("agent_send", { runId, text, attachments: attachments ?? null }),
   agentStop: (runId: string) => invoke<void>("agent_stop", { runId }),
   /** Removes an ended run from the list. Errors `agentInvalid` while it still runs, `agentRunGone`. */
   agentRemove: (runId: string) => invoke<void>("agent_remove", { runId }),
   agentRuns: () => invoke<AgentRuns>("agent_runs"),
   agentTranscript: (runId: string) => invoke<AgentEntry[]>("agent_transcript", { runId }),
+  /** Ctrl+V (2.10b.3): the clipboard's files, or its image saved as a file by Rust; empty when it holds text. */
+  agentPasteAttachments: () => invoke<AttachmentPick[]>("agent_paste_attachments"),
+  /** The Attach button (2.10b.4): the shell's file picker; empty if cancelled. */
+  agentPickAttachments: () => invoke<AttachmentPick[]>("agent_pick_attachments"),
+  /** Dropped files' names, kinds and sizes (2.10b.3); errors for a folder or a missing file. */
+  agentDescribeAttachments: (paths: string[]) =>
+    invoke<AttachmentPick[]>("agent_describe_attachments", { paths }),
+  /** Opens a transcript link in the browser; Rust refuses anything but https (2.10a). */
+  agentOpenLink: (url: string) => invoke<void>("agent_open_link", { url }),
   agentDecide: (requestId: number, decision: "allow" | "deny", remember: "once" | "run") =>
     invoke<void>("agent_decide", { requestId, decision, remember }),
   /** A waiting approval's whole diff or command (2.8b); `null` once answered or for tools without one. */
@@ -170,6 +186,9 @@ export const on = {
   /** Delivered to the command window only. */
   agentOutput: (cb: (payload: AgentOutput) => void): Promise<UnlistenFn> =>
     listen<AgentOutput>(EVENTS.agentOutput, (e) => cb(e.payload)),
+  /** Command window only (2.10a): Claude's text so far while it's written; the run's next entry replaces it. */
+  agentTextDraft: (cb: (payload: AgentTextDraft) => void): Promise<UnlistenFn> =>
+    listen<AgentTextDraft>(EVENTS.agentTextDraft, (e) => cb(e.payload)),
   /** Command window only: which run to show. */
   commandFocusRun: (cb: (runId: string) => void): Promise<UnlistenFn> =>
     listen<string>(EVENTS.commandFocusRun, (e) => cb(e.payload)),
@@ -187,6 +206,14 @@ export const on = {
   /** Every 2 s while the panel is open and `processes.enabled` is on. */
   processesHeavy: (cb: (payload: HeavyProcesses) => void): Promise<UnlistenFn> =>
     listen<HeavyProcesses>(EVENTS.processesHeavy, (e) => cb(e.payload)),
+  /** Command window only (2.10b.3): files dragged over it, from Tauri's drag-drop event (paths only). */
+  filesDrag: (cb: (drag: FilesDrag) => void): Promise<UnlistenFn> =>
+    getCurrentWebview().onDragDropEvent((e) => {
+      const p = e.payload;
+      if (p.type === "drop") cb({ type: "drop", paths: p.paths });
+      else if (p.type === "leave") cb({ type: "leave" });
+      else cb({ type: "over" });
+    }),
 };
 
 /** Unsubscribes listeners registered with `on.*` (safe to call before they resolve). */

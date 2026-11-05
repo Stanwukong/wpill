@@ -15,6 +15,8 @@ pub mod events {
     pub const AGENT_RUNS: &str = "agent:runs";
     /// Sent to the `command` window only.
     pub const AGENT_OUTPUT: &str = "agent:output";
+    /// Claude's text as it's written (2.10a), command window only; the next `agent:output` entry replaces it.
+    pub const AGENT_TEXT_DRAFT: &str = "agent:textDraft";
     /// Sent to the `command` window only: which run to select when it opens.
     pub const COMMAND_FOCUS_RUN: &str = "command:focus-run";
     pub const ROUTINES_CHANGED: &str = "routines:changed";
@@ -609,6 +611,8 @@ pub struct AgentRun {
     pub updated_at_ms: i64,
     /// The routine that started it (2.7e), if any.
     pub routine: Option<AgentRunRoutine>,
+    /// Whether images go to the agent as images (2.10b.2); `None` until an ACP agent has said. Files always go.
+    pub accepts_images: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -759,6 +763,35 @@ pub struct RoutinesPayload {
     pub paused: bool,
 }
 
+/// Whether an attachment goes to Claude as an image or is passed as a file (2.10b).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AttachmentKind {
+    Image,
+    File,
+}
+
+/// An attachment as the transcript and the audit show it: never its content or where it came from.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAttachment {
+    pub name: String,
+    pub kind: AttachmentKind,
+    /// The original file's size.
+    pub bytes: u64,
+}
+
+/// A file picked for a message before it's sent (2.10b.3): dropped, pasted or copied in Explorer. Only its path
+/// crosses IPC, never its bytes.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentPick {
+    pub path: String,
+    pub name: String,
+    pub kind: AttachmentKind,
+    pub bytes: u64,
+}
+
 /// One transcript entry: what the command window shows for a run.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -771,9 +804,11 @@ pub struct AgentEntry {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum AgentEvent {
-    /// A prompt or follow-up you sent.
+    /// A prompt or follow-up you sent, and what you attached to it (2.10b: names, kinds and sizes only).
     User {
         text: String,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<AgentAttachment>,
     },
     /// Claude's text.
     Text {
@@ -783,6 +818,9 @@ pub enum AgentEvent {
         id: String,
         name: String,
         label: String,
+        /// An edit's diff, as the approval card shows it (2.10a; built from the input, no file read).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        preview: Option<ApprovalPreview>,
     },
     ToolResult {
         id: String,
@@ -806,6 +844,8 @@ pub enum AgentEvent {
         reason: AgentEndReason,
         turns: u32,
         cost_usd: Option<f64>,
+        /// From the message that started this stretch of work to its end, as Cay timed it (2.10a).
+        duration_ms: Option<i64>,
     },
     Error {
         message: String,
@@ -813,6 +853,14 @@ pub enum AgentEvent {
 }
 
 /// `agent:output`.
+/// `agent:textDraft` (2.10a): the whole draft so far, at most 10 times a second.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentTextDraft {
+    pub run_id: String,
+    pub text: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentOutputPayload {

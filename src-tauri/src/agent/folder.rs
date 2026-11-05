@@ -6,8 +6,8 @@ use windows::Win32::Foundation::HWND;
 use windows::Win32::Storage::FileSystem::GetLongPathNameW;
 use windows::Win32::System::Com::{CoCreateInstance, CoTaskMemFree, CLSCTX_INPROC_SERVER};
 use windows::Win32::UI::Shell::{
-    FileOpenDialog, IFileOpenDialog, FOS_FORCEFILESYSTEM, FOS_PATHMUSTEXIST, FOS_PICKFOLDERS,
-    SIGDN_FILESYSPATH,
+    FileOpenDialog, IFileOpenDialog, IShellItem, FOS_ALLOWMULTISELECT, FOS_FILEMUSTEXIST,
+    FOS_FORCEFILESYSTEM, FOS_PATHMUSTEXIST, FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
 };
 
 /// The chosen folder, or `None` if the dialog was cancelled.
@@ -23,6 +23,37 @@ pub fn pick(owner: HWND) -> Result<Option<String>> {
             return Ok(None);
         }
         let item = dialog.GetResult()?;
+        file_path(&item)
+    }
+}
+
+/// The Attach button (2.10b.4): files chosen in the shell's picker, none if it was cancelled.
+pub fn pick_files(owner: HWND) -> Result<Vec<String>> {
+    // SAFETY: as in `pick`; every item is released on drop.
+    unsafe {
+        let dialog: IFileOpenDialog =
+            CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER)?;
+        let options = dialog.GetOptions()?;
+        dialog
+            .SetOptions(options | FOS_ALLOWMULTISELECT | FOS_FILEMUSTEXIST | FOS_FORCEFILESYSTEM)?;
+        if dialog.Show(Some(owner)).is_err() {
+            return Ok(Vec::new());
+        }
+        let items = dialog.GetResults()?;
+        let mut paths = Vec::new();
+        for i in 0..items.GetCount()? {
+            if let Some(path) = file_path(&items.GetItemAt(i)?)? {
+                paths.push(path);
+            }
+        }
+        Ok(paths)
+    }
+}
+
+/// A shell item's file-system path.
+fn file_path(item: &IShellItem) -> Result<Option<String>> {
+    // SAFETY: the returned string is freed with CoTaskMemFree.
+    unsafe {
         let path = item.GetDisplayName(SIGDN_FILESYSPATH)?;
         let text = path.to_string().ok();
         CoTaskMemFree(Some(path.0 as *const _));
