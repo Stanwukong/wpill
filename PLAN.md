@@ -48,8 +48,9 @@ author's other machine. **2.9c (settings, the agent and model picker, README) is
 checks passed.**
 **Phase 3 (memory-heavy apps) is complete (2026-11-05): design agreed (D49), 3a (the read-only list) and 3b (End Task,
 D50) signed off, all manual checks passed (3b on the author's other machine).** Built on branch
-`self/phase-3-memory-heavy` (PR #2). Next, per the roadmap: [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
-[prompts/phase-5-utilities.md](prompts/phase-5-utilities.md)), then the spikes, and last 4a-5 (release). See
+`self/phase-3-memory-heavy` (PR #2). Next, per the roadmap: [Phase 2.10, agent window UI](#phase-210-agent-window-ui-proposed-2026-11-05-d51-design-to-be-agreed)
+(added 2026-11-05, D51), then [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
+[prompts/phase-5-utilities.md](prompts/phase-5-utilities.md)), the spikes, and last 4a-5 (release). See
 [Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
@@ -518,9 +519,10 @@ meaning; new phases slot in between.
 | 8 | **6 Google Calendar and Gmail** (complete 2026-11-03; prompt [phase-6-google.md](prompts/phase-6-google.md)) | Upcoming events and tasks in the pill and panel; Gmail and Calendar tools for agent runs | Proposed 2026-11-01 (D35). Replaces the "calendar peek" spike. |
 | 9 | **2.9 Other agents and open models** (complete 2026-11-04, D47/D48; Goose deferred; prompt [phase-2.9-other-agents.md](prompts/phase-2.9-other-agents.md)) | Codex / OpenCode sessions in the island; agent runs through ACP (Goose + Ollama first) beside the native Claude Code path | Proposed 2026-11-01 after a competitor survey. Every rival watches several CLIs; none runs agents. Keeps Cay's lead (runs, routines, desktop tools) while closing the coverage gap. |
 | 10 | **3 Memory-heavy apps** (complete 2026-11-05, D49/D50; prompt [phase-3-memory-heavy.md](prompts/phase-3-memory-heavy.md)) | As specified, behind a settings toggle | Power-user tool with the riskiest action (End Task); opt-in only. |
-| 11 | **5 Utilities** (next; prompt [phase-5-utilities.md](prompts/phase-5-utilities.md)) | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
-| 12 | **Spikes** | Notifications mirror, live window previews (calendar peek moved to Phase 6) | Uncertain feasibility or needs sign-in; prototype before committing. |
-| 13 | **4a-5 Release v0.2** (deferred here 2026-11-02) | Full manual pass of every phase, the dock check, publish the installer with its SHA-256 | The author's call: release once every phase is in. |
+| 11 | **2.10 Agent window UI** (next; proposed 2026-11-05, D51) | Readable, structured transcript (Markdown, turns, folded tool calls), image and file attachments, fullscreen, layout and composer polish | The author's request: the command window is where runs are read and steered, and it reads like a raw log today. |
+| 12 | **5 Utilities** (prompt [phase-5-utilities.md](prompts/phase-5-utilities.md)) | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
+| 13 | **Spikes** | Notifications mirror, live window previews (calendar peek moved to Phase 6) | Uncertain feasibility or needs sign-in; prototype before committing. |
+| 14 | **4a-5 Release v0.2** (deferred here 2026-11-02) | Full manual pass of every phase, the dock check, publish the installer with its SHA-256 | The author's call: release once every phase is in. |
 
 ### Phase 1.5: shell basics (complete 2026-10-30)
 - [x] Tray icon (`tauri` `tray-icon` feature, `src-tauri/src/tray.rs`). The menu (left or right click) shows a
@@ -1756,6 +1758,70 @@ first)
 Performance Information" (working set vs private bytes); phnt `ntexapi.h` (field names behind the reserved bytes);
 `windows` 0.62.2 bindings (checked locally); `sysinfo` docs (`Process::memory` = working set on Windows);
 the 3.5 ms measurement above (PowerShell + C# P/Invoke, 2026-11-04).
+
+### Phase 2.10: agent window UI (proposed 2026-11-05, D51; design to be agreed)
+The command window is where agent runs are read and steered, and it reads like a log: Claude's replies are plain
+paragraphs (raw `**`, `#`, backticks and tables show as typed), tool calls and their results are a flat list of lines,
+and there is no way to give a run an image or a file. This phase makes it a structured, readable conversation, adds
+attachments, and lets the window go fullscreen. The island's Agents section is unchanged.
+
+**Where things stand (read before designing)**
+- `src/command/RunView.tsx` renders each `AgentEntry` as a `<p>`: `user`, `text` (Claude's reply), `tool` (one label
+  line), `toolResult`, `approval` / `decision` notes, `result` (status, turns, cost) and `error`. Text arrives one whole
+  message at a time (runs don't pass `--include-partial-messages`).
+- `src/command/Markdown.tsx` (2.8c) already renders Markdown safely as React elements (never HTML strings): headings,
+  paragraphs, nested lists, fenced code, quotes, rules, inline code, bold, italic. Links show only their text, tables
+  stay as monospace lines. Only plans use it.
+- Prompts reach Claude Code as text in a stream-json user message (`agent/run.rs`, `--input-format stream-json`); ACP
+  runs (OpenCode, Codex) send text prompts (`agent/acp.rs`) and don't check the agent's prompt capabilities.
+- The window (`window/command.rs`) is undecorated and resizable (min 520x380 times the text scale), centred at 12 %
+  from the top; `CommandApp.tsx` draws its own title bar (`cmd__bar`, drag region) with the hotkey hint and a Close
+  button (Esc closes).
+
+**Stages and tasks**
+- **2.10a: a readable, structured transcript**
+  - [ ] Claude's replies (and your own messages) rendered with `Markdown.tsx`, extended with tables, clickable links
+        (opened by Rust, https only, like calendar links) and code blocks with a language label and a Copy button.
+        Still no HTML strings and no `dangerouslySetInnerHTML`; syntax highlighting only if a small, well-kept
+        dependency earns it (a decision, recorded in CASESTUDY).
+  - [ ] Turns: your message, then Claude's turn as one block. Consecutive tool calls fold into one row ("Read 3 files,
+        ran 2 commands") that expands; each call shows its result collapsed by default (errors open), edits show the
+        same diff as the approval card (`PreviewBlock`), long results are cut with "Show all".
+  - [ ] A clear end of run: status, turns, cost and duration as a small summary card instead of a log line; approvals
+        and answers shown inline where they happened.
+  - [ ] Copy a message; copy the whole run as Markdown.
+  - [ ] Scrolling: stay pinned to the newest entry while at the bottom, a "Jump to latest" button when scrolled up.
+  - [ ] Research: streaming Claude's text as it's written (`--include-partial-messages`; ACP's chunks already arrive
+        that way): cost on the pipe and the transcript store, and whether it reads better.
+- **2.10b: images and files**
+  - [ ] An Attach button in the new-task form and the follow-up box, plus paste (Ctrl+V of an image or copied files)
+        and drag-and-drop onto the window. Attachments show as chips (thumbnail or icon, name, size, remove) before
+        sending, and in the transcript after.
+  - [ ] Images go to Claude Code as image content blocks in the stream-json user message (PNG/JPEG/GIF/WebP, scaled
+        to at most 1568 px on the long edge like desktop looks, with a size and count cap). Other files are passed by
+        path: research whether to reference them where they are (and allow that folder for the run, `--add-dir`) or
+        copy them into the run's own folder under `%APPDATA%\...\agent\runs\<runId>\` (deleted with the run).
+  - [ ] ACP runs: only the kinds the agent advertises in `promptCapabilities` (image, embedded context); otherwise the
+        Attach button explains why it's off for that agent.
+  - [ ] The audit log records names, types and sizes of attachments, never their content. Routines: no attachments
+        in this phase.
+- **2.10c: fullscreen and window layout**
+  - [ ] A Fullscreen button beside Close in the title bar (its icon swaps to "Exit fullscreen"); double-clicking the
+        title bar and F11 toggle it too. Research and choose: fill the monitor's work area (taskbar stays) or true
+        fullscreen. Esc leaves fullscreen first, then closes, as now.
+  - [ ] With room to spare (fullscreen or a wide window): the run list as a sidebar beside the open run, and the
+        transcript at a comfortable reading width (~760 px), not stretched edge to edge.
+  - [ ] The window remembers its size, position and fullscreen state between opens (in Cay's settings), never opening
+        off-screen (D31's display rules).
+- **2.10d: other polish**
+  - [ ] Composer: grows with its text, Enter sends and Shift+Enter adds a line, shows the run's agent, model and mode,
+        and keeps an unsent draft per run.
+  - [ ] Run list: status at a glance, newest first grouped by Today / Earlier, a filter box.
+  - [ ] Keyboard: Ctrl+N new task, Ctrl+F filter runs, arrows through the run list; visible focus everywhere.
+  - [ ] Empty, loading and error states for each view; Cay's own look (D30, `--font-agent` for Claude's content, the
+        `--agent` amber only for "working"), through `motion-designer`, reduced motion respected.
+- Each stage ends with `pnpm typecheck`, cargo checks where Rust changed, headless renders reviewed and a manual check
+  list (real runs with `haiku` in a scratch folder; attachments only with files the test made itself).
 
 ### Phase 4b: settings
 A settings window (a normal, focusable window, separate from the island) for: activities on/off,

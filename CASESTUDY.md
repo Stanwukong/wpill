@@ -991,6 +991,15 @@ work `WM_CLOSE` was meant to protect.
 TaskDialog with an "End" button (needs Common Controls 6 in Cay's manifest; MessageBox matches Connect); always
 terminating after 5 s as the design said (rejected for the reason above).
 
+### D51: Phase 2.10, the agent window's UI, goes before utilities
+*What:* a new phase for the command window: Claude's replies rendered as Markdown and the transcript structured into
+turns with folded tool calls, image and file attachments (paste, drag-and-drop, an Attach button), a Fullscreen button
+beside Close, and layout, composer and run-list polish. It goes next in the roadmap, ahead of Phase 5 (utilities).
+*Why:* the author's request (2026-11-05). The command window is where runs are read and steered; today it shows raw
+Markdown and a flat log, and a run can't be given a screenshot or a file.
+*Alternatives:* folding it into Phase 5 (unrelated scope); a Markdown library in place of extending `Markdown.tsx`
+(still open: the current renderer never builds HTML strings, which any replacement must keep).
+
 ### C8: The agent pipe refused every bridge's hello
 *Symptom:* the first real agent run failed with "MCP tool mcp__topbar__approve not found"; TopBar's log said it had
 refused two connections "without a valid run token". *Diagnosis:* the bridge writes its hello as soon as it connects,
@@ -1149,6 +1158,7 @@ so tests and Connect must both say which folder they touch; and a hook only prov
 | 2026-11-04 | **Stage 3a signed off** by the author (all 6 manual checks passed). In the live log the first refresh took ~577 ms (the exe-path cache filling: one `OpenProcess` per process), every later one 14–60 ms for ~340 processes, and none while the panel was closed. 3b (End Task) next. |
 | 2026-11-04 | Stage 3b.1 built (D50): `processes/end.rs` and `end_process_group`, the confirm box in Rust, two checks by creation time, `WM_CLOSE` then `TerminateProcess` children first, `prompted` for an app asking to save. 290 Rust tests; a live test ended a `cmd` → `ping` tree it started. Built with `CARGO_INCREMENTAL=0` and `cargo test --lib` (8.4 GB free, C14). |
 | 2026-11-04 | Stage 3b.2 built (motion-designer): the × End control in a fixed slot, "Ending…", result lines in the figure's type, ended rows fading out; End state in `useHeavyProcesses` so it survives the panel collapsing during the confirm box. Headless renders reviewed; 3b manual check written. |
+| 2026-11-05 | Phase 2.10 (agent window UI) added to the plan ahead of Phase 5 at the author's request (D51): Markdown and structured turns, attachments, fullscreen, polish. Design to be agreed. |
 | 2026-11-05 | **Stage 3b signed off** by the author (manual check run on the other machine): **Phase 3 complete**. On the dev PC one End on WhatsApp ended all 8 processes after the 5 s wait (it hides to the tray instead of closing), and the row read "WhatsApp.Root" (its exe has no description): both in Known limitations. Phase 5 (utilities) kick-off prompt written. |
 | 2026-11-03 | Stage 2.9a, step 1: the rename (`claude/` → `sessions/`, session IPC names, `features/sessions/`, `--font-agent`, `data-agent`), no behaviour change; 230 Rust tests, clippy and typecheck clean. Codex updated to 0.166.0. |
 
