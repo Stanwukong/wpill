@@ -46,7 +46,7 @@ mod preview;
 mod routines;
 mod run;
 mod schedule;
-mod settings;
+pub mod settings;
 mod stream;
 mod tools;
 
