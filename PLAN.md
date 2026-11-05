@@ -50,7 +50,7 @@ checks passed.**
 D50) signed off, all manual checks passed (3b on the author's other machine).** Built on branch
 `self/phase-3-memory-heavy` (PR #2). Next, per the roadmap: [Phase 2.10, agent window UI](#phase-210-agent-window-ui-design-agreed-2026-11-05-d51-d52)
 (added 2026-11-05, D51; design agreed 2026-11-05, D52; built on branch `self/phase-2.10-agent-window`, PR #3).
-**Stage 2.10a (readable transcript) is built (2026-11-05); its manual check is pending.** 2.10b–d not started. After 2.10: [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
+**Stages 2.10a (readable transcript) and 2.10b (attachments) are built (2026-11-05); their manual checks are pending.** 2.10c–d not started. After 2.10: [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
 [prompts/phase-5-utilities.md](prompts/phase-5-utilities.md)), the spikes, and last 4a-5 (release). See
 [Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
@@ -465,6 +465,9 @@ names `cay-claude-…` and the hook marker.
 |---|---|---|---|
 | type | `AgentEvent` `tool` | `+ preview?: ApprovalPreview` | An edit's diff (`Edit`, `MultiEdit`, `Write`, a Codex patch), built from the input alone, ≤200 lines (`preview::for_transcript`). |
 | command | `agent_open_link` | `(url) → ()` | Opens a transcript link in the browser; https only (`agent/links.rs`), refused otherwise (`agentInvalid`). |
+| command | `agent_paste_attachments` | `() → AttachmentPick[]` | 2.10b.3. Ctrl+V: the clipboard's files (`CF_HDROP`), or its image saved as a file in `agent\pasted`; `[]` for text. |
+| command | `agent_describe_attachments` | `(paths) → AttachmentPick[]` | 2.10b.3. Dropped files' names, kinds and sizes; a folder or missing file is `agentInvalid`. |
+| command | `agent_pick_attachments` | `() → AttachmentPick[]` | 2.10b.4. The Attach button's multi-file picker (sync, main thread); `[]` if cancelled. |
 | event | `agent:textDraft` | `{ runId, text }` | Command window only. Claude's whole text so far while it's written (`--include-partial-messages`; ACP chunks), at most every 100 ms (`lifecycle::DRAFT_EVERY_MS`); never in the transcript or audit, no `agent:runs` for it; the run's next `agent:output` entry replaces it. |
 | type | `AgentEvent` `result` | `+ durationMs: number \| null` | From the first message of the stretch that ended (Cay's own clock, every agent). |
 
@@ -1919,13 +1922,24 @@ run's own attachments folder. The tasks below are the work list; the stage bulle
         8. An OpenCode or Codex run (ACP) streams too and shows the same turns.
         9. The island is unchanged (no `agent:runs` flood while text streams: the panel's Agents row doesn't flicker).
 - **2.10b: attachments**
-  - [ ] 2.10b.1 Rust: an `attachments` module (pure: kinds, caps, prompt lines, content blocks; tested), copy and
+  - [x] 2.10b.1 (3795ff3) Rust: an `attachments` module (pure: kinds, caps, prompt lines, content blocks; tested), copy and
         scale, `--add-dir` at spawn, Claude Code's user line as a content array, the audit (names, types, sizes).
-  - [ ] 2.10b.2 ACP: read `promptCapabilities`, send `image` / `resource_link` blocks, report what an agent accepts to
+  - [x] 2.10b.2 (0da7c8d) ACP: read `promptCapabilities`, send `image` / `resource_link` blocks, report what an agent accepts to
         React; tests on recorded `initialize` replies.
-  - [ ] 2.10b.3 Clipboard and drag-and-drop commands (paths, never bytes over IPC).
-  - [ ] 2.10b.4 UI: Attach button, chips, paste and drop in the new-task form and follow-up box, chips in the
+  - [x] 2.10b.3 (fc7a749) Clipboard and drag-and-drop commands (paths, never bytes over IPC). `agent/clipboard.rs`:
+        `CF_HDROP` → paths; a `PNG` or `CF_DIBV5`/`CF_DIB` image → a file in `agent\pasted` (pruned after a day);
+        dropped paths described. The Attach button's multi-file picker is `folder::pick_files` (09dc6e8).
+  - [x] 2.10b.4 (09dc6e8) UI: Attach button, chips, paste and drop in the new-task form and follow-up box, chips in the
         transcript, the "off for this agent" note (motion-designer).
+  - [ ] **2.10b manual check (Femi)**: from this branch, a scratch folder:
+        1. Attach (paperclip/button) opens the file picker; chips show icon, name, size and ×.
+        2. Ctrl+V of a Win+Shift+S screenshot adds an image chip; Explorer's Copy of files adds file chips; plain
+           text still pastes as text. Dragging files over the window shows "Drop to attach"; dropping adds chips.
+        3. A haiku run with an image and a text file: Claude describes the image and reads the file (from the run's
+           `attachments` copy, without asking for the folder); the transcript shows the chips; the audit has names and
+           sizes only.
+        4. Five images: the cap error shows and the chips stay. A follow-up with attachments after the run ended works.
+        5. An OpenCode or Codex run with an image and a file (images as images; files as links).
 - **2.10c: window**
   - [ ] 2.10c.1 Fullscreen button + F11 + double-click (per choice 5); Esc leaves it first.
   - [ ] 2.10c.2 Remember size, position and state in `settings.json` (`agent.window`); restore only on a current

@@ -59,3 +59,24 @@
 - For Femi: run the 2.10a manual check in PLAN.md (stop the dev Cay on main, then `pnpm tauri dev` in
   `..\wpill-phase210`, or check out the branch). Gotcha seen twice today: Python heredocs in Git Bash turn `\a` and
   `\n` inside Rust/TS string literals into control characters; write such code with the Write/Edit tools.
+
+## 2026-11-05 (afternoon) | Phase 2.10: agent window UI, stage 2.10b
+- Status: PARTIAL (2.10a and 2.10b built; their manual checks are Femi's; 2.10c–d not started). Draft PR
+  https://github.com/Stanwukong/wpill/pull/3.
+- Found: 2.10b.1 committed locally (3795ff3, unpushed) and 2.10b.2 half-done, uncommitted, in `..\wpill-phase210`: the
+  author's VS Code session had hit its 5-hour limit at 13:18. Femi chose "Routine finishes 2.10b" (asked in Cay).
+- Tasks: ✅ 2.10b.1 3795ff3 · ✅ 2.10b.2 0da7c8d (wired ACP start/follow-up, `acceptsImages`) · ✅ 2.10b.3 fc7a749 ·
+  ✅ 2.10b.4 09dc6e8 (motion-designer; file picker command added) · ⏳ 2.10b manual check (Femi).
+- Checks: cargo fmt --check, clippy --lib --tests -D warnings, cargo test --lib (317 passed, 2 ignored), pnpm
+  typecheck, pnpm test (16), pnpm build: all clean. Headless Edge renders of the chips/overlay (C:	mpttach-render).
+  Not run live: the live dev Cay hosts this run, so the worktree build wasn't launched; the clipboard was never
+  written (it's Femi's).
+- Desktop build: the dev Cay from the main checkout (on main, 53fc680) was rebuilt 14:11 today; main's last code
+  commit is b894f09, so it matches main. Nothing rebuilt.
+- How: shell + motion-designer, not the VS Code extension (Femi was at the machine and their VS Code session holds
+  this branch's history).
+- Next run: if Femi signed off 2.10a/2.10b, start 2.10c.1 (maximize button, F11, double-click) in `..\wpill-phase210`.
+  If the checks found problems, fix those first.
+- For Femi: run the 2.10a and 2.10b manual checks in PLAN.md. Live unknowns: whether WebView2 reports "Files" in
+  `clipboardData.types` for a Win+Shift+S paste, and whether OpenCode/Codex read a `resource_link` outside the
+  project folder without asking.

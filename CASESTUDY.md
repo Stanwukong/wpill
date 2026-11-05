@@ -1011,6 +1011,16 @@ author (2026-11-05), including `--add-dir`, which widens what a run can read.
 *Alternatives:* `react-markdown` + `remark-gfm` (~40 kB, many packages); `prism-react-renderer`; referencing files in
 place with `--add-dir` per parent folder; `set_fullscreen`.
 
+### D53: Attachments cross IPC as paths; ACP files go as links to copies (2.10b)
+*What:* the command window never holds attachment bytes: the picker, Explorer's Copy and drops give paths, and a
+copied image is saved to a file by Rust (`agent\pasted`, pruned after a day) before its path goes to React. At send,
+Rust checks the caps and copies or scales (`attach::prepare`). ACP agents get every file as a `resource_link` to its
+copy (every agent must take those) and images as `image` blocks only when `initialize` says
+`promptCapabilities.image`; otherwise the image's copy goes as a link too. `AgentRun.acceptsImages` tells React.
+*Why:* the design's "paths, never bytes over IPC"; one copy path for every agent; no agent is refused attachments.
+*Alternatives:* reading pasted images in JS (`clipboardData.files`) and sending bytes; turning attachments off for
+agents without image support.
+
 ### C8: The agent pipe refused every bridge's hello
 *Symptom:* the first real agent run failed with "MCP tool mcp__topbar__approve not found"; TopBar's log said it had
 refused two connections "without a valid run token". *Diagnosis:* the bridge writes its hello as soon as it connects,
@@ -1169,6 +1179,7 @@ so tests and Connect must both say which folder they touch; and a hook only prov
 | 2026-11-04 | **Stage 3a signed off** by the author (all 6 manual checks passed). In the live log the first refresh took ~577 ms (the exe-path cache filling: one `OpenProcess` per process), every later one 14–60 ms for ~340 processes, and none while the panel was closed. 3b (End Task) next. |
 | 2026-11-04 | Stage 3b.1 built (D50): `processes/end.rs` and `end_process_group`, the confirm box in Rust, two checks by creation time, `WM_CLOSE` then `TerminateProcess` children first, `prompted` for an app asking to save. 290 Rust tests; a live test ended a `cmd` → `ping` tree it started. Built with `CARGO_INCREMENTAL=0` and `cargo test --lib` (8.4 GB free, C14). |
 | 2026-11-04 | Stage 3b.2 built (motion-designer): the × End control in a fixed slot, "Ending…", result lines in the figure's type, ended rows fading out; End state in `useHeavyProcesses` so it survives the panel collapsing during the confirm box. Headless renders reviewed; 3b manual check written. |
+| 2026-11-05 | Stage 2.10b built (attachments, D53): Rust copies and scales, `--add-dir` for Claude Code, ACP `image`/`resource_link` blocks by `promptCapabilities`, clipboard (`CF_HDROP`, PNG, DIB) and drop commands, the Attach picker, chips, paste and drop in both composers. 317 Rust and 16 TS tests. Manual check pending. The routine resumed it after the author's VS Code session hit its usage limit mid-2.10b.2. |
 | 2026-11-05 | Phase 2.10 design agreed (D52, every recommendation). Stage 2.10a built by the daily routine: Markdown tables/links/strike/code (own parser, now pure and tested with `node --test`, no dependency), https links opened by Rust, the transcript as turns with folded tool groups and diffs, a summary card with duration, copy message/run, Jump to latest, and Claude's text streamed as drafts (`--include-partial-messages`, throttled to 10 Hz in `lifecycle.rs`, no `agent:runs` per delta). 296 Rust and 13 TS tests. Manual check pending. |
 | 2026-11-05 | Phase 2.10 design drafted by the daily routine (no code): findings on the transcript's gaps (tool input, 2,000-char results, no duration), Claude Code's image blocks in stream-json, ACP's baseline `resource_link`; six choices for the author (renderer, highlighting, streaming, files and `--add-dir`, maximize vs fullscreen, caps). |
 | 2026-11-05 | Phase 2.10 (agent window UI) added to the plan ahead of Phase 5 at the author's request (D51): Markdown and structured turns, attachments, fullscreen, polish. Design to be agreed. |
