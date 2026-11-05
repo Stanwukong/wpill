@@ -101,6 +101,8 @@ export const commands = {
   agentRemove: (runId: string) => invoke<void>("agent_remove", { runId }),
   agentRuns: () => invoke<AgentRuns>("agent_runs"),
   agentTranscript: (runId: string) => invoke<AgentEntry[]>("agent_transcript", { runId }),
+  /** Opens a transcript link in the browser; Rust refuses anything but https (2.10a). */
+  agentOpenLink: (url: string) => invoke<void>("agent_open_link", { url }),
   agentDecide: (requestId: number, decision: "allow" | "deny", remember: "once" | "run") =>
     invoke<void>("agent_decide", { requestId, decision, remember }),
   /** A waiting approval's whole diff or command (2.8b); `null` once answered or for tools without one. */

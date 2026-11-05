@@ -463,6 +463,7 @@ names `cay-claude-…` and the hook marker.
 | Kind | Name | Payload / signature | Notes |
 |---|---|---|---|
 | type | `AgentEvent` `tool` | `+ preview?: ApprovalPreview` | An edit's diff (`Edit`, `MultiEdit`, `Write`, a Codex patch), built from the input alone, ≤200 lines (`preview::for_transcript`). |
+| command | `agent_open_link` | `(url) → ()` | Opens a transcript link in the browser; https only (`agent/links.rs`), refused otherwise (`agentInvalid`). |
 | type | `AgentEvent` `result` | `+ durationMs: number \| null` | From the first message of the stretch that ended (Cay's own clock, every agent). |
 
 ### Reserved for later phases (names fixed now so they slot in)
@@ -1895,7 +1896,7 @@ run's own attachments folder. The tasks below are the work list; the stage bulle
 - **2.10a: transcript**
   - [x] 2.10a.1 (0a6b91a) Rust: `Tool` entries carry an optional preview (from the input, no file read); `Result` carries
         `durationMs` (Rust's own start-to-result time, the same for every agent); tests in `stream.rs`/`lifecycle.rs`.
-  - [ ] 2.10a.2 `Markdown.tsx`: tables, links (new `agent_open_link`, https only, checked in Rust), strikethrough,
+  - [x] 2.10a.2 `Markdown.tsx`: tables, links (new `agent_open_link`, https only, checked in Rust), strikethrough,
         fence language label + Copy; unit tests for the parser (pure functions moved out of the component).
   - [ ] 2.10a.3 `RunView`: turns, folded tool groups, results collapsed (errors open), `PreviewBlock` for edits, the
         summary card, inline approvals (motion-designer).

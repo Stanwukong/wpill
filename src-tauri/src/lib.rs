@@ -108,6 +108,7 @@ pub fn run() {
             agent::agent_remove,
             agent::agent_runs,
             agent::agent_transcript,
+            agent::agent_open_link,
             agent::agent_decide,
             agent::agent_options,
             agent::agent_pick_folder,

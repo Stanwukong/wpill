@@ -34,6 +34,7 @@ mod installs;
 pub mod interact;
 mod job;
 mod lifecycle;
+mod links;
 mod mcp;
 mod mode;
 mod patch;
@@ -2505,6 +2506,13 @@ pub fn agent_remove(app: AppHandle, agents: State<'_, Agents>, run_id: String) -
 #[tauri::command]
 pub fn agent_runs(agents: State<'_, Agents>) -> AgentRunsPayload {
     agents.payload()
+}
+
+/// Opens a link from a transcript in the browser (2.10a): https only (`links::checked`).
+#[tauri::command]
+pub fn agent_open_link(url: String) -> AppResult<()> {
+    let url = links::checked(&url).map_err(AppError::AgentInvalid)?;
+    crate::desktop::open_link(&url).map_err(|e| AppError::AgentInvalid(links::why(e)))
 }
 
 #[tauri::command]

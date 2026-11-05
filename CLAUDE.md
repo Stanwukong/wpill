@@ -412,3 +412,7 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
 - **Building while Cay runs from `pnpm tauri dev`:** if this session runs inside that Cay (an agent run), editing Rust in
   the main checkout restarts Cay and ends the run. Work in a git worktree beside it (`git worktree add ../wpill-<x>
   <branch>`, `pnpm install` there; its own `target`, ~5 min cold for `cargo test --lib` with `CARGO_INCREMENTAL=0`).
+- **Frontend unit tests (2.10a):** `pnpm test` runs `node --test` on `src/**/*.test.ts` (Node 24 strips the types; no
+  test dependency). Tested modules are pure `.ts` files that import each other with explicit `.ts` extensions
+  (`allowImportingTsExtensions`) and only `import type` from elsewhere; `*.test.ts` is excluded from `tsc` (no
+  `@types/node`). Examples: `src/command/markdownParse.ts`, `transcriptTurns.ts`, `runMarkdown.ts`.

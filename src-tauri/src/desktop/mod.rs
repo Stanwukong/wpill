@@ -414,3 +414,8 @@ fn image(bitmap: &capture::Bitmap, area: Rect) -> Result<Image, LookError> {
         origin: area,
     })
 }
+
+/// Opens an already-checked https link in the browser (the command window's transcript links, 2.10a).
+pub fn open_link(url: &str) -> Result<(), plan::ActError> {
+    launch::open_url(url)
+}
