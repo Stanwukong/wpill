@@ -80,3 +80,17 @@
 - For Femi: run the 2.10a and 2.10b manual checks in PLAN.md. Live unknowns: whether WebView2 reports "Files" in
   `clipboardData.types` for a Win+Shift+S paste, and whether OpenCode/Codex read a `resource_link` outside the
   project folder without asking.
+
+## 2026-11-05 (late) | Phase 5: utilities (research and design only)
+- Status: BLOCKED on design approval. PR #4 (2.10c–d) has no review comments and waits on Femi's manual checks;
+  Phase 5 doesn't depend on it, and its kick-off prompt asks for research and a design first. Drafted in PLAN.md
+  ("Phase 5 design: DRAFT – needs Femi's OK"). No code. Branch `self/phase-5-utilities` (worktree `..\wpill-phase5`).
+- Tasks: none run (stages 5a timer, 5b drop shelf, 5c clipboard proposed).
+- Desktop build: dev Cay runs `target\debug\cay.exe` built 15:47, after main's last commit 101b1cc (15:36): matches
+  main. Nothing rebuilt.
+- Disk: only ~3 GB free on C: (`target\debug` is 11 GB). No build was needed today; clean before the next Rust stage.
+- How: shell + web research, not the VS Code extension (docs-only change).
+- Next run: if Femi answered the five choices, drop the DRAFT mark, turn 5a into tasks and start 5a.1 (`timer/logic.rs`)
+  in `..\wpill-phase5`. If not, wait; don't redo the research. If PR #4 gets comments, those come first.
+- For Femi: pick choices 1–5 in PLAN.md's Phase 5 design; free disk space (e.g. delete `target\debug\incremental`
+  with the dev Cay stopped); run the 2.10c/2.10d manual checks for PR #4.
