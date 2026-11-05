@@ -8,10 +8,11 @@ import { ModeChip } from "../features/agent/ModeChip";
 import { decide, isLive, stopRun } from "../features/agent/useAgentRuns";
 import { AgentTag } from "../features/sessions/AgentTag";
 import { StepLabel } from "../features/sessions/StepLabel";
+import { WorkingIndicator } from "../features/sessions/WorkingGlyphs";
 import { PlanView, QuestionForm } from "./InteractionViews";
 import { Markdown } from "./Markdown";
 import type { RoutineSeed } from "./routineLabels";
-import { decisionText, resultParts } from "./runMarkdown";
+import { decisionText, resultParts, toMarkdown } from "./runMarkdown";
 import { turns, type Call, type Turn, type TurnItem } from "./transcriptTurns";
 import { useWholePreview } from "./useSessionAsks";
 import type { Transcript } from "./useTranscripts";
@@ -38,17 +39,39 @@ export function RunView({
   onSaveAsRoutine: (seed: RoutineSeed) => void;
 }) {
   const entries = transcript?.entries ?? [];
+  const draft = transcript?.draft ?? null;
   const live = run ? isLive(run.status) : true;
   const log = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
+  /** A "Jump to latest" scroll is under way: its in-between positions still count as pinned. */
+  const jumping = useRef(false);
+  /** New output arrived while the reader was scrolled up. */
+  const [behind, setBehind] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  // Follow new output while the reader is at the bottom; leave them alone once they scroll up.
+  // Follow new output (and the draft as it grows) while the reader is at the bottom; once they scroll up, leave them
+  // alone and offer "Jump to latest".
   useLayoutEffect(() => {
     const el = log.current;
-    if (el && atBottom.current) el.scrollTop = el.scrollHeight;
-  }, [entries, run?.pending.length]);
+    if (!el) return;
+    if (atBottom.current) el.scrollTop = el.scrollHeight;
+    else setBehind(true);
+  }, [entries, draft, run?.pending.length]);
+
+  const jump = () => {
+    const el = log.current;
+    if (!el) return;
+    atBottom.current = true;
+    jumping.current = true;
+    setBehind(false);
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollTo({ top: el.scrollHeight, behavior: still ? "auto" : "smooth" });
+  };
 
   const shaped = useMemo(() => turns(entries), [entries]);
+  // A draft with no turn yet (a cut transcript) still needs somewhere to show.
+  const shown = draft != null && shaped.length === 0 ? [{ user: null, items: [] }] : shaped;
+  const title = run ? (run.routine?.name ?? run.project) : undefined;
 
   return (
     <div className="run">
@@ -71,6 +94,17 @@ export function RunView({
           )
         )}
         {run && <ModeChip run={run} />}
+        {entries.length > 0 && (
+          <button
+            className="cmd-btn cmd-btn--quiet run__stop"
+            title="Copy the whole run as Markdown"
+            onClick={() => navigator.clipboard.writeText(toMarkdown(entries, title)).then(() => setCopied(true), () => {})}
+            onPointerLeave={() => setCopied(false)}
+            onBlur={() => setCopied(false)}
+          >
+            {copied ? "Copied" : "Copy"}
+          </button>
+        )}
         {run && !live && !run.routine && (
           <button
             className="cmd-btn cmd-btn--quiet run__stop"
@@ -96,19 +130,39 @@ export function RunView({
         )}
       </div>
 
-      <div
-        ref={log}
-        className="run__log"
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_PX;
-        }}
-      >
-        {transcript?.error && <p className="entry entry--error">{transcript.error}</p>}
-        {shaped.map((turn, i) => (
-          <TurnView key={turn.user ? `turn:${turn.user.atMs}:${i}` : `turn:start`} turn={turn} />
-        ))}
-        {transcript?.loading && entries.length === 0 && <p className="run__empty">Loading…</p>}
+      <div className="run__logwrap">
+        <div
+          ref={log}
+          className="run__log"
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_PX;
+            if (bottom) jumping.current = false;
+            atBottom.current = bottom || jumping.current;
+            if (bottom) setBehind(false);
+          }}
+          onWheel={() => {
+            jumping.current = false;
+          }}
+        >
+          {transcript?.error && <p className="entry entry--error">{transcript.error}</p>}
+          {shown.map((turn, i) => (
+            <TurnView
+              key={turn.user ? `turn:${turn.user.atMs}:${i}` : `turn:start`}
+              turn={turn}
+              draft={i === shown.length - 1 ? draft : null}
+            />
+          ))}
+          {transcript?.loading && entries.length === 0 && <p className="run__empty">Loading…</p>}
+        </div>
+        {behind && (
+          <button type="button" className="run__jump" onClick={jump}>
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M8 3.5v9M4 8.5l4 4 4-4" />
+            </svg>
+            Jump to latest
+          </button>
+        )}
       </div>
 
       {run && run.pending.length > 0 && (
@@ -126,27 +180,41 @@ export function RunView({
   );
 }
 
-function TurnView({ turn }: { turn: Turn }) {
+function TurnView({ turn, draft }: { turn: Turn; draft: string | null }) {
   return (
     <section className="turn">
       {turn.user && (
         <div className="entry entry--user" aria-label="You">
+          <CopyMessage text={turn.user.text} />
           <Markdown source={turn.user.text} />
         </div>
       )}
-      {turn.items.length > 0 && (
+      {(turn.items.length > 0 || draft != null) && (
         <div className="turn__agent">
-          {turn.items.map((item, i) => (
-            <Item key={itemKey(item, i)} item={item} />
-          ))}
+          {/* One list, so the draft (keyed as its text will be) is replaced in place by the real entry: no fade, no jump. */}
+          {[
+            ...turn.items.map((item, i) =>
+              item.kind === "text" ? (
+                <TextItem key={textKey(i)} text={item.entry.text} />
+              ) : (
+                <Item key={itemKey(item, i)} item={item} />
+              ),
+            ),
+            draft != null && <TextItem key={textKey(turn.items.length)} text={draft} writing />,
+          ]}
         </div>
       )}
     </section>
   );
 }
 
+/** By position: items only ever append to a turn, and a draft becomes the text at the same index. */
+function textKey(i: number): string {
+  return `text:${i}`;
+}
+
 /** Stable across appends: an item's first entry never changes once it's in the transcript. */
-function itemKey(item: TurnItem, i: number): string {
+function itemKey(item: Exclude<TurnItem, { kind: "text" }>, i: number): string {
   if (item.kind === "tools") {
     const first = item.calls[0];
     return `tools:${first?.tool?.id ?? first?.result?.id ?? i}`;
@@ -154,14 +222,63 @@ function itemKey(item: TurnItem, i: number): string {
   return `${item.kind}:${item.entry.atMs}:${i}`;
 }
 
-function Item({ item }: { item: TurnItem }) {
+/** Claude's text, or its draft while it's written (`writing`: the working wave in the gutter instead of Copy). */
+function TextItem({ text, writing = false }: { text: string; writing?: boolean }) {
+  return (
+    <div className="entry entry--text" data-writing={writing || undefined}>
+      {writing ? (
+        <span className="entry__writing">
+          <WorkingIndicator small />
+        </span>
+      ) : (
+        <CopyMessage text={text} />
+      )}
+      <Markdown source={text} />
+    </div>
+  );
+}
+
+/**
+ * Copies a message's Markdown source. Shows on hover or focus of its message; "Copied" (a check) holds until the
+ * pointer or focus leaves, so no timer runs.
+ */
+function CopyMessage({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className="entry__copy"
+      data-copied={copied || undefined}
+      aria-label={copied ? "Copied" : "Copy message"}
+      title={copied ? "Copied" : "Copy message"}
+      onClick={() => navigator.clipboard.writeText(text).then(() => setCopied(true), () => {})}
+      onPointerLeave={() => setCopied(false)}
+      onBlur={() => setCopied(false)}
+    >
+      {copied ? <CheckGlyph /> : <CopyGlyph />}
+    </button>
+  );
+}
+
+function CopyGlyph() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinejoin="round" aria-hidden="true">
+      <rect x="5.5" y="5.5" width="8" height="8" rx="1.8" />
+      <path d="M10.5 3.2A1.8 1.8 0 0 0 8.8 2H4A2 2 0 0 0 2 4v4.8a1.8 1.8 0 0 0 1.2 1.7" />
+    </svg>
+  );
+}
+
+function CheckGlyph() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3.5 8.5l3 3 6-7" />
+    </svg>
+  );
+}
+
+function Item({ item }: { item: Exclude<TurnItem, { kind: "text" }> }) {
   switch (item.kind) {
-    case "text":
-      return (
-        <div className="entry entry--text">
-          <Markdown source={item.entry.text} />
-        </div>
-      );
     case "tools":
       return item.calls.length === 1 ? (
         <div className="entry entry--calls">
