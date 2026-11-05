@@ -28,3 +28,16 @@
   problems, fix those first.
 - For Femi: run the 3a manual check in PLAN.md (check out the branch, set `"processes": { "enabled": true }`). The
   worktree `..\wpill-phase3` can be removed with `git worktree remove ..\wpill-phase3` once you're done with it.
+
+## 2026-11-05 | Phase 2.10: agent window UI (research and design only)
+- Status: BLOCKED on design approval. Phase 3 is merged (PR #2); 2.10 is next and its design was "to be agreed", so
+  this run researched and drafted it in PLAN.md ("Phase 2.10 design: DRAFT – needs Femi's OK"). No code was run or
+  written. Branch `self/phase-2.10-agent-window`, draft PR (see below).
+- Tasks: none run (2.10a.1–2.10d proposed).
+- Desktop build: the running Cay is `pnpm tauri dev`; `target\debug\cay.exe` was built 2026-11-05 12:06, after
+  b894f09 (the last code commit on main; later commits are docs only), so it matches main. No installed release; nothing rebuilt.
+- Checks on main: `cargo test --lib` 290 passed (2 ignored), `pnpm typecheck` clean.
+- Next run: if Femi has answered the six (choose) items, drop the DRAFT mark, put the proposed tasks in place of the
+  stage bullets and start 2.10a.1 (Rust, in a worktree beside the live dev Cay). If not, wait; don't redo the research.
+- For Femi: pick choices 1–6 in PLAN.md's Phase 2.10 design. Choice 4 adds `--add-dir` to runs, which widens what a
+  run can read; it needs your explicit OK, since it sits next to the protected permission rules.
