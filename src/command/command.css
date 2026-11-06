@@ -19,11 +19,26 @@ textarea {
   color: inherit;
 }
 
+/*
+ * Keyboard focus (2.10d.3): one amber ring for everything you can tab to, only for keyboard focus (never on a
+ * click). `:where` keeps it at class weight, so the few controls that need a different offset (rows that fill the
+ * sidebar, the segmented control's inset) override it below. Text fields keep their own soft amber halo.
+ */
+.cmd :where(button, a, summary, [tabindex]):focus-visible {
+  outline: 2px solid rgba(var(--agent-rgb), 0.55);
+  outline-offset: 1px;
+}
+
 .cmd {
   height: 100%;
   display: flex;
   flex-direction: column;
   box-shadow: inset 0 0 0 1px var(--island-border);
+}
+
+/* Maximized (2.10c): the screen's edge is the window's edge, so the hairline goes. */
+.cmd[data-maximized] {
+  box-shadow: none;
 }
 
 /* Title bar: the whole strip drags the window (data-tauri-drag-region), except its buttons. */
@@ -70,7 +85,13 @@ textarea {
   color: rgba(255, 107, 107, 0.8);
 }
 
-.cmd__close {
+/* Fullscreen and Close: one group, closer together than the bar's gap. */
+.cmd__btns {
+  display: flex;
+  gap: 2px;
+}
+
+.cmd__btn {
   width: 32px;
   height: 28px;
   display: grid;
@@ -84,12 +105,12 @@ textarea {
     color 120ms ease;
 }
 
-.cmd__close svg {
+.cmd__btn svg {
   width: 14px;
   height: 14px;
 }
 
-.cmd__close:hover {
+.cmd__btn:hover {
   background: rgba(255, 255, 255, 0.08);
   color: var(--island-fg);
 }
@@ -117,6 +138,13 @@ textarea {
 @media (max-width: 560px) {
   .cmd__runs {
     width: 168px;
+  }
+}
+
+/* A wide or maximized window (2.10c): the list grows a little; the rest goes to the run's margins. */
+@media (min-width: 1200px) {
+  .cmd__runs {
+    width: 256px;
   }
 }
 
@@ -201,6 +229,115 @@ textarea {
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
+}
+
+/* Runs grouped by day (2.10d): the same quiet labels as the section heads, inside the scroll. */
+.cmd-runs__group {
+  display: flex;
+  flex-direction: column;
+}
+
+.cmd-runs__group > .cmd-routines__label {
+  padding: 8px 10px 4px;
+  font-size: 11px;
+}
+
+.cmd-runs__group:first-child > .cmd-routines__label {
+  padding-top: 2px;
+}
+
+.cmd-runs__grouplist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cmd-runs__none {
+  padding: 6px 10px;
+  font-size: 11px;
+  color: rgba(245, 245, 247, 0.4);
+}
+
+/* The runs' filter: a small well under the head, like the form's inputs; a clear button while it holds text. */
+.cmd-filter {
+  flex: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 0 0 6px;
+}
+
+.cmd-filter__glyph {
+  position: absolute;
+  left: 9px;
+  width: 12px;
+  height: 12px;
+  color: var(--island-muted);
+  pointer-events: none;
+}
+
+.cmd-filter__input {
+  width: 100%;
+  height: 26px;
+  padding: 0 26px 0 27px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px var(--island-border);
+  outline: none;
+  font-size: 11.5px;
+  transition:
+    box-shadow 120ms ease,
+    background-color 120ms ease;
+}
+
+.cmd-filter__input::placeholder {
+  color: rgba(245, 245, 247, 0.32);
+}
+
+.cmd-filter__input:hover,
+.cmd-filter__input:focus {
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.cmd-filter__input:focus {
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--agent-rgb), 0.4),
+    0 0 0 3px rgba(var(--agent-rgb), 0.1);
+}
+
+.cmd-filter__clear {
+  position: absolute;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--island-muted);
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.cmd-filter__clear svg {
+  width: 11px;
+  height: 11px;
+}
+
+.cmd-filter__clear:hover {
+  color: var(--island-fg);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cmd-filter__input,
+  .cmd-filter__clear {
+    transition: none;
+  }
 }
 
 .cmd-run {
@@ -566,12 +703,19 @@ textarea {
   color: var(--island-muted);
 }
 
+/*
+ * The main area is a size container so its views can keep a reading column (2.10c): `--col` is the margin either side
+ * of a 760 px column, 0 until the area is wider than that. Views take max(their own padding, --col), so a narrow window
+ * is unchanged and a wide one centres the content while scroll containers (and their scrollbars) stay full width.
+ */
 .cmd__main {
   position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  container-type: inline-size;
+  --col: max(0px, (100cqi - 760px) / 2);
 }
 
 .cmd__view {
@@ -705,7 +849,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 16px 22px;
+  padding: 16px max(22px, var(--col));
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -934,8 +1078,8 @@ textarea {
   flex: none;
   position: sticky;
   bottom: -16px;
-  margin: auto -22px -16px;
-  padding: 12px 22px 16px;
+  margin: auto calc(-1 * max(22px, var(--col))) -16px;
+  padding: 12px max(22px, var(--col)) 16px;
   background: #141416;
   display: flex;
   align-items: center;
@@ -1057,6 +1201,7 @@ textarea {
 }
 
 .seg__item:focus-visible {
+  outline: none;
   box-shadow: inset 0 0 0 1.5px rgba(var(--agent-rgb), 0.55);
 }
 
@@ -1288,7 +1433,7 @@ textarea {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 0 14px 0 22px;
+  padding: 0 max(14px, var(--col)) 0 max(22px, var(--col));
   line-height: 44px;
   border-bottom: 1px solid var(--island-border);
   white-space: nowrap;
@@ -1341,11 +1486,6 @@ textarea {
   align-self: center;
 }
 
-.mode-chip:focus-visible {
-  outline: 1px solid rgba(var(--agent-rgb), 0.7);
-  outline-offset: 1px;
-}
-
 .run__stop {
   align-self: center;
   height: 26px;
@@ -1368,7 +1508,7 @@ textarea {
   min-height: 0;
   overflow-y: auto;
   /* The left side is wider: Copy and the writing wave sit in it, beside Claude's text. */
-  padding: 16px 22px 8px 28px;
+  padding: 16px max(22px, var(--col)) 8px max(28px, var(--col));
   scrollbar-width: thin;
   user-select: text;
   cursor: text;
@@ -1377,8 +1517,60 @@ textarea {
   line-height: 1.55;
 }
 
-.run__empty {
+/*
+ * Empty, loading and error lines (2.10d.4): one quiet Segoe sentence where the view's content would start, an error in
+ * --danger, at most one quiet action. Loading fades in once after 300 ms (a fast load shows nothing); nothing loops.
+ */
+.cmd-state {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px max(22px, var(--col));
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 30px;
   color: var(--island-muted);
+}
+
+.run__log .cmd-state {
+  padding: 0;
+  margin: 0 0 10px;
+}
+
+.cmd-state__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmd-state[data-tone="error"] {
+  color: var(--danger);
+}
+
+.cmd-state[data-tone="loading"] {
+  animation: state-in 200ms ease-out 300ms both;
+}
+
+.cmd-state__action {
+  height: 26px;
+  color: var(--island-fg);
+}
+
+@keyframes state-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The sidebar's first-run hint, under New task. */
+.cmd-hint {
+  margin: 0;
+  padding: 6px 10px 0;
+  font-size: 11px;
+  color: rgba(245, 245, 247, 0.4);
 }
 
 /* Transcript entries. New ones fade in (160 ms); nothing else moves. */
@@ -1397,7 +1589,8 @@ textarea {
 
 @media (prefers-reduced-motion: reduce) {
   .entry,
-  .tools__calls {
+  .tools__calls,
+  .cmd-state[data-tone="loading"] {
     animation: none;
   }
 
@@ -1486,11 +1679,6 @@ textarea {
 
 .entry__copy[data-copied] {
   color: var(--island-fg);
-}
-
-.entry__copy:focus-visible {
-  outline: 1px solid rgba(255, 255, 255, 0.4);
-  outline-offset: 1px;
 }
 
 .entry__copy svg {
@@ -1597,13 +1785,6 @@ textarea {
 .tools__head:hover {
   color: var(--island-fg);
   background: rgba(255, 255, 255, 0.05);
-}
-
-.tools__head:focus-visible,
-.entry__toggle:focus-visible,
-.entry__more:focus-visible {
-  outline: 1px solid rgba(255, 255, 255, 0.4);
-  outline-offset: 1px;
 }
 
 .tools__head svg {
@@ -1820,7 +2001,7 @@ textarea {
   scrollbar-width: thin;
   list-style: none;
   margin: 0;
-  padding: 8px 18px 0;
+  padding: 8px max(18px, var(--col)) 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1963,7 +2144,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 16px 22px;
+  padding: 16px max(22px, var(--col));
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -2016,7 +2197,7 @@ textarea {
 
 .ask__gone--alone {
   margin: 0;
-  padding: 16px 22px;
+  padding: 16px max(22px, var(--col));
   text-align: left;
 }
 
@@ -2378,12 +2559,6 @@ textarea {
   background: rgba(255, 255, 255, 0.06);
 }
 
-.md__copy:focus-visible,
-.md__link:focus-visible {
-  outline: 2px solid rgba(var(--agent-rgb), 0.55);
-  outline-offset: 1px;
-}
-
 /* Links: the text's own color with a faint underline that firms up on hover (no accent in this window). */
 .md__link {
   border-radius: 2px;
@@ -2468,7 +2643,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px 18px 16px;
+  padding: 10px max(18px, var(--col)) 12px;
 }
 
 .composer__box {
@@ -2493,6 +2668,57 @@ textarea {
   line-height: 22px;
   user-select: text;
   scrollbar-width: thin;
+}
+
+/*
+ * Under the box (2.10d): whose run this is, its model and the mode the next message runs in, in the run's own
+ * Cascadia; the keys on the right in Segoe. Both quiet; the hint goes first when the window is narrow.
+ */
+.composer__meta {
+  container-type: inline-size;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 0 4px 0 12px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--agent-status);
+}
+
+.composer__run {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  font-family: var(--font-agent);
+  white-space: nowrap;
+}
+
+.composer__run > span {
+  flex: none;
+}
+
+.composer__run > span + span::before {
+  content: "\00a0·\00a0";
+}
+
+/* A long model name gives way; the mode, which changes, stays readable. */
+.composer__run > .composer__model {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.composer__hint {
+  flex: none;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+@container (max-width: 380px) {
+  .composer__hint {
+    display: none;
+  }
 }
 
 .composer__send {
@@ -2641,12 +2867,6 @@ textarea {
 .attach-btn--icon:hover {
   background: rgba(255, 255, 255, 0.08);
   color: var(--island-fg);
-}
-
-.attach-chip__remove:focus-visible,
-.attach-btn--icon:focus-visible {
-  outline: 2px solid rgba(var(--agent-rgb), 0.55);
-  outline-offset: 1px;
 }
 
 /* In the new-task footer, Attach sits on the left, away from Run. */

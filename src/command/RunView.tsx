@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEve
 import { commands, errorMessage } from "../lib/ipc";
 import type { AgentApprovalActivity, AgentEntry, AgentRun, Interaction } from "../lib/types";
 import { ClockGlyph, RiskGlyph, StopGlyph } from "../features/agent/AgentGlyphs";
-import { RISK_LABEL, runLabel } from "../features/agent/labels";
+import { MODE_LABEL, RISK_LABEL, runLabel } from "../features/agent/labels";
 import { changePreview, PreviewBlock } from "../features/agent/PreviewBlock";
 import { ModeChip } from "../features/agent/ModeChip";
 import { decide, isLive, stopRun } from "../features/agent/useAgentRuns";
@@ -10,13 +10,16 @@ import { AgentTag } from "../features/sessions/AgentTag";
 import { StepLabel } from "../features/sessions/StepLabel";
 import { WorkingIndicator } from "../features/sessions/WorkingGlyphs";
 import { AttachButton, AttachmentChips, useAttachments, useDropTarget, type DropInto } from "./Attachments";
+import { composerDrafts } from "./composerDrafts";
 import { PlanView, QuestionForm } from "./InteractionViews";
 import { Markdown } from "./Markdown";
 import type { RoutineSeed } from "./routineLabels";
 import { decisionText, resultParts, toMarkdown } from "./runMarkdown";
 import { turns, type Call, type Turn, type TurnItem } from "./transcriptTurns";
+import { StateLine } from "./StateLine";
 import { useWholePreview } from "./useSessionAsks";
 import type { Transcript } from "./useTranscripts";
+import { runViewState, unshownRunError } from "./viewStates";
 
 /** Distance from the bottom (CSS px) that still counts as "at the bottom" for auto-scroll. */
 const STICK_PX = 24;
@@ -28,8 +31,12 @@ const STICK_PX = 24;
 export function RunView({
   runId,
   run,
+  runsLoaded,
   transcript,
+  onRetry,
+  onNewTask,
   focusTick,
+  focusOnOpen,
   dropInto,
   picking,
   onSaveAsRoutine,
@@ -37,8 +44,16 @@ export function RunView({
   runId: string;
   /** Missing for a moment right after the run starts (until `agent:runs` arrives). */
   run: AgentRun | undefined;
+  /** Rust's first run list has arrived: a missing run is then gone, not just not listed yet. */
+  runsLoaded: boolean;
   transcript: Transcript | undefined;
+  /** Loads the transcript again after a failure. */
+  onRetry: () => void;
+  /** The way back from a run that's gone. */
+  onNewTask: () => void;
   focusTick: number;
+  /** `false` when opened from the run list by an arrow key: the row keeps focus until the window's focus changes. */
+  focusOnOpen: boolean;
   /** Drops on the window go to this run's follow-up box while it shows. */
   dropInto: DropInto;
   picking: MutableRefObject<boolean>;
@@ -54,6 +69,9 @@ export function RunView({
   /** New output arrived while the reader was scrolled up. */
   const [behind, setBehind] = useState(false);
   const [copied, setCopied] = useState(false);
+  /** The run has been listed while this view showed (keyed by run): missing after that, it's gone. */
+  const [seen, setSeen] = useState(false);
+  if (run && !seen) setSeen(true);
 
   // Follow new output (and the draft as it grows) while the reader is at the bottom; once they scroll up, leave them
   // alone and offer "Jump to latest".
@@ -78,6 +96,17 @@ export function RunView({
   // A draft with no turn yet (a cut transcript) still needs somewhere to show.
   const shown = draft != null && shaped.length === 0 ? [{ user: null, items: [] }] : shaped;
   const title = run ? (run.routine?.name ?? run.project) : undefined;
+  const state = runViewState(run, runsLoaded, seen, transcript);
+  const runError = unshownRunError(run, entries);
+
+  if (state === "gone") {
+    return (
+      <div className="run">
+        <div className="run__head" />
+        <StateLine action={{ label: "New task", onClick: onNewTask }}>This run is no longer in Cay's list</StateLine>
+      </div>
+    );
+  }
 
   return (
     <div className="run">
@@ -94,7 +123,7 @@ export function RunView({
           <StepLabel className="run__status" text={runLabel(run)} todos={run.todos} />
         ) : (
           run && (
-            <span className="run__status" data-status={run.status}>
+            <span className="run__status" data-status={run.status} title={run.error ?? undefined}>
               {runLabel(run)}
             </span>
           )
@@ -151,7 +180,12 @@ export function RunView({
             jumping.current = false;
           }}
         >
-          {transcript?.error && <p className="entry entry--error">{transcript.error}</p>}
+          {transcript?.error != null && (
+            <StateLine tone="error" detail={transcript.error} action={{ label: "Retry", onClick: onRetry }}>
+              Couldn't load this run's transcript
+            </StateLine>
+          )}
+          {runError && <p className="entry entry--error">{runError}</p>}
           {shown.map((turn, i) => (
             <TurnView
               key={turn.user ? `turn:${turn.user.atMs}:${i}` : `turn:start`}
@@ -159,7 +193,8 @@ export function RunView({
               draft={i === shown.length - 1 ? draft : null}
             />
           ))}
-          {transcript?.loading && entries.length === 0 && <p className="run__empty">Loading…</p>}
+          {state === "loading" && <StateLine tone="loading">Loading…</StateLine>}
+          {state === "empty" && <StateLine>{live ? "No output yet" : "Nothing was recorded for this run"}</StateLine>}
         </div>
         {behind && (
           <button type="button" className="run__jump" onClick={jump}>
@@ -185,7 +220,9 @@ export function RunView({
         runId={runId}
         live={live}
         acceptsImages={run?.acceptsImages ?? null}
+        meta={run ? composerMeta(run) : null}
         focusTick={focusTick}
+        focusOnOpen={focusOnOpen}
         dropInto={dropInto}
         picking={picking}
       />
@@ -495,15 +532,29 @@ function PendingApproval({ approval }: { approval: AgentApprovalActivity }) {
   );
 }
 
+/** "claude · haiku · Ask": whose run it is, its model if one was picked, and the mode the next message runs in. */
+interface ComposerMeta {
+  agent: string;
+  model: string | null;
+  mode: string;
+}
+
+function composerMeta(run: AgentRun): ComposerMeta {
+  return { agent: run.backend, model: run.model, mode: MODE_LABEL[run.nextMode ?? run.mode] };
+}
+
 /**
  * Enter sends, Shift+Enter is a newline. Grows to about five lines. Attachments ride along as chips above the box;
- * a refused send keeps them so one can be removed and the message sent again.
+ * a refused send keeps them so one can be removed and the message sent again. Unsent text is kept per run
+ * (`composerDrafts`) while the window lives; attachments aren't.
  */
 function Composer({
   runId,
   live,
   acceptsImages,
+  meta,
   focusTick,
+  focusOnOpen,
   dropInto,
   picking,
 }: {
@@ -511,11 +562,14 @@ function Composer({
   live: boolean;
   /** `false`: an ACP agent that gets images as file links; `null`: not known yet. */
   acceptsImages: boolean | null;
+  /** The run's agent, model and mode; `null` until the run is known. */
+  meta: ComposerMeta | null;
   focusTick: number;
+  focusOnOpen: boolean;
   dropInto: DropInto;
   picking: MutableRefObject<boolean>;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => composerDrafts.get(runId) ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -523,8 +577,10 @@ function Composer({
   useDropTarget(dropInto, true, attachments.addPaths);
   const imagesAsFiles = acceptsImages === false && attachments.items.some((a) => a.kind === "image");
 
+  // Compared with the tick it opened at (not a "mounted" flag), so StrictMode's second run of the effect agrees.
+  const openTick = useRef(focusTick);
   useEffect(() => {
-    ref.current?.focus();
+    if (focusOnOpen || focusTick !== openTick.current) ref.current?.focus();
   }, [focusTick]);
 
   useLayoutEffect(() => {
@@ -542,6 +598,7 @@ function Composer({
     try {
       const paths = attachments.items.map((a) => a.path);
       await commands.agentSend(runId, value, paths.length > 0 ? paths : undefined);
+      composerDrafts.clear(runId);
       setText("");
       attachments.clear();
     } catch (err) {
@@ -579,7 +636,10 @@ function Composer({
           placeholder={live ? "Add to this task…" : "Follow up…"}
           value={text}
           spellCheck={false}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            composerDrafts.set(runId, e.target.value);
+          }}
           onKeyDown={onKey}
           onPaste={attachments.onPaste}
         />
@@ -596,6 +656,16 @@ function Composer({
           </svg>
         </button>
       </div>
+      {meta && (
+        <div className="composer__meta">
+          <span className="composer__run" title={[meta.agent, meta.model, meta.mode].filter(Boolean).join(" · ")}>
+            <span>{meta.agent}</span>
+            {meta.model && <span className="composer__model">{meta.model}</span>}
+            <span>{meta.mode}</span>
+          </span>
+          <span className="composer__hint">Enter to send · Shift+Enter for a new line</span>
+        </div>
+      )}
     </div>
   );
 }

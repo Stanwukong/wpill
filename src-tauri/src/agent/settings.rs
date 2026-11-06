@@ -35,6 +35,19 @@ pub struct AgentSettings {
     pub default_backend: crate::ipc::AgentBackend,
     /// Each other agent's exe and default model (2.9c); `null` finds it on PATH and leaves the model to the agent.
     pub backends: Backends,
+    /// Where the command window was last (2.10c): written by Cay when it hides, `null` until then.
+    pub window: Option<WindowPlace>,
+}
+
+/// `agent.window`: the command window's restored (not maximized) rect in physical px, and whether it was maximized.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowPlace {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub maximized: bool,
 }
 
 /// `agent.backends` (2.9c).
@@ -79,6 +92,7 @@ impl Default for AgentSettings {
             default_mode: crate::ipc::AgentMode::Auto,
             default_backend: crate::ipc::AgentBackend::Claude,
             backends: Backends::default(),
+            window: None,
         }
     }
 }
@@ -106,6 +120,26 @@ pub fn load(app: &AppHandle) -> AgentSettings {
     }
     log::info!("agent settings: {settings:?}");
     settings
+}
+
+/// `agent.window` as the file holds it now (read when the command window is created).
+pub fn load_window(app: &AppHandle) -> Option<WindowPlace> {
+    read(&path(app)?)?.agent.window
+}
+
+/// Writes `agent.window`, keeping everything else in the file as it is.
+pub fn save_window(app: &AppHandle, place: WindowPlace) {
+    let Some(path) = path(app) else {
+        return;
+    };
+    let mut file = read(&path).unwrap_or_default();
+    if file.agent.window == Some(place) {
+        return;
+    }
+    file.agent.window = Some(place);
+    if let Err(e) = write(&path, &file) {
+        log::debug!("writing {} failed: {e}", path.display());
+    }
 }
 
 fn read(path: &Path) -> Option<File> {
@@ -231,6 +265,22 @@ mod tests {
                 .of(crate::ipc::AgentBackend::Opencode)
                 .and_then(|b| b.model.as_deref()),
             Some("opencode/big-pickle")
+        );
+        // 2.10c: no window place until Cay writes one; a written one reads back.
+        assert_eq!(out["agent"]["window"], serde_json::Value::Null);
+        let placed: File = serde_json::from_str(
+            r#"{ "agent": { "window": { "x": -1200, "y": 80, "width": 900, "height": 700, "maximized": true } } }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            placed.agent.window,
+            Some(WindowPlace {
+                x: -1200,
+                y: 80,
+                width: 900,
+                height: 700,
+                maximized: true
+            })
         );
     }
 }

@@ -81,6 +81,43 @@
   `clipboardData.types` for a Win+Shift+S paste, and whether OpenCode/Codex read a `resource_link` outside the
   project folder without asking.
 
+## 2026-11-05 (evening) | Phase 2.10: agent window UI, stage 2.10c
+- Status: PARTIAL (2.10a–b merged in PR #3; 2.10c built, its manual check is Femi's; 2.10d not started, it waits for
+  the 2.10c check as earlier stages did). Draft PR https://github.com/Stanwukong/wpill/pull/4.
+- Found: PR #3 merged at 15:36 with no review comments; nothing uncommitted. The branch was fast-forwarded to main
+  (101b1cc) in `..\wpill-phase210` and reused, as "resume on its existing branch".
+- Tasks: ✅ 2.10c.1 e3b5ab0 (button, F11, Esc restores first, `command:maximized`; the title-bar double-click is
+  Tauri's default `allow-internal-toggle-maximize`, no capability change) · ✅ 2.10c.2 4be4996 (`agent.window`, pure
+  `fit` with 4 tests; `agent::settings` made `pub mod`) · ✅ 2.10c.3 a873d4e (CSS only, motion-designer; pixel-identical
+  at 720 and 540 px in headless Edge, C:\tmp\cmdwide) · ⏳ 2.10c manual check (Femi).
+- Checks: cargo fmt --check, clippy --lib --tests -D warnings, cargo test --lib (322 passed, 2 ignored), pnpm
+  typecheck, pnpm test (16), pnpm build: all clean. Not run live: the dev Cay on main hosts this run, so the branch build
+  wasn't launched (single instance; editing it would end the run).
+- Desktop build: the dev Cay's `target\debug\cay.exe` was rebuilt 15:47, after main's merge commit 101b1cc (15:36),
+  so it matches main. Nothing rebuilt.
+- How: shell + motion-designer (no VS Code extension driving; Femi may be at the machine).
+- Next run: if Femi signed off 2.10c, start 2.10d.1 (composer: grows, Enter/Shift+Enter, agent/model/mode, per-run
+  draft) on this branch in `..\wpill-phase210`. If the check found problems, fix those first.
+- For Femi: run the 2.10c manual check in PLAN.md. Live unknown: whether Tao's maximize of the undecorated window stays
+  inside the work area here (the plan's open question for choice 5).
+
+## 2026-11-05 (night) | Phase 2.10: agent window UI, stage 2.10d
+- Status: PARTIAL (every 2.10 task is built; what is left is the 2.10a–d manual checks, which are Femi's). Draft PR
+  https://github.com/Stanwukong/wpill/pull/4 (now 2.10c + 2.10d).
+- Asked Femi in Cay whether to start 2.10d before the 2.10c check: "Start 2.10d now".
+- Tasks: ✅ 2.10d.1 1860dda (composer meta + per-run drafts) · ✅ 2.10d.2 4a55132 (Today/Earlier, filter, stopped ring)
+  · ✅ 2.10d.3 bf54c44 (Ctrl+N/F, arrows; I fixed the composer taking focus from an arrow-opened row) · ✅ 2.10d.4
+  47e4c9f (empty/loading/error states, Retry) · ⏳ 2.10d manual check (Femi).
+- Checks: pnpm typecheck, pnpm test (41), pnpm build: clean after every task. No Rust changed in 2.10d (2.10c's cargo
+  checks stand). Headless Edge renders in C:\tmp\composer-meta, runlist, keys, states. Not run live (the dev Cay hosts
+  this run).
+- Desktop build: dev Cay from the main checkout, `target\debug\cay.exe` built 15:47 after main's 101b1cc (15:36): matches
+  main. Nothing rebuilt.
+- How: shell + motion-designer in `..\wpill-phase210`, not the VS Code extension.
+- Next run: if PR #4 has comments, address them. Otherwise Phase 2.10 waits on Femi's manual checks and merge; then
+  Phase 5 (utilities, prompts/phase-5-utilities.md) on a new branch.
+- For Femi: run the 2.10c and 2.10d manual checks in PLAN.md, then mark PR #4 ready / merge.
+
 ## 2026-11-05 (late) | Phase 5: utilities (research and design only)
 - Status: BLOCKED on design approval. PR #4 (2.10c–d) has no review comments and waits on Femi's manual checks;
   Phase 5 doesn't depend on it, and its kick-off prompt asks for research and a design first. Drafted in PLAN.md

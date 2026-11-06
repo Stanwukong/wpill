@@ -46,7 +46,7 @@ mod preview;
 mod routines;
 mod run;
 mod schedule;
-mod settings;
+pub mod settings;
 mod stream;
 mod tools;
 
@@ -2842,6 +2842,24 @@ pub fn command_take_focus() -> Option<crate::ipc::CommandFocus> {
 #[tauri::command]
 pub async fn command_window_hide(app: AppHandle) -> AppResult<()> {
     window::command::hide(&app)
+}
+
+/// Esc (2.10c): restores a maximized command window, else hides it.
+#[tauri::command]
+pub async fn command_window_escape(app: AppHandle) -> AppResult<()> {
+    window::command::escape(&app)
+}
+
+/// The Fullscreen button and F11 (2.10c): maximize or restore; returns the new state.
+#[tauri::command]
+pub async fn command_window_toggle_maximize(app: AppHandle) -> AppResult<bool> {
+    window::command::toggle_maximize(&app)
+}
+
+/// Whether the command window is maximized, for its first render (`command:maximized` follows).
+#[tauri::command]
+pub async fn command_window_maximized(app: AppHandle) -> bool {
+    window::command::is_maximized(&app)
 }
 
 /// Debug builds only: drive the agent from outside for verification, through a second launch that the

@@ -24,6 +24,8 @@ pub mod events {
     pub const SESSION_ASKS: &str = "sessions:asks";
     /// Sent to the `command` window only: which held session request to show when it opens (2.8b).
     pub const COMMAND_FOCUS_ASK: &str = "command:focus-ask";
+    /// Sent to the `command` window only: whether it's maximized now (2.10c), on every change.
+    pub const COMMAND_MAXIMIZED: &str = "command:maximized";
     /// Google sign-in state changed (Phase 6a).
     pub const GOOGLE_STATE: &str = "google:state";
     /// Upcoming events and due tasks changed, or one changed phase (Phase 6a).
