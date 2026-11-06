@@ -13,6 +13,7 @@ mod media;
 mod migrate;
 mod processes;
 mod sessions;
+mod timer;
 mod tray;
 mod win32;
 mod window;
