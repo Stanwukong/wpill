@@ -197,7 +197,10 @@ pub fn restore(mut timer: Timer, now: i64) -> Option<Timer> {
         return None;
     }
     timer.tick(now);
-    if timer.ended_ms.is_some_and(|e| now - e > RESTORE_ENDED_FOR_MS) {
+    if timer
+        .ended_ms
+        .is_some_and(|e| now - e > RESTORE_ENDED_FOR_MS)
+    {
         return None;
     }
     if timer.kind == TimerKind::Stopwatch && timer.elapsed(now) > RESTORE_STOPWATCH_FOR_MS {
@@ -292,7 +295,11 @@ mod tests {
         let mut watch = Timer::start(TimerKind::Stopwatch, None, T0).unwrap();
         watch.pause(T0 + 3 * M).unwrap();
         watch.resume(T0 + 4 * M).unwrap();
-        assert_eq!(watch.elapsed(T0), 3 * M, "the segment clamps, the bank stays");
+        assert_eq!(
+            watch.elapsed(T0),
+            3 * M,
+            "the segment clamps, the bank stays"
+        );
     }
 
     #[test]
@@ -358,11 +365,19 @@ mod tests {
         let ended = restore(back.clone(), T0 + 30 * M).unwrap();
         assert_eq!(ended.phase(), TimerPhase::Ended, "ended while Cay was off");
         assert!(ended.late(T0 + 30 * M));
-        assert_eq!(restore(back, T0 + 2 * 60 * M), None, "ended over an hour ago");
+        assert_eq!(
+            restore(back, T0 + 2 * 60 * M),
+            None,
+            "ended over an hour ago"
+        );
 
         let watch = Timer::start(TimerKind::Stopwatch, None, T0).unwrap();
         assert!(restore(watch.clone(), T0 + 60 * M).is_some());
-        assert_eq!(restore(watch, T0 + 25 * 60 * M), None, "a forgotten stopwatch");
+        assert_eq!(
+            restore(watch, T0 + 25 * 60 * M),
+            None,
+            "a forgotten stopwatch"
+        );
 
         let mut paused = countdown(10);
         paused.pause(T0 + M).unwrap();

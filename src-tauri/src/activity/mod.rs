@@ -27,7 +27,9 @@ use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 use crate::error::{AppError, AppResult};
 use crate::ipc::{Activity, ActivityPayload};
 use crate::window;
-pub use queue::{approval_key, calendar_key, session_approval_key, session_key, Queue, ACTING_KEY};
+pub use queue::{
+    approval_key, calendar_key, session_approval_key, session_key, Queue, ACTING_KEY, TIMER_KEY,
+};
 use settings::Switches;
 
 #[cfg(test)]

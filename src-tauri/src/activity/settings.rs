@@ -60,6 +60,8 @@ impl Switches {
             // A run waits on its approval, so it can't be switched off (it would only time out).
             Activity::AgentApproval(_) | Activity::AgentActing(_) => true,
             Activity::CalendarSoon(_) => self.calendar,
+            // You started it; there's nothing to switch off.
+            Activity::TimerDone(_) => true,
         }
     }
 }

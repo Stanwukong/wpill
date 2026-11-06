@@ -27,6 +27,8 @@ import type {
   HeavyProcesses,
   ProcessId,
   SessionAsks,
+  TimerKind,
+  TimerPayload,
   QuestionAnswer,
   ClaudeHooksStatus,
   AgentSessions,
@@ -58,6 +60,7 @@ const EVENTS = {
   googleState: "google:state",
   calendarUpcoming: "calendar:upcoming",
   processesHeavy: "processes:heavy",
+  timerState: "timer:state",
 } as const;
 
 /** Which island shape a reported rect measures. */
@@ -170,6 +173,18 @@ export const commands = {
   /** Asks in a native confirm box first; Rust only touches pids it listed for `key`. */
   endProcessGroup: (key: string, pids: ProcessId[]) =>
     invoke<EndResult>("end_process_group", { key, pids }),
+  /** Phase 5a: starts a timer, replacing the one that runs. `minutes` only for `countdown` (1–180). */
+  timerStart: (kind: TimerKind, minutes?: number) =>
+    invoke<TimerPayload>("timer_start", { kind, minutes }),
+  timerPause: () => invoke<TimerPayload>("timer_pause"),
+  timerResume: () => invoke<TimerPayload>("timer_resume"),
+  /** One more minute; an ended countdown runs again with a minute left. */
+  timerAddMinute: () => invoke<TimerPayload>("timer_add_minute"),
+  /** Cancels the timer, or dismisses an ended one. */
+  timerCancel: () => invoke<TimerPayload>("timer_cancel"),
+  getTimer: () => invoke<TimerPayload>("get_timer"),
+  /** Opens Windows' Notifications settings (Do not disturb); Cay can't switch it itself. */
+  timerOpenDnd: () => invoke<void>("timer_open_dnd"),
 };
 
 export const on = {
@@ -215,6 +230,9 @@ export const on = {
   /** Every 2 s while the panel is open and `processes.enabled` is on. */
   processesHeavy: (cb: (payload: HeavyProcesses) => void): Promise<UnlistenFn> =>
     listen<HeavyProcesses>(EVENTS.processesHeavy, (e) => cb(e.payload)),
+  /** Phase 5a: on every change, and once a second while a timer runs. */
+  timerState: (cb: (payload: TimerPayload) => void): Promise<UnlistenFn> =>
+    listen<TimerPayload>(EVENTS.timerState, (e) => cb(e.payload)),
   /** Command window only (2.10b.3): files dragged over it, from Tauri's drag-drop event (paths only). */
   filesDrag: (cb: (drag: FilesDrag) => void): Promise<UnlistenFn> =>
     getCurrentWebview().onDragDropEvent((e) => {

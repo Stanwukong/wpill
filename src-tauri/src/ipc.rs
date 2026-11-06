@@ -32,6 +32,8 @@ pub mod events {
     pub const CALENDAR_UPCOMING: &str = "calendar:upcoming";
     /// The memory-heavy apps, every 2 s while the panel is open and `processes.enabled` is on (Phase 3).
     pub const PROCESSES_HEAVY: &str = "processes:heavy";
+    /// The timer (Phase 5a): on every change, and once a second while one runs.
+    pub const TIMER_STATE: &str = "timer:state";
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -92,6 +94,8 @@ pub enum Activity {
     AgentFinished(AgentFinishedActivity),
     /// An event starts soon (Phase 6b): shown once, at `google.leadMinutes` before it.
     CalendarSoon(CalendarSoonActivity),
+    /// A countdown, focus or break reached its end (Phase 5a).
+    TimerDone(TimerDoneActivity),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -1155,4 +1159,14 @@ pub struct TimerState {
 #[serde(rename_all = "camelCase")]
 pub struct TimerPayload {
     pub timer: Option<TimerState>,
+}
+
+/// `timerDone`: Dismiss / +1 min (Break after Focus). `late`: it ended a while before Cay saw it (the PC slept), so the
+/// island says when ("Ended at 14:05").
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimerDoneActivity {
+    pub kind: TimerKind,
+    pub ended_at_ms: i64,
+    pub late: bool,
 }

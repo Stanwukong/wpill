@@ -123,6 +123,9 @@ export function ActivityView({
     }
     case "calendarSoon":
       return <CalendarSoon soon={activity.payload} />;
+    case "timerDone":
+      // Its view comes with 5a.3.
+      return null;
   }
 }
 
