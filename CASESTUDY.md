@@ -1053,6 +1053,20 @@ Windows' Focus API is Insider-only and a Limited Access Feature, Win+V history n
 OLE drops skip click-through windows (the findings in PLAN.md). *Alternatives:* waiting for Windows' Focus API; a
 memory-only timer; shelf items leaving when dropped; clipboard images or a DPAPI file.
 
+### D57: The timer as built (5a)
+*What:* `timer/logic.rs` keeps one timer (Countdown, Stopwatch, Focus or Break) in wall-clock UTC ms with banked and
+resumed segments, so sleep, lock and a restart are handled: `tick` ends it at its deadline, not at "now", and it
+reports late ("Ended at 14:05") when Cay noticed a minute or more after the end. `timer/mod.rs` runs one `timer`
+thread through `activity::Watcher`: parked on a condvar while nothing runs, once a second while one does. The running
+or ended timer is saved to `timer.json`; an ended one stays (panel row, `timerDone` activity) until Dismiss or a new
+start. The activity is a notice (priority 3, shown 12 s, dropped if it queued over 10 min), interactive while hovered, with the optional sound.
+React renders `timer:state` only (`timerFormat.ts`, tested): countdowns round up, stopwatches down. *Why:* deadlines
+in `Instant` would stop counting during sleep. Two departures from the plan text: the ring uses `--media-accent`
+(the art's accent, else soft white) because the default `--accent` is the charging green and read as a battery ring
+beside the clock; and Do not disturb opens `ms-settings:notifications` (Windows 11 moved it there from
+`quiethours`). *Alternatives:* a CSS-animated ring between ticks (no gain at one update a second); several timers at
+once.
+
 ### C8: The agent pipe refused every bridge's hello
 *Symptom:* the first real agent run failed with "MCP tool mcp__topbar__approve not found"; TopBar's log said it had
 refused two connections "without a valid run token". *Diagnosis:* the bridge writes its hello as soon as it connects,
@@ -1212,6 +1226,7 @@ so tests and Connect must both say which folder they touch; and a hook only prov
 | 2026-11-04 | Stage 3b.1 built (D50): `processes/end.rs` and `end_process_group`, the confirm box in Rust, two checks by creation time, `WM_CLOSE` then `TerminateProcess` children first, `prompted` for an app asking to save. 290 Rust tests; a live test ended a `cmd` → `ping` tree it started. Built with `CARGO_INCREMENTAL=0` and `cargo test --lib` (8.4 GB free, C14). |
 | 2026-11-04 | Stage 3b.2 built (motion-designer): the × End control in a fixed slot, "Ending…", result lines in the figure's type, ended rows fading out; End state in `useHeavyProcesses` so it survives the panel collapsing during the confirm box. Headless renders reviewed; 3b manual check written. |
 | 2026-11-05 | Stage 2.10d built (polish, D55) by the daily routine on the author's go-ahead before the 2.10c check: composer meta line and per-run drafts, run list groups and filter, Ctrl+N/Ctrl+F/arrows and one focus ring, empty/loading/error states. React only; 41 TS tests. Every Phase 2.10 task is built; manual checks pending. |
+| 2026-11-06 | Phase 5 design agreed (D56). Stage 5a built (D57): wall-clock timer, stopwatch and 25-minute focus with a break, `timer.json` across restarts, the `timerDone` activity, `mm:ss` and a ring in the pill, the panel's Timer section. Manual check pending. |
 | 2026-11-05 | Stage 2.10c built (the window, D54): maximize button, F11 and double-click with `command:maximized` from Rust, Esc restores first, `agent.window` remembered and fitted onto a current work area, a 760 px reading column when wide. 322 Rust and 16 TS tests. Manual check pending. |
 | 2026-11-05 | Stage 2.10b built (attachments, D53): Rust copies and scales, `--add-dir` for Claude Code, ACP `image`/`resource_link` blocks by `promptCapabilities`, clipboard (`CF_HDROP`, PNG, DIB) and drop commands, the Attach picker, chips, paste and drop in both composers. 317 Rust and 16 TS tests. Manual check pending. The routine resumed it after the author's VS Code session hit its usage limit mid-2.10b.2. |
 | 2026-11-05 | Phase 2.10 design agreed (D52, every recommendation). Stage 2.10a built by the daily routine: Markdown tables/links/strike/code (own parser, now pure and tested with `node --test`, no dependency), https links opened by Rust, the transcript as turns with folded tool groups and diffs, a summary card with duration, copy message/run, Jump to latest, and Claude's text streamed as drafts (`--include-partial-messages`, throttled to 10 Hz in `lifecycle.rs`, no `agent:runs` per delta). 296 Rust and 13 TS tests. Manual check pending. |

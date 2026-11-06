@@ -51,7 +51,7 @@ D50) signed off, all manual checks passed (3b on the author's other machine).** 
 `self/phase-3-memory-heavy` (PR #2). Next, per the roadmap: [Phase 2.10, agent window UI](#phase-210-agent-window-ui-design-agreed-2026-11-05-d51-d52)
 (added 2026-11-05, D51; design agreed 2026-11-05, D52; built on branch `self/phase-2.10-agent-window`, PR #3; 2.10c–d in PR #4, merged 2026-11-05).
 **Stages 2.10a (readable transcript) and 2.10b (attachments) are built and merged (PR #3, 2026-11-05); 2.10c (the window: maximize, remembered place, wide layout, D54) and 2.10d (polish, D55) are built (2026-11-05, draft PR #4). Their manual checks are pending.** With 2.10d every Phase 2.10 task is built. After 2.10: [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
-[prompts/phase-5-utilities.md](prompts/phase-5-utilities.md); **design agreed 2026-11-06 (D56), all five recommended choices; 5a building on branch `self/phase-5-utilities`, PR #5**), the spikes, and last 4a-5 (release). See
+[prompts/phase-5-utilities.md](prompts/phase-5-utilities.md); **design agreed 2026-11-06 (D56), all five recommended choices; stage 5a (timer, stopwatch, focus, D57) built 2026-11-06 on branch `self/phase-5-utilities`, PR #5; its manual check is pending, then 5b (shelf)**), the spikes, and last 4a-5 (release). See
 [Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
@@ -2000,22 +2000,44 @@ Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `taur
 
 ### Phase 5: utilities
 - [ ] Timer / stopwatch / focus mode: countdown lives in the pill; presets in the panel (stage 5a, tasks below)
-    - [ ] 5a.1 `timer/logic.rs` (pure): `Timer` (kind Countdown | Stopwatch | Focus | Break, wall-clock UTC ms,
+    - [x] 5a.1 (ac285e0) `timer/logic.rs` (pure): `Timer` (kind Countdown | Stopwatch | Focus | Break, wall-clock UTC ms,
           banked + resumed segments), start/pause/resume/cancel/add-minute, `tick` (ends at the deadline, not "now",
           so a timer that ended in sleep reports its real end), `restore` after a restart (drops stale ones), the
           `timer:state` payload, next wake. Unit tests: fake clocks, sleep across the deadline, clock set back, +1 min
           after the end, restore.
-    - [ ] 5a.2 `timer/mod.rs`: managed `Timers`, the `timer` thread (through `activity::Watcher`; parked on a condvar
+    - [x] 5a.2 (c949c02) `timer/mod.rs`: managed `Timers`, the `timer` thread (through `activity::Watcher`; parked on a condvar
           while nothing runs, once a second while one does), `timer.json` in Cay's data folder, commands
           `timer_start { kind, minutes? }`, `timer_pause`, `timer_resume`, `timer_cancel`, `timer_add_minute`,
           `get_timer`, `timer_open_dnd`; event `timer:state`; the `timerDone` activity (notice, interactive, plays the
           optional sound) with Dismiss / +1 min (and Break after Focus). IPC in `ipc.rs` + `ipc.ts`/`types.ts`.
-    - [ ] 5a.3 Look (motion-designer): `mm:ss` + a thin `--accent` ring in the pill while a timer runs; the panel's
+    - [x] 5a.3 (d7755d3) Look (motion-designer): `mm:ss` + a thin `--accent` ring in the pill while a timer runs; the panel's
           Timer row (presets 5 / 10 / 25 focus / Stopwatch; Pause / Resume, +1 min, Cancel; Do not disturb link during
           Focus); the `timerDone` activity view. No JS timers: React renders the latest `timer:state`.
-    - [ ] 5a.4 Docs and the 5a manual check list (below).
+    - [x] 5a.4 Docs and the 5a manual check list (below).
 - [ ] Drop shelf: drag files onto the island to park them, drag them out later
 - [ ] Clipboard history (recent text/images), opt-in
+
+#### 5a manual check list (the author's; built 2026-11-06, D57)
+Run Cay from the branch (`pnpm tauri dev` in `..\wpill-phase5`). Nothing to switch on: 5a is harmless until a preset
+is clicked.
+1. Expand the island: the panel has a **Timer** section with four chips: 5 min, 10 min, 25 min focus, Stopwatch.
+2. Click **5 min** and collapse: the pill shows a thin ring and `05:00` right of the clock, counting down once a
+   second, with tabular figures (the clock doesn't shift). Your foreground app keeps focus throughout.
+3. Panel row: Pause dims the pill's time and stops it; Resume continues from the same second; +1 min adds a minute
+   (the ring steps back); Cancel clears the row and the pill.
+4. Let a timer end (or start 5 min and wait): the "Timer done" activity shows with +1 min and Dismiss, the sound plays
+   if `activities.sound` is on, and it takes clicks only while hovered. +1 min restarts a one-minute countdown; Dismiss
+   clears it.
+5. **25 min focus**: the row shows a "Do not disturb" link that opens Windows' Notifications settings (Cay never
+   changes it). At the end the activity says "Focus done" with **Break 5 min**; the break ends as "Break over".
+6. **Stopwatch**: a stopwatch mark instead of the ring, counting up; no +1 min.
+7. Restart: with a timer running, quit Cay from the tray and start it again within its time: it picks up where it
+   was (`timer.json` in `%APPDATA%\io.github.stanwukong.cay`). Quit, wait past its end, start again: "Timer done"
+   shows with "Ended at hh:mm".
+8. Sleep: start 5 min, put the PC to sleep for over 5 minutes, wake it: "Timer done · Ended at hh:mm" (the real end,
+   not the wake time).
+9. Throughout: the island never takes focus or blinks, stays click-through outside the panel, and with no timer the
+   `timer` thread is parked (no `timer:state` events in the `cay_lib=debug` log).
 
 #### Phase 5 design: agreed 2026-11-06 (D56; drafted by the daily routine 2026-11-05, all five recommended choices accepted by the author)
 Agreed in Cay on 2026-11-06: choices 1–5 below, each as recommended. Built on branch `self/phase-5-utilities` (worktree `..\wpill-phase5`). Phase 5

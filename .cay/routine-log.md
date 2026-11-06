@@ -132,3 +132,24 @@
 - For Femi: pick choices 1–5 in PLAN.md's Phase 5 design; free disk space (e.g. delete `target\debug\incremental`
   with the dev Cay stopped); run the 2.10c/2.10d manual checks for PR #4.
 - PR: https://github.com/Stanwukong/wpill/pull/5 (draft)
+
+## 2026-11-06 (evening) | Phase 5: utilities, stage 5a (timer)
+- Status: PARTIAL (5a built; its manual check is Femi's; 5b/5c not started, they wait for the 5a sign-off). Draft PR
+  https://github.com/Stanwukong/wpill/pull/5.
+- Found (Femi pointed this run at `..\wpill-phase5`): design agreed (D56, 7e12fc0), 5a.1 ac285e0 and 5a.2 c949c02
+  committed but unticked, and 5a.3 written but uncommitted (ticked in PLAN.md) by an earlier session around 11:20.
+- Tasks: ✅ 5a.1 ac285e0 · ✅ 5a.2 c949c02 · ✅ 5a.3 d7755d3 (I reviewed and committed the uncommitted UI) · ✅ 5a.4
+  docs (D57, the 5a manual check list, CLAUDE.md layout note) · ⏳ 5a manual check (Femi).
+- Checks: cargo fmt --check, clippy --lib --tests -D warnings, cargo test --lib (334 passed, 2 ignored), pnpm
+  typecheck, pnpm test (49), pnpm build: all clean. Not run live by me: Femi's `pnpm tauri dev` from this worktree
+  hosts this run (editing Rust or restarting it would end the run).
+- Desktop build: the running Cay is the dev build from `..\wpill-phase5` (main b8aeb69 merged in at f908689, plus 5a),
+  so it isn't behind main. The main checkout's `target\debug\cay.exe` (22:10) is newer than main's b8aeb69 (22:07).
+  Nothing rebuilt.
+- Disk: 3.6 GB free on C: after the check build. Clean `target\debug\incremental` in both checkouts soon.
+- Next run: if Femi signed off 5a, add 5b's tasks (shelf) and start 5b.1 in `..\wpill-phase5`. If the check found
+  problems, fix those first.
+- For Femi: run the 5a manual check in PLAN.md. Two departures from the plan text (D57): the ring uses
+  `--media-accent` (the default `--accent` is the charging green), and Do not disturb opens
+  `ms-settings:notifications`. Your PR #5 review lists choice 4 as "text only, memory only, cleared on lock
+  (recommended) · also images"; D56 recorded text only. Please confirm before 5c whether you want images too.
