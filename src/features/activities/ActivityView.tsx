@@ -5,6 +5,7 @@ import { CalendarSoon } from "../calendar/CalendarSoon";
 import { openRun } from "../agent/useAgentRuns";
 import { AgentTag } from "../sessions/AgentTag";
 import { focusSession } from "../sessions/useSessions";
+import { TimerDone } from "../timer/TimerDone";
 import { AgentActing } from "./AgentActing";
 import { AgentApproval } from "./AgentApproval";
 import { SessionApproval } from "./SessionApproval";
@@ -124,8 +125,7 @@ export function ActivityView({
     case "calendarSoon":
       return <CalendarSoon soon={activity.payload} />;
     case "timerDone":
-      // Its view comes with 5a.3.
-      return null;
+      return <TimerDone done={activity.payload} />;
   }
 }
 

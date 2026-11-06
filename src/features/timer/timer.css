@@ -1,0 +1,206 @@
+/*
+ * Timer, stopwatch and focus (Phase 5a). Chrome, Segoe throughout, tabular figures for every time. The ring uses
+ * --media-accent: the album art's accent when there is one, soft white on the plain island (the default --accent is
+ * the charging green, which a ring beside the clock would read as). No loops: the ring is redrawn from each
+ * `timer:state`, and only +1 min (a step) and pausing (a fade) transition.
+ */
+
+/* The ring: a faint full track, and what's left in the accent. */
+.timer-ring {
+  flex: none;
+  display: block;
+  fill: none;
+  stroke-width: 1.8;
+}
+
+.timer-ring__track {
+  stroke: rgba(255, 255, 255, 0.16);
+}
+
+.timer-ring__arc {
+  stroke: var(--media-accent);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 120ms ease-out;
+}
+
+/* At 00:00 the round cap would still leave a dot. */
+.timer-ring__arc[data-empty="true"] {
+  opacity: 0;
+}
+
+.timer-glyph {
+  flex: none;
+  display: block;
+}
+
+/* Pill: right of the clock, a little closer to it than the pill's 10 px gap; the mark sits tight to its digits. */
+.pill-timer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: -2px;
+  transition: opacity 200ms ease-out;
+}
+
+.pill-timer .timer-glyph {
+  color: var(--island-muted);
+}
+
+.pill-timer__time {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.pill-timer[data-phase="paused"] {
+  opacity: 0.5;
+}
+
+/* Buttons: quiet chips (the calendar's panel Join), many per row so none is filled. */
+.timer-btn {
+  flex: none;
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    opacity 120ms ease;
+}
+
+.timer-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.timer-btn:active {
+  opacity: 0.8;
+}
+
+/* Quiet text choices: Cancel / Dismiss and the Do not disturb link. */
+.timer-link {
+  flex: none;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 11.5px;
+  color: var(--island-muted);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.timer-link:hover {
+  color: var(--island-fg);
+}
+
+/* Panel section: the calendar's density (12 px uppercase heading, 30 px row). */
+.timer {
+  margin-bottom: 14px;
+}
+
+.timer__heading {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--island-muted);
+}
+
+.timer__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 30px;
+  align-items: center;
+}
+
+.timer-row {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.timer-row__mark {
+  flex: none;
+  width: 16px;
+  display: grid;
+  place-items: center;
+  color: var(--island-muted);
+}
+
+.timer-row__time {
+  flex: none;
+  min-width: 46px;
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.timer-row__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  color: var(--island-muted);
+}
+
+.timer-row[data-phase="paused"] .timer-row__mark,
+.timer-row[data-phase="paused"] .timer-row__time {
+  opacity: 0.5;
+  transition: opacity 200ms ease-out;
+}
+
+.timer__error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+/* Activity: icon · title (and "Ended at …" under it) · two chips. */
+.timer-done {
+  gap: 10px;
+  padding-right: 10px;
+}
+
+.timer-done__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.2;
+}
+
+.timer-done__late {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--island-muted);
+}
+
+.timer-done .timer-btn {
+  height: 26px;
+  padding: 0 11px;
+  font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timer-ring__arc,
+  .pill-timer,
+  .timer-row__mark,
+  .timer-row__time {
+    transition: none;
+  }
+}
