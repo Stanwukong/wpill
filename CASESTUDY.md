@@ -1045,6 +1045,14 @@ island's panel shares. *Why:* all four bullets were React-only; pure modules kee
 Drafts aren't saved to disk because a prompt can hold anything the user typed. *Alternatives:* drafts in
 `settings.json`; a fuzzy filter; a spinner for loading.
 
+### D56: Phase 5's design: Cay's own timer, a paths-only shelf, a memory-only clipboard
+*What:* the author accepted the routine's Phase 5 draft as recommended (2026-11-06): focus is a Cay timer plus a Do
+Not Disturb settings link the user clicks; the running timer survives a restart in `timer.json`; shelf items stay
+until removed; clipboard history is text only, in memory, cleared on lock; stages in order 5a → 5b → 5c. *Why:*
+Windows' Focus API is Insider-only and a Limited Access Feature, Win+V history needs focus the island never takes, and
+OLE drops skip click-through windows (the findings in PLAN.md). *Alternatives:* waiting for Windows' Focus API; a
+memory-only timer; shelf items leaving when dropped; clipboard images or a DPAPI file.
+
 ### C8: The agent pipe refused every bridge's hello
 *Symptom:* the first real agent run failed with "MCP tool mcp__topbar__approve not found"; TopBar's log said it had
 refused two connections "without a valid run token". *Diagnosis:* the bridge writes its hello as soon as it connects,

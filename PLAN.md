@@ -1999,12 +1999,26 @@ A settings window (a normal, focusable window, separate from the island) for: ac
 Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `tauri-plugin-store`.
 
 ### Phase 5: utilities
-- [ ] Timer / stopwatch / focus mode: countdown lives in the pill; presets in the panel
+- [ ] Timer / stopwatch / focus mode: countdown lives in the pill; presets in the panel (stage 5a, tasks below)
+    - [ ] 5a.1 `timer/logic.rs` (pure): `Timer` (kind Countdown | Stopwatch | Focus | Break, wall-clock UTC ms,
+          banked + resumed segments), start/pause/resume/cancel/add-minute, `tick` (ends at the deadline, not "now",
+          so a timer that ended in sleep reports its real end), `restore` after a restart (drops stale ones), the
+          `timer:state` payload, next wake. Unit tests: fake clocks, sleep across the deadline, clock set back, +1 min
+          after the end, restore.
+    - [ ] 5a.2 `timer/mod.rs`: managed `Timers`, the `timer` thread (through `activity::Watcher`; parked on a condvar
+          while nothing runs, once a second while one does), `timer.json` in Cay's data folder, commands
+          `timer_start { kind, minutes? }`, `timer_pause`, `timer_resume`, `timer_cancel`, `timer_add_minute`,
+          `get_timer`, `timer_open_dnd`; event `timer:state`; the `timerDone` activity (notice, interactive, plays the
+          optional sound) with Dismiss / +1 min (and Break after Focus). IPC in `ipc.rs` + `ipc.ts`/`types.ts`.
+    - [ ] 5a.3 Look (motion-designer): `mm:ss` + a thin `--accent` ring in the pill while a timer runs; the panel's
+          Timer row (presets 5 / 10 / 25 focus / Stopwatch; Pause / Resume, +1 min, Cancel; Do not disturb link during
+          Focus); the `timerDone` activity view. No JS timers: React renders the latest `timer:state`.
+    - [ ] 5a.4 Docs and the 5a manual check list (below).
 - [ ] Drop shelf: drag files onto the island to park them, drag them out later
 - [ ] Clipboard history (recent text/images), opt-in
 
-#### Phase 5 design: DRAFT – needs Femi's OK (drafted by the daily routine, 2026-11-05)
-No code until the author agrees. Built on branch `self/phase-5-utilities` (worktree `..\wpill-phase5`). Phase 5
+#### Phase 5 design: agreed 2026-11-06 (D56; drafted by the daily routine 2026-11-05, all five recommended choices accepted by the author)
+Agreed in Cay on 2026-11-06: choices 1–5 below, each as recommended. Built on branch `self/phase-5-utilities` (worktree `..\wpill-phase5`). Phase 5
 doesn't depend on Phase 2.10's open PR #4 (the island, not the command window).
 
 **Findings (with sources)**
@@ -2099,7 +2113,7 @@ restart restore; shelf: caps, de-dup, missing files, arming; clipboard: each mar
 clipboard tests never read or write the author's real clipboard (a test that needs a live clipboard saves and
 restores it, and uses its own text). Manual check lists per stage.
 
-**Choices for Femi** (recommendation first)
+**Choices** (recommendation first; the author took every recommendation, 2026-11-06)
 1. Focus mode: Cay timer + a Do Not Disturb link (recommended) · Cay timer only · wait for Windows' Focus API.
 2. Timer survives a Cay restart via `timer.json` (recommended) · memory only.
 3. Shelf: items stay until removed (recommended) · leave the shelf when dropped elsewhere.
