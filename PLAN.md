@@ -49,9 +49,9 @@ checks passed.**
 **Phase 3 (memory-heavy apps) is complete (2026-11-05): design agreed (D49), 3a (the read-only list) and 3b (End Task,
 D50) signed off, all manual checks passed (3b on the author's other machine).** Built on branch
 `self/phase-3-memory-heavy` (PR #2). Next, per the roadmap: [Phase 2.10, agent window UI](#phase-210-agent-window-ui-design-agreed-2026-11-05-d51-d52)
-(added 2026-11-05, D51; design agreed 2026-11-05, D52; built on branch `self/phase-2.10-agent-window`, PR #3; 2.10c in draft PR #4).
+(added 2026-11-05, D51; design agreed 2026-11-05, D52; built on branch `self/phase-2.10-agent-window`, PR #3; 2.10c–d in PR #4, merged 2026-11-05).
 **Stages 2.10a (readable transcript) and 2.10b (attachments) are built and merged (PR #3, 2026-11-05); 2.10c (the window: maximize, remembered place, wide layout, D54) and 2.10d (polish, D55) are built (2026-11-05, draft PR #4). Their manual checks are pending.** With 2.10d every Phase 2.10 task is built. After 2.10: [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
-[prompts/phase-5-utilities.md](prompts/phase-5-utilities.md)), the spikes, and last 4a-5 (release). See
+[prompts/phase-5-utilities.md](prompts/phase-5-utilities.md); **design agreed 2026-11-06 (D56), all five recommended choices; stage 5a (timer, stopwatch, focus, D57) built 2026-11-06 on branch `self/phase-5-utilities`, PR #5; its manual check is pending, then 5b (shelf)**), the spikes, and last 4a-5 (release). See
 [Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
@@ -1999,9 +1999,152 @@ A settings window (a normal, focusable window, separate from the island) for: ac
 Phase 3 toggle, hot-zone size, monitor choice, and launch at startup. Uses `tauri-plugin-store`.
 
 ### Phase 5: utilities
-- [ ] Timer / stopwatch / focus mode: countdown lives in the pill; presets in the panel
+- [ ] Timer / stopwatch / focus mode: countdown lives in the pill; presets in the panel (stage 5a, tasks below)
+    - [x] 5a.1 (ac285e0) `timer/logic.rs` (pure): `Timer` (kind Countdown | Stopwatch | Focus | Break, wall-clock UTC ms,
+          banked + resumed segments), start/pause/resume/cancel/add-minute, `tick` (ends at the deadline, not "now",
+          so a timer that ended in sleep reports its real end), `restore` after a restart (drops stale ones), the
+          `timer:state` payload, next wake. Unit tests: fake clocks, sleep across the deadline, clock set back, +1 min
+          after the end, restore.
+    - [x] 5a.2 (c949c02) `timer/mod.rs`: managed `Timers`, the `timer` thread (through `activity::Watcher`; parked on a condvar
+          while nothing runs, once a second while one does), `timer.json` in Cay's data folder, commands
+          `timer_start { kind, minutes? }`, `timer_pause`, `timer_resume`, `timer_cancel`, `timer_add_minute`,
+          `get_timer`, `timer_open_dnd`; event `timer:state`; the `timerDone` activity (notice, interactive, plays the
+          optional sound) with Dismiss / +1 min (and Break after Focus). IPC in `ipc.rs` + `ipc.ts`/`types.ts`.
+    - [x] 5a.3 (d7755d3) Look (motion-designer): `mm:ss` + a thin `--accent` ring in the pill while a timer runs; the panel's
+          Timer row (presets 5 / 10 / 25 focus / Stopwatch; Pause / Resume, +1 min, Cancel; Do not disturb link during
+          Focus); the `timerDone` activity view. No JS timers: React renders the latest `timer:state`.
+    - [x] 5a.4 Docs and the 5a manual check list (below).
 - [ ] Drop shelf: drag files onto the island to park them, drag them out later
 - [ ] Clipboard history (recent text/images), opt-in
+
+#### 5a manual check list (the author's; built 2026-11-06, D57)
+Run Cay from the branch (`pnpm tauri dev` in `..\wpill-phase5`). Nothing to switch on: 5a is harmless until a preset
+is clicked.
+1. Expand the island: the panel has a **Timer** section with four chips: 5 min, 10 min, 25 min focus, Stopwatch.
+2. Click **5 min** and collapse: the pill shows a thin ring and `05:00` right of the clock, counting down once a
+   second, with tabular figures (the clock doesn't shift). Your foreground app keeps focus throughout.
+3. Panel row: Pause dims the pill's time and stops it; Resume continues from the same second; +1 min adds a minute
+   (the ring steps back); Cancel clears the row and the pill.
+4. Let a timer end (or start 5 min and wait): the "Timer done" activity shows with +1 min and Dismiss, the sound plays
+   if `activities.sound` is on, and it takes clicks only while hovered. +1 min restarts a one-minute countdown; Dismiss
+   clears it.
+5. **25 min focus**: the row shows a "Do not disturb" link that opens Windows' Notifications settings (Cay never
+   changes it). At the end the activity says "Focus done" with **Break 5 min**; the break ends as "Break over".
+6. **Stopwatch**: a stopwatch mark instead of the ring, counting up; no +1 min.
+7. Restart: with a timer running, quit Cay from the tray and start it again within its time: it picks up where it
+   was (`timer.json` in `%APPDATA%\io.github.stanwukong.cay`). Quit, wait past its end, start again: "Timer done"
+   shows with "Ended at hh:mm".
+8. Sleep: start 5 min, put the PC to sleep for over 5 minutes, wake it: "Timer done · Ended at hh:mm" (the real end,
+   not the wake time).
+9. Throughout: the island never takes focus or blinks, stays click-through outside the panel, and with no timer the
+   `timer` thread is parked (no `timer:state` events in the `cay_lib=debug` log).
+
+#### Phase 5 design: agreed 2026-11-06 (D56; drafted by the daily routine 2026-11-05, all five recommended choices accepted by the author)
+Agreed in Cay on 2026-11-06: choices 1–5 below, each as recommended. Built on branch `self/phase-5-utilities` (worktree `..\wpill-phase5`). Phase 5
+doesn't depend on Phase 2.10's open PR #4 (the island, not the command window).
+
+**Findings (with sources)**
+- *Windows' own Focus can't be driven by Cay.* `Windows.UI.Shell.FocusSessionManager` (`IsSupported`,
+  `IsFocusActive`, `TryStartFocusSession(DateTime)`, `DeactivateFocus`) first shipped in Insider build 23504, and
+  starting or ending a session is a Limited Access Feature that needs an unlock token from Microsoft
+  ([FocusSessionManager](https://learn.microsoft.com/en-us/uwp/api/windows.ui.shell.focussessionmanager),
+  [IsSupported](https://learn.microsoft.com/en-ca/uwp/api/windows.ui.shell.focussessionmanager.issupported?view=winrt-22621)).
+  The dev PC runs 22631 (23H2). Do Not Disturb has no public API either. So "focus" = a Cay timer, plus at most a link
+  to `ms-settings:quiethours` (Notifications → Do not disturb) that the user clicks.
+- *Win+V history is unreadable for Cay.* `Clipboard.GetHistoryItemsAsync` returns `AccessDenied` unless the caller has
+  focus ([ClipboardHistoryItemsResultStatus](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.datatransfer.clipboardhistoryitemsresultstatus),
+  [Clipboard](https://learn.microsoft.com/en-us/uwp/api/Windows.ApplicationModel.DataTransfer.Clipboard),
+  [blog](https://app-mzikmund.azurewebsites.net/blog/accessing-clipboard-history-in-uwp)), and the island never
+  takes focus (rule 2). Cay would need its own listener: `AddClipboardFormatListener` on a message-only window, as
+  `power.rs` does.
+- *Privacy markers to honour:* the registered formats `ExcludeClipboardContentFromMonitorProcessing` (present = skip),
+  `CanIncludeInClipboardHistory` (DWORD 0 = skip) and `Clipboard Viewer Ignore` (present = skip). Password managers,
+  private browser windows and RDP set them, but not always (Bitwarden's extension button didn't, per its forum)
+  ([CopyQ security notes](https://copyq-czech.readthedocs.io/cs/stable/_sources/security.rst.txt),
+  [CopyPaste privacy](https://github.com/rgdevment/CopyPaste/wiki/Privacy),
+  [Bitwarden thread](https://community.bitwarden.com/t/new-failure-with-acetext/71884)). So the feature stays opt-in.
+- *Drops on a click-through window:* OLE finds the drop target by hit-testing, which skips a `WS_EX_TRANSPARENT`
+  window, so the collapsed island can't receive a drop. Tauri's own drop handler is already on the island (C6). It
+  reports `WindowEvent::DragDrop` with **paths, in Rust**, so file names never need to cross IPC to be parked.
+- *Snap Layouts conflict:* dragging a *window* to the top centre opens Windows 11's snap bar, right where the island
+  sits. A window move runs in a move/size loop (`GetGUIThreadInfo` → `GUI_INMOVESIZE` on the foreground thread), so
+  Cay can tell a window drag from a file drag and keep out of the way.
+
+**Stages (least risky first; each useful on its own, each signed off before the next)**
+
+*5a: timer, stopwatch, focus (no switch: harmless until you click a preset).*
+- Rust `src-tauri/src/timer/`: `logic.rs` (pure: `Timer { kind: Countdown | Stopwatch | Focus, started_utc_ms,
+  deadline_utc_ms?, paused_ms }`, start/pause/resume/cancel/add-minute, "ended while asleep", restore after a restart;
+  unit-tested with fake clocks and DST/clock-jump cases) and `mod.rs` (managed `Timers`, a `timer` thread through
+  `activity::Watcher` that waits on a condvar until something runs, then wakes once per second, and once at the
+  deadline). Deadlines are **wall clock (UTC ms)**, not `Instant`, so sleep and lock are handled: a timer that ends
+  while the PC sleeps reports "Ended at 14:05" on wake. Persist the running timer in `%APPDATA%\…\timer.json` (one small
+  object), so a Cay restart picks it back up. Idle cost: one parked thread.
+- The end: an activity ("Timer done", Dismiss / +1 min) through the existing queue, with the optional sound
+  (`activity/sound.rs`, already gated by `activities.sound`). Focus = a 25-minute timer with a 5-minute break offered
+  at the end, plus the Do Not Disturb link above (the user's click, never automatic).
+- IPC (replaces the reserved `timer_start(ms)` / `timer:tick` line): commands `timer_start { kind, minutes? }`,
+  `timer_pause`, `timer_resume`, `timer_cancel`, `timer_add_minute`, `get_timer`; event `timer:state`
+  `{ kind, phase: running|paused|ended, deadlineMs?, startedMs, pausedMs, nowMs }` on every change and once a second
+  while running. React only renders the latest `timer:state` (no JS timer; its ring is a CSS animation on an `@property`
+  from `deadlineMs`/`nowMs`, like the charging ring).
+- Look (motion-designer): the pill shows `mm:ss` (tabular figures) and a thin progress ring when a timer runs; the
+  panel gets a small "Timer" row: presets 5 / 10 / 25 (focus) min and Stopwatch, then Pause / +1 min / Cancel while one
+  runs. Clicks only; no custom time in the island (typing needs focus). Existing tokens, `var(--accent)` for the ring.
+  Empty state: just the preset chips.
+- Agent runs: not exposed.
+
+*5b: drop shelf (switch `shelf.enabled`, off by default until signed off, then on).*
+- Rust `src-tauri/src/shelf/`: `logic.rs` (pure: the list, max 12 items, de-dup by path, "missing" when a file moved,
+  arming rules), `mod.rs` (managed `Shelf`, commands). Arming lives in the hover poller (rule 1): when the left button
+  is down (`GetAsyncKeyState`), it went down **outside** the hot zone, the cursor is now in the zone and the foreground
+  isn't in a move/size loop, the poller turns click-through off and shows the shelf's drop shape. Tauri's `DragEnter`
+  confirms a real file drag; with none within ~300 ms, or on button-up, it's disarmed. `DragDrop` paths are added in
+  Rust.
+- Holds **paths only, never copies** (nothing is written to disk but the list). The list survives a restart in
+  `%APPDATA%\…\shelf.json`; items whose file is gone show greyed with Remove. Drag out reuses `activity/drag.rs`
+  (`SHDoDragDrop`, sync command on the main thread, started while the button is down); an item stays until removed (or,
+  open question for Femi, leaves the shelf when dropped elsewhere, like macOS shelf apps).
+- IPC: commands `shelf_list`, `shelf_drag_out(id)`, `shelf_remove(id)`, `shelf_clear`, `shelf_open(id)` (reveal in
+  Explorer); event `shelf:items` `{ items: [{ id, name, kind, missing }] }`. File names cross IPC only to be shown;
+  full paths stay in Rust (ids, as Google links do). Logs: counts only.
+- Look: while armed, the pill widens into a "Drop to keep" target (dashed outline in `--accent`, no new colours); the
+  panel's Shelf section shows up to 12 file tiles (shell icons via `apps/icon.rs`'s `SHGetFileInfoW` path), × to remove,
+  Clear. Hidden when empty.
+- Agent runs: not exposed (a later, separate decision: "attach from shelf" in the command window).
+
+*5c: clipboard history (switch `clipboard.enabled`, off by default; stays opt-in).*
+- Rust `src-tauri/src/clipboard/`: `logic.rs` (pure: caps, de-dup, exclusion verdicts from the formats present,
+  text trimming), `watcher.rs` (message-only window, `AddClipboardFormatListener`, `WM_CLIPBOARDUPDATE` → check
+  the three markers **before** reading anything, then read `CF_UNICODETEXT` only; retry `OpenClipboard` briefly when
+  another app holds it). Text only in 5c (25 items, 16 KB each); images later if wanted (they cost memory and need
+  thumbnails).
+- **Memory only, never on disk**, cleared when Cay quits, when the session locks (`WTS_SESSION_LOCK` through `WTSRegisterSessionNotification` on the watcher's own message-only window; new, not in
+  `power.rs` today) and when the switch goes off. Never logged (counts only), never sent to agent runs, never shown in the
+  pill (only in the open panel). Desktop looks never capture Cay, so agent screenshots can't see it either.
+- Pasting back: clicking an item **puts it on the clipboard** (moved to the top, not re-recorded) and shows "Copied";
+  the user presses Ctrl+V. No synthetic keystrokes, no focus changes.
+- IPC: commands `clipboard_list`, `clipboard_copy(id)`, `clipboard_remove(id)`, `clipboard_clear`; event
+  `clipboard:items` (first line of each item, trimmed to ~80 chars, sent only while the panel is open, like
+  `processes:heavy`).
+- Look: a "Clipboard" panel section, one line per item in `--font-agent`-free UI type, × on hover, Clear. Hidden when
+  the switch is off; "Copy something to see it here" when empty.
+
+**Tests:** pure parts unit-tested with synthetic input (timer: sleep across the deadline, a clock set back, DST,
+restart restore; shelf: caps, de-dup, missing files, arming; clipboard: each marker, caps, de-dup, lock clears). The
+clipboard tests never read or write the author's real clipboard (a test that needs a live clipboard saves and
+restores it, and uses its own text). Manual check lists per stage.
+
+**Choices** (recommendation first; the author took every recommendation, 2026-11-06)
+1. Focus mode: Cay timer + a Do Not Disturb link (recommended) · Cay timer only · wait for Windows' Focus API.
+2. Timer survives a Cay restart via `timer.json` (recommended) · memory only.
+3. Shelf: items stay until removed (recommended) · leave the shelf when dropped elsewhere.
+4. Clipboard: text only, memory only, cleared on lock (recommended) · also images · also kept on disk (DPAPI).
+5. Order 5a → 5b → 5c (recommended), or skip 5c entirely.
+
+**Exit criteria:** each stage's manual checks pass; the island never takes focus, never blinks (no layered-style
+changes), stays click-through outside the panel and outside an armed drop; idle cost = parked threads only; nothing
+from the clipboard or file names in logs.
 
 ### Spikes (prototype before committing)
 - **Notifications mirror:** `UserNotificationListener` needs user consent and is unreliable for some apps.

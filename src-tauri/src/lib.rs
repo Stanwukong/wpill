@@ -13,6 +13,7 @@ mod media;
 mod migrate;
 mod processes;
 mod sessions;
+mod timer;
 mod tray;
 mod win32;
 mod window;
@@ -63,6 +64,7 @@ pub fn run() {
         .manage(agent::Agents::default())
         .manage(google::Google::default())
         .manage(processes::Processes::default())
+        .manage(timer::Timers::default())
         .setup(|app| {
             let handle = app.handle().clone();
             migrate::from_topbar(&handle);
@@ -75,6 +77,7 @@ pub fn run() {
             agent::spawn(&handle, &app.state::<activity::Activities>());
             google::spawn(&handle, &app.state::<activity::Activities>());
             processes::spawn(&handle, &app.state::<activity::Activities>());
+            timer::spawn(&handle, &app.state::<activity::Activities>());
             tray::create(&handle)?;
             Ok(())
         })
@@ -140,6 +143,13 @@ pub fn run() {
             google::calendar_join,
             processes::list_heavy_processes,
             processes::end_process_group,
+            timer::timer_start,
+            timer::timer_pause,
+            timer::timer_resume,
+            timer::timer_add_minute,
+            timer::timer_cancel,
+            timer::get_timer,
+            timer::timer_open_dnd,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Cay")

@@ -32,6 +32,8 @@ pub mod events {
     pub const CALENDAR_UPCOMING: &str = "calendar:upcoming";
     /// The memory-heavy apps, every 2 s while the panel is open and `processes.enabled` is on (Phase 3).
     pub const PROCESSES_HEAVY: &str = "processes:heavy";
+    /// The timer (Phase 5a): on every change, and once a second while one runs.
+    pub const TIMER_STATE: &str = "timer:state";
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -92,6 +94,8 @@ pub enum Activity {
     AgentFinished(AgentFinishedActivity),
     /// An event starts soon (Phase 6b): shown once, at `google.leadMinutes` before it.
     CalendarSoon(CalendarSoonActivity),
+    /// A countdown, focus or break reached its end (Phase 5a).
+    TimerDone(TimerDoneActivity),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -1113,4 +1117,56 @@ pub struct CalendarUpcoming {
     pub tasks: Vec<GoogleTask>,
     /// The pill's calendar icon shows: an event soon or in progress, or a task due.
     pub pending: bool,
+}
+
+/// Phase 5a: which timer runs. Focus and Break have fixed lengths (25 and 5 minutes).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TimerKind {
+    Countdown,
+    Stopwatch,
+    Focus,
+    Break,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TimerPhase {
+    Running,
+    Paused,
+    Ended,
+}
+
+/// One timer as React draws it. Times are wall-clock UTC ms; React draws `mm:ss` from `elapsedMs` (and
+/// `durationMs`) and runs no clock of its own.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimerState {
+    pub kind: TimerKind,
+    pub phase: TimerPhase,
+    pub started_ms: i64,
+    /// Countdown kinds only.
+    pub duration_ms: Option<i64>,
+    pub elapsed_ms: i64,
+    /// A running countdown's end.
+    pub deadline_ms: Option<i64>,
+    pub ended_at_ms: Option<i64>,
+    pub now_ms: i64,
+}
+
+/// `timer:state` (on every change, and once a second while one runs) and the timer commands' reply.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimerPayload {
+    pub timer: Option<TimerState>,
+}
+
+/// `timerDone`: Dismiss / +1 min (Break after Focus). `late`: it ended a while before Cay saw it (the PC slept), so the
+/// island says when ("Ended at 14:05").
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimerDoneActivity {
+    pub kind: TimerKind,
+    pub ended_at_ms: i64,
+    pub late: bool,
 }

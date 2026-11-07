@@ -78,6 +78,8 @@ fn rules(activity: &Activity) -> Rules {
         Activity::AgentFinished(_) => notice(2, ms(5000), ms(120_000)),
         // Long enough to reach Join; stale once the lead time is mostly gone.
         Activity::CalendarSoon(_) => notice(2, ms(8000), ms(120_000)),
+        // You set it, so it outranks other notices; still there if you come back within ten minutes.
+        Activity::TimerDone(_) => notice(3, ms(12_000), ms(600_000)),
     }
 }
 
@@ -99,8 +101,12 @@ fn key(activity: &Activity) -> String {
         Activity::AgentActing(_) => ACTING_KEY.into(),
         Activity::AgentFinished(f) => format!("agent:{}", f.run_id),
         Activity::CalendarSoon(c) => calendar_key(&c.event_id),
+        Activity::TimerDone(_) => TIMER_KEY.into(),
     }
 }
+
+/// One timer at a time, so one key: `timer::retract_done` withdraws it after Dismiss, +1 min or a new start.
+pub const TIMER_KEY: &str = "timer";
 
 /// One action runs at a time, so one key: waiting → acting updates it in place.
 pub const ACTING_KEY: &str = "acting";
@@ -135,6 +141,7 @@ pub fn interactive(activity: &Activity) -> bool {
             | Activity::AgentApproval(_)
             | Activity::AgentFinished(_)
             | Activity::CalendarSoon(_)
+            | Activity::TimerDone(_)
     )
 }
 
@@ -439,6 +446,34 @@ pub mod tests {
         let next = q.take_next(t0 + ms(2000)).unwrap();
         assert!(matches!(next.activity, Activity::Screenshot(_)));
         assert_eq!(q.take_next(t0 + ms(2000)), None);
+    }
+
+    fn timer_done() -> Activity {
+        Activity::TimerDone(crate::ipc::TimerDoneActivity {
+            kind: crate::ipc::TimerKind::Countdown,
+            ended_at_ms: 0,
+            late: false,
+        })
+    }
+
+    #[test]
+    fn a_finished_timer_waits_its_turn_is_clickable_and_can_be_withdrawn() {
+        let t0 = Instant::now();
+        let mut q = Queue::default();
+        assert!(
+            q.offer(timer_done(), t0, false).is_none(),
+            "waits while the panel is open"
+        );
+        let shown = q.take_next(t0 + ms(300_000)).unwrap();
+        assert!(matches!(shown.activity, Activity::TimerDone(_)));
+        assert!(q.current_interactive());
+        assert_eq!(q.retract(TIMER_KEY), Some(shown.id), "Dismiss or +1 min");
+        q.offer(timer_done(), t0, false);
+        assert_eq!(
+            q.take_next(t0 + ms(600_001)),
+            None,
+            "stale after ten minutes"
+        );
     }
 
     #[test]

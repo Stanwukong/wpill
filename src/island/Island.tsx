@@ -19,6 +19,10 @@ import { useArtTheme } from "../features/media/artTheme";
 import { MediaCard } from "../features/media/MediaCard";
 import { Equalizer, PillArt } from "../features/media/PillMedia";
 import { useMedia } from "../features/media/useMedia";
+import { PillTimer } from "../features/timer/PillTimer";
+import { TimerSection } from "../features/timer/TimerSection";
+import { showsInPill } from "../features/timer/timerFormat";
+import { useTimer } from "../features/timer/useTimer";
 import { Clock } from "./Clock";
 import { ACTIVITY_RADIUS, contentFade, islandSpring, PANEL_RADIUS, PILL_RADIUS } from "./motion";
 import { useIslandState } from "./useIslandState";
@@ -56,6 +60,7 @@ export function Island() {
   const agentRuns = useAgentRuns();
   const calendar = useCalendar();
   const heavyProcesses = useHeavyProcesses();
+  const timer = useTimer();
   const calendarListed =
     calendar.connected && (calendar.upcoming.events.length > 0 || calendar.upcoming.tasks.length > 0);
   const workingSessions = agentSessions.filter((s) => s.status === "working");
@@ -126,6 +131,7 @@ export function Island() {
               {/* One scroller under the fixed clock and media card; each section keeps its natural height. */}
               <div className="island__scroll">
                 {calendarListed && <CalendarSection upcoming={calendar.upcoming} />}
+                <TimerSection timer={timer} />
                 <AgentsSection
                   sessions={agentSessions}
                   limits={usageLimits}
@@ -154,6 +160,7 @@ export function Island() {
               {agentWorking && <WorkingIndicator />}
               {pillStep?.step && <StepLabel className="pill-step" text={pillStep.step} todos={pillStep.todos} />}
               <Clock variant="pill" />
+              {showsInPill(timer) && <PillTimer timer={timer} />}
               {calendar.connected && calendar.upcoming.pending && <CalendarMark className="pill-calendar" />}
               {nowPlaying && <Equalizer />}
             </motion.div>

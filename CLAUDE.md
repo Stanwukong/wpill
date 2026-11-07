@@ -429,3 +429,9 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
   760 px column through a container query on `.cmd__main` (`--col`), so narrow windows are unchanged.
 - **Long Python edit scripts in Git Bash:** an inline `python - <<'EOF'` heredoc with many quotes failed to parse
   ("unexpected EOF"); write the script to a file under `C:\tmp` (or use Edit) instead.
+- **Layout, Phase 5a (timer):** `src-tauri/src/timer/`: `logic.rs` (pure: one `Timer` in wall-clock UTC ms, `tick`
+  ends at the deadline, `late`, `restore`, `next_wake_ms`), `mod.rs` (managed `Timers`, the `timer` thread through
+  `activity::Watcher`, parked on a condvar while idle; `timer.json`; `timer_*` commands, `timer:state`, the `timerDone`
+  activity, `timer_open_dnd` = `ms-settings:notifications`). `src/features/timer/`: `useTimer` (lives in `Island`),
+  `PillTimer`, `TimerSection`, `TimerDone`, pure `timerFormat.ts` (tested). The ring uses `--media-accent`, not
+  `--accent` (the charging green). Never count time in React.

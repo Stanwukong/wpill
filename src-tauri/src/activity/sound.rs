@@ -37,7 +37,10 @@ impl Chime {
 fn needs_you(activity: &Activity) -> bool {
     matches!(
         activity,
-        Activity::SessionNeedsInput(_) | Activity::SessionApproval(_) | Activity::AgentApproval(_)
+        Activity::SessionNeedsInput(_)
+            | Activity::SessionApproval(_)
+            | Activity::AgentApproval(_)
+            | Activity::TimerDone(_)
     )
 }
 

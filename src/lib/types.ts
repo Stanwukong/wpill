@@ -230,7 +230,8 @@ export type Activity =
   | { kind: "agentApproval"; payload: AgentApprovalActivity }
   | { kind: "agentActing"; payload: AgentActingActivity }
   | { kind: "agentFinished"; payload: AgentFinishedActivity }
-  | { kind: "calendarSoon"; payload: CalendarSoonActivity };
+  | { kind: "calendarSoon"; payload: CalendarSoonActivity }
+  | { kind: "timerDone"; payload: TimerDoneActivity };
 
 /** `activity:show`. The same `id` again means the activity was updated in place (e.g. another volume step). */
 export type ActivityPayload = Activity & {
@@ -612,6 +613,7 @@ export interface AppError {
     | "calendarItemGone"
     | "processGroupGone"
     | "processEndBusy"
+    | "timer"
     | "win32"
     | "tauri";
   message: string;
@@ -733,3 +735,33 @@ export type EndOutcome =
   | "prompted"
   /** Windows refused for another reason. */
   | "failed";
+
+// Phase 5a: timer, stopwatch and focus (mirrors `TimerKind`, `TimerState`, `TimerPayload` in ipc.rs).
+export type TimerKind = "countdown" | "stopwatch" | "focus" | "break";
+export type TimerPhase = "running" | "paused" | "ended";
+
+/** Wall-clock UTC ms. Draw `mm:ss` from `elapsedMs` (and `durationMs`); Rust sends it once a second while running. */
+export interface TimerState {
+  kind: TimerKind;
+  phase: TimerPhase;
+  startedMs: number;
+  /** Countdown kinds only (focus 25 min, break 5 min). */
+  durationMs: number | null;
+  elapsedMs: number;
+  /** A running countdown's end. */
+  deadlineMs: number | null;
+  endedAtMs: number | null;
+  nowMs: number;
+}
+
+/** `timer:state` and the timer commands' reply. `null`: no timer. */
+export interface TimerPayload {
+  timer: TimerState | null;
+}
+
+/** A countdown reached its end. `late`: it ended a while before Cay saw it (sleep); say when ("Ended at 14:05"). */
+export interface TimerDoneActivity {
+  kind: TimerKind;
+  endedAtMs: number;
+  late: boolean;
+}

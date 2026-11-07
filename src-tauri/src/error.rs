@@ -46,6 +46,8 @@ pub enum AppError {
     ProcessGroupGone,
     #[error("Cay is already ending an app.")]
     ProcessEndBusy,
+    #[error("{0}")]
+    Timer(String),
     #[error(transparent)]
     Win32(#[from] windows::core::Error),
     #[error(transparent)]
@@ -75,6 +77,7 @@ impl AppError {
             Self::CalendarItemGone => "calendarItemGone",
             Self::ProcessGroupGone => "processGroupGone",
             Self::ProcessEndBusy => "processEndBusy",
+            Self::Timer(_) => "timer",
             Self::Win32(_) => "win32",
             Self::Tauri(_) => "tauri",
         }
