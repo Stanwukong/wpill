@@ -14,7 +14,8 @@ collapsed it doesn't block a single click.
   <img src="docs/images/approval.png" alt="An approval card asking to allow a shell command, with Deny and Allow" height="136">
 </p>
 
-> **Status:** v0.2 is being prepared. Cay was called TopBar until November 2026. Built for Windows 11 only.
+> **Status:** v1.0 is a pre-release for beta testers (November 2026). Expect rough edges, and please
+> [report them](#bugs-and-feedback). Cay was called TopBar until November 2026. Built for Windows 11 only.
 
 ## What it does
 
@@ -40,13 +41,13 @@ collapsed it doesn't block a single click.
 Download `Cay_<version>_x64-setup.exe` from [Releases](https://github.com/Stanwukong/wpill/releases) and run it. It installs for
 your user only (no admin) into `%LOCALAPPDATA%\Cay`, and adds a tray icon with **Launch at startup** and **Quit Cay**.
 
-v0.2 isn't code-signed yet (signing is planned from v0.3), so Windows SmartScreen will say "Windows protected your PC"
-and list the publisher as unknown. Check your download first (below), then click **More info** → **Run anyway**.
+Cay isn't code-signed yet (signing is planned for a later release), so Windows SmartScreen will say "Windows protected
+your PC" and list the publisher as unknown. Check your download first (below), then click **More info** → **Run anyway**.
 
 **Check your download.** Each release lists the installer's SHA-256 checksum. In PowerShell:
 
 ```powershell
-Get-FileHash .\Cay_0.2.0_x64-setup.exe -Algorithm SHA256
+Get-FileHash .\Cay_1.0.0_x64-setup.exe -Algorithm SHA256
 ```
 
 The hash must match the one on the release page exactly. If it doesn't, delete the file.
@@ -69,6 +70,30 @@ routines and agent history, and moves the startup entry if you had it on. If you
   - **Local models** (through Goose with Ollama) are planned. Be realistic about hardware: agent work needs a
     model around 30B parameters, which wants about 32 GB of RAM or a 24 GB GPU. 16 GB runs smaller models slowly, and
     8 GB isn't enough.
+
+## Known limitations
+
+These are the ones you're likely to notice. [PLAN.md](PLAN.md#known-limitations) has the full list.
+
+- The island lives on the primary monitor only. Choosing another monitor comes with the settings window.
+- Windows' own volume and brightness pop-ups still appear next to Cay's.
+- There's no settings window yet. Switches and agent settings are edited by hand in
+  `%APPDATA%\io.github.stanwukong.cay\settings.json`, and Cay reads them when it starts.
+- Brightness works for a laptop's own screen only, not for external monitors.
+- Screenshots are picked up from the Screenshots folder only. PrtScn to the clipboard (no file) shows nothing.
+- Media: each app decides what it shares. Browsers often disable next and previous, and some apps send no progress.
+- Clicking an agent session focuses its window, not its Windows Terminal tab.
+- Google Calendar, Tasks and Gmail need your own Google OAuth client ID (`google.clientId` in `settings.json`), and
+  Google shows an "unverified app" screen when you sign in.
+
+## Bugs and feedback
+
+- **Something broke?** [Report a bug](https://github.com/Stanwukong/wpill/issues/new?template=bug_report.yml). The
+  form asks for your Windows version, display setup and what happened. Screenshots or a short screen recording help a
+  lot.
+- **An idea?** [Suggest a feature](https://github.com/Stanwukong/wpill/issues/new?template=feature_request.yml).
+- Please check [Known limitations](#known-limitations) and the
+  [open issues](https://github.com/Stanwukong/wpill/issues) first.
 
 ## What it touches, and privacy
 
