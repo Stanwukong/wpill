@@ -1,6 +1,6 @@
 [package]
 name = "cay"
-version = "0.1.0"
+version = "1.0.0"
 description = "A Dynamic Island-style surface for Windows 11, with Claude Code activity and approvals"
 license = "MIT"
 repository = "https://github.com/Stanwukong/wpill"
