@@ -1,0 +1,22 @@
+name: Feature request
+description: An idea for something Cay could do.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like Cay to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why would it help you?
+      description: What you're trying to do, or what gets in your way today.
+
+  - type: textarea
+    id: else
+    attributes:
+      label: Anything else?
+      description: How another app does it, a sketch, a screenshot.

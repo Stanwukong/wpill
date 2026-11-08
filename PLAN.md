@@ -24,7 +24,7 @@ and never for the run, stopped by any input of yours, with all 12 manual checks 
 Cay runs), with all 12 manual checks passed. Phase 2.7 is complete.**
 [Phase 4a](#phase-4a-release-readiness) (release readiness): 4a-1 (own visual identity: the amber wave, D30), 4a-2
 (display changes followed live, D31; dock check pending) and 4a-3 (renamed **Cay**, README, MIT, D32) are done and 4a-4
-decided (v0.2 unsigned, D33) (2026-11-01). **4a-5 (release v0.2) and the dock check are deferred to the end of all
+decided (v0.2 unsigned, D33) (2026-11-01). **4a-5 (the release, now the 1.0.0 beta, D60) and the dock check are deferred to the end of all
 phases** (the author's call, 2026-11-02).
 **Phase 2.8 is complete (2026-11-02): agent UX, stages 2.8a–f (D34, D36–D41), with 2.8a, 2.8e and 2.8f signed off by
 hand.** **Phase 6 is complete (2026-11-03): [Google Calendar and Gmail](#phase-6-google-calendar-and-gmail-complete-2026-11-03)
@@ -51,7 +51,11 @@ D50) signed off, all manual checks passed (3b on the author's other machine).** 
 `self/phase-3-memory-heavy` (PR #2). Next, per the roadmap: [Phase 2.10, agent window UI](#phase-210-agent-window-ui-design-agreed-2026-11-05-d51-d52)
 (added 2026-11-05, D51; design agreed 2026-11-05, D52; built on branch `self/phase-2.10-agent-window`, PR #3; 2.10c–d in PR #4, merged 2026-11-05).
 **Stages 2.10a (readable transcript) and 2.10b (attachments) are built and merged (PR #3, 2026-11-05); 2.10c (the window: maximize, remembered place, wide layout, D54) and 2.10d (polish, D55) are built (2026-11-05, draft PR #4). Their manual checks are pending.** With 2.10d every Phase 2.10 task is built. After 2.10: [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
-[prompts/phase-5-utilities.md](prompts/phase-5-utilities.md); **design agreed 2026-11-06 (D56), all five recommended choices; stage 5a (timer, stopwatch, focus, D57) built 2026-11-06 on branch `self/phase-5-utilities`, PR #5; its manual check is pending, then 5b (shelf)**), the spikes, and last 4a-5 (release). **Desktop tools made cheaper 2026-11-08 (D58): smaller trees, no forced look after actions, timings in the audit; a faster walk (D59). Narrower looks are next ([Desktop tools: cost and speed](#desktop-tools-cost-and-speed-started-2026-11-08-d58)).** See
+[prompts/phase-5-utilities.md](prompts/phase-5-utilities.md); **design agreed 2026-11-06 (D56), all five recommended choices; stage 5a (timer, stopwatch, focus, D57) built 2026-11-06 on branch `self/phase-5-utilities`, PR #5; its manual check is pending, then 5b (shelf)**), the spikes, and last 4a-5 (release). **Desktop tools made cheaper 2026-11-08 (D58): smaller trees, no forced look after actions, timings in the audit; a faster walk (D59). Narrower looks are next ([Desktop tools: cost and speed](#desktop-tools-cost-and-speed-started-2026-11-08-d58)).**
+**Beta (2026-11-08, D60):** v0.1.0 went out first as a GitHub pre-release (no checksum in its notes). The beta for testers is
+**1.0.0** (manifests bumped, the author's call): README for testers (status, Known limitations, Bugs and feedback), issue
+forms in `.github/ISSUE_TEMPLATE/`, and `scripts/release.ps1`, which builds, puts the SHA-256 in the notes and creates a
+draft pre-release for the author to publish. A log file for testers was proposed and declined for now (release builds still log nowhere). See
 [Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
@@ -537,7 +541,7 @@ meaning; new phases slot in between.
 | 3 | **2.5 Live Activities** | Island auto-expands for system events | The defining Dynamic Island behavior; reuses Phase 2's pill plumbing. |
 | 4 | **2.6 Claude Code activity** | Island shows when a local Claude Code session finishes or needs a decision | Added 2026-10-30 (D17). Small once 2.5's activity queue exists; high daily value while working with Claude Code. |
 | 5 | **2.7 Local automation agent** | Type an instruction; Cay runs a headless Claude Code session, shows progress in the island, asks for approvals there, and gives Claude desktop tools through its own MCP server | Added 2026-10-30 (D21). Builds directly on 2.6's pipe, sessions and activities. Staged so each stage is useful on its own. |
-| 6 | **4a Release readiness** (4a-1 to 4a-4 done; **4a-5 release and the dock check deferred to the end**, 2026-11-02) | Multi-monitor + per-monitor DPI, code signing, v0.2 release | Docking/undocking breaks placement today; unsigned installers trigger SmartScreen. |
+| 6 | **4a Release readiness** (4a-1 to 4a-4 done; **4a-5 release and the dock check deferred to the end**, 2026-11-02) | Multi-monitor + per-monitor DPI, code signing, first release (1.0.0 beta, D60) | Docking/undocking breaks placement today; unsigned installers trigger SmartScreen. |
 | 7 | **2.8 Agent UX** (complete 2026-11-02) | Approve terminal sessions from the island, see what you approve, questions and plans, a live step line, permission modes, trustworthy Connect | Proposed 2026-11-01 after a competitor survey (D34). Approving terminal sessions is the core of every rival; Cay only focuses the window. |
 | 8 | **6 Google Calendar and Gmail** (complete 2026-11-03; prompt [phase-6-google.md](prompts/phase-6-google.md)) | Upcoming events and tasks in the pill and panel; Gmail and Calendar tools for agent runs | Proposed 2026-11-01 (D35). Replaces the "calendar peek" spike. |
 | 9 | **2.9 Other agents and open models** (complete 2026-11-04, D47/D48; Goose deferred; prompt [phase-2.9-other-agents.md](prompts/phase-2.9-other-agents.md)) | Codex / OpenCode sessions in the island; agent runs through ACP (Goose + Ollama first) beside the native Claude Code path | Proposed 2026-11-01 after a competitor survey. Every rival watches several CLIs; none runs agents. Keeps Cay's lead (runs, routines, desktop tools) while closing the coverage gap. |
@@ -545,7 +549,7 @@ meaning; new phases slot in between.
 | 11 | **2.10 Agent window UI** (next; proposed 2026-11-05, D51) | Readable, structured transcript (Markdown, turns, folded tool calls), image and file attachments, fullscreen, layout and composer polish | The author's request: the command window is where runs are read and steered, and it reads like a raw log today. |
 | 12 | **5 Utilities** (prompt [phase-5-utilities.md](prompts/phase-5-utilities.md)) | Timer/stopwatch/focus, drop shelf + clipboard | High daily value, low platform risk. |
 | 13 | **Spikes** | Notifications mirror, live window previews (calendar peek moved to Phase 6) | Uncertain feasibility or needs sign-in; prototype before committing. |
-| 14 | **4a-5 Release v0.2** (deferred here 2026-11-02) | Full manual pass of every phase, the dock check, publish the installer with its SHA-256 | The author's call: release once every phase is in. |
+| 14 | **4a-5 Release: the 1.0.0 beta** (deferred here 2026-11-02; D60) | Full manual pass of every phase, the dock check, publish the installer with its SHA-256 | The author's call: release once every phase is in. |
 
 ### Phase 1.5: shell basics (complete 2026-10-30)
 - [x] Tray icon (`tauri` `tray-icon` feature, `src-tauri/src/tray.rs`). The menu (left or right click) shows a
@@ -1070,7 +1074,7 @@ hook; deliberately not mixed in here).
 
 ### Phase 4a: release readiness
 Kick-off prompt: [prompts/phase-4a-release-readiness.md](prompts/phase-4a-release-readiness.md) (stages 4a-1 identity,
-4a-2 monitors and DPI, 4a-3 name and repo, 4a-4 signing, 4a-5 v0.2 release).
+4a-2 monitors and DPI, 4a-3 name and repo, 4a-4 signing, 4a-5 first release: the 1.0.0 beta, D60).
 - [x] **4a-1 Own visual identity** (2026-11-01, D30): the Claude Code look-alike spinner, `✻` mark and orange are
       replaced by an amber wave (`WorkingIndicator`, a sine scrolling one wavelength per 1.6 s), the wave at rest
       (`AgentMark`) and the `--agent` amber (`#f6a823`, ink `#0f0f0f`) from the femiajanaku palette; amber edge glow
@@ -1104,9 +1108,9 @@ Kick-off prompt: [prompts/phase-4a-release-readiness.md](prompts/phase-4a-releas
       worldwide, "Open Source Developer, <name>") and OV/EV (EV lost its instant SmartScreen pass in 2024). No option
       skips SmartScreen for a new app; signing builds publisher reputation over releases. The README explains the
       SmartScreen prompt and how to check the installer's SHA-256, which every release lists.
-- [ ] Signing from v0.3: Certum Open Source (own name) or SignPath (free); wire `bundle.windows.signCommand`, never
+- [ ] Signing in a later release: Certum Open Source (own name) or SignPath (free); wire `bundle.windows.signCommand`, never
       commit a secret, check `cay.exe` and the installer with `signtool verify /pa`
-- [ ] Rerun the manual checklist; publish v0.2 installer
+- [ ] Rerun the manual checklist; publish the 1.0.0 beta with `scripts/release.ps1` (D60)
 - [ ] Before release: a home page and privacy policy (e.g. GitHub Pages) so the Google project can be published (Phase 6)
 
 **Manual check (Phase 4a-2)** (`pnpm tauri dev` with `$env:RUST_LOG='info,cay_lib=debug'`; each step logs
@@ -2250,13 +2254,18 @@ from the clipboard or file names in logs.
 - Windows 11 already has the WebView2 runtime, so nothing else is downloaded. On machines without it,
   Tauri's default NSIS mode fetches a small WebView2 bootstrapper during install.
 - A fresh release build takes ~11 min (fat LTO). The release profile trades build time for size.
-- **v0.2 is not code-signed (D33):** SmartScreen warns "Windows protected your PC" with an unknown publisher. Each
-  release lists the installer's SHA-256 (`Get-FileHash … -Algorithm SHA256`); the README explains both. Signing is
-  planned from v0.3.
+- **The first public pre-release was 0.1.0** (2026-11-08), not 0.2 as D33 planned; the beta for testers is **1.0.0**
+  (D60). Releases are not code-signed yet (D33): SmartScreen warns "Windows protected your PC" with an unknown
+  publisher. The README explains it and how to check the SHA-256 (`Get-FileHash … -Algorithm SHA256`).
+- **Releases go through `scripts/release.ps1 -Version <v>`** (D60): it refuses a dirty tree, an existing tag or
+  mismatched manifests, builds, hashes the installer, fills `scripts/release-notes.md` (version, SHA-256, a "What's new"
+  file passed with `-WhatsNew`) and creates a **draft** pre-release. The author reads and publishes it on GitHub.
 
 ## Open questions
 - ~~Release v0.2 before Phase 6?~~ Decided 2026-11-02: no, 4a-5 waits until every phase is in.
-- Signing from v0.3: Certum Open Source certificate (own name, ~€69) or SignPath Foundation (free, their name)?
+- Signing in a later release: Certum Open Source certificate (own name, ~€69) or SignPath Foundation (free, their name)?
+- The TopBar migration (`migrate.rs`, `OLD_IDENTIFIER`, `OLD_VALUE_NAME`, `OLD_MARKER`) is kept "until v1" (CLAUDE.md).
+  The beta is 1.0.0 (D60): keep it through the beta and drop it in the first release after?
 - Rename the GitHub repo from `wpill` to `cay`? (GitHub redirects the old URL; the README and configs link `wpill`.)
 
 ## Decided

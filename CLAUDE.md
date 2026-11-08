@@ -35,6 +35,7 @@ pnpm install
 pnpm tauri dev              # run the app (Vite HMR for React; Rust rebuilds + relaunches on save)
 $env:RUST_LOG='info,cay_lib=debug'; pnpm tauri dev   # + hover transitions, panel-rect, media:state and activity:show logs
 pnpm tauri build            # release build + NSIS installer (~11 min cold: fat LTO; ~1.5 MB installer)
+.\scripts\release.ps1 -Version 1.0.0 [-WhatsNew <file.md>] [-SkipBuild]   # checks, build, SHA-256 into scripts\release-notes.md, DRAFT pre-release (you publish it)
 cd src-tauri; cargo fmt; cargo clippy --all-targets; cargo test
 pnpm typecheck              # tsc --noEmit
 # Debug builds only: drive agent runs from outside (forwarded to the running Cay; results in its log)
