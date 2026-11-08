@@ -1099,6 +1099,27 @@ about 680 elements of that window instead of 400–550. Every new result was an 
 *Alternatives:* `TreeScope_Subtree` in one call (fastest, but no node, depth or time bound: a big page could fail its
 2 s transaction timeout whole); the walker everywhere (C16 avoided, but 2–3× slower).
 
+### D60: The beta is 1.0.0; every release's checksum comes from a script (Phase 4a-5)
+*What:* the first public pre-release went out on 2026-11-08 as **v0.1.0**, not the v0.2 that D33 planned, and its notes
+had no checksum, no SmartScreen note and nowhere to report bugs. The manifests had said 0.1.0 since the Phase 1
+scaffold and were never bumped, so the build was 0.1.0, and the notes were written by hand. Before asking people to
+test, the author chose to call the beta **1.0.0** (package.json, tauri.conf.json, Cargo.toml) and released it as a
+GitHub pre-release. `scripts/release.ps1 -Version <v>` now makes every release: it refuses a dirty tree, HEAD not on
+origin, an existing tag or release, or manifests that disagree; runs `pnpm tauri build` (unless `-SkipBuild`);
+hashes `Cay_<v>_x64-setup.exe` with `Get-FileHash`; fills `scripts/release-notes.md` (version, SHA-256, a "What's
+new" file, SmartScreen steps, what to try, known limitations, the bug form); and runs `gh release create --draft
+--prerelease --target <HEAD>`. It never publishes: the author reads the draft and publishes it. The README gained
+Known limitations and Bugs and feedback sections, and `.github/ISSUE_TEMPLATE/` a bug form (part, Windows build,
+monitors, scale) so testers report what we need without guessing.
+*Why:* D33 rests on the checksum being on the release page, and a step done by hand was missed on the very first
+release. Hashing the file the script just built and putting it straight into the notes leaves nothing to paste.
+A draft keeps a person between the script and the public page. GitHub also shows each asset's SHA-256 digest, a second
+check that matched (v0.1.0: `5255a962…6e018`, hashed from the published download).
+*Alternatives:* 0.2.0 as D33 planned, or a SemVer pre-release such as `1.0.0-beta.1` (the author chose 1.0.0 and the
+GitHub pre-release flag); keeping hand-written notes with a checklist (already missed once); building in GitHub
+Actions (needed later for SignPath, but not for an unsigned beta); letting the script publish (one wrong checksum
+or a TODO left in the notes would go straight to testers).
+
 ### C8: The agent pipe refused every bridge's hello
 *Symptom:* the first real agent run failed with "MCP tool mcp__topbar__approve not found"; TopBar's log said it had
 refused two connections "without a valid run token". *Diagnosis:* the bridge writes its hello as soon as it connects,
@@ -1269,6 +1290,7 @@ at a time (there are few of them); after that the walks matched element for elem
 | 2026-11-06 | Phase 5 design agreed (D56). Stage 5a built (D57): wall-clock timer, stopwatch and 25-minute focus with a break, `timer.json` across restarts, the `timerDone` activity, `mm:ss` and a ring in the pill, the panel's Timer section. Manual check pending. |
 | 2026-11-08 | Desktop tools made cheaper (D58) after `/usage` put Cay's `cay` MCP server at 21%: smaller `ui_tree` by default (containers merged, offscreen skipped, bounds on request, 250 elements / 24 KB), action replies with the focused element and no forced look, `ms`/`replyChars`/`imageTokens` in the audit. 335 Rust tests. The `motion-designer` agent now runs on Sonnet (it was 22% of usage on the session's model). |
 | 2026-11-08 | Faster tree walk (D59): a windowless parent's children in one UIA call with the runtime id cached, the walker kept for parents with their own HWND after a XAML island child went missing (C16). Same elements, 1.3–2.8× faster on a WebView2 app. 335 Rust tests. |
+| 2026-11-08 | v0.1.0 published as a GitHub pre-release. Beta readiness (D60): version 1.0.0, README for testers, issue forms, `scripts/release.ps1` (checksum in the notes, draft only). |
 | 2026-11-05 | Stage 2.10c built (the window, D54): maximize button, F11 and double-click with `command:maximized` from Rust, Esc restores first, `agent.window` remembered and fitted onto a current work area, a 760 px reading column when wide. 322 Rust and 16 TS tests. Manual check pending. |
 | 2026-11-05 | Stage 2.10b built (attachments, D53): Rust copies and scales, `--add-dir` for Claude Code, ACP `image`/`resource_link` blocks by `promptCapabilities`, clipboard (`CF_HDROP`, PNG, DIB) and drop commands, the Attach picker, chips, paste and drop in both composers. 317 Rust and 16 TS tests. Manual check pending. The routine resumed it after the author's VS Code session hit its usage limit mid-2.10b.2. |
 | 2026-11-05 | Phase 2.10 design agreed (D52, every recommendation). Stage 2.10a built by the daily routine: Markdown tables/links/strike/code (own parser, now pure and tested with `node --test`, no dependency), https links opened by Rust, the transcript as turns with folded tool groups and diffs, a summary card with duration, copy message/run, Jump to latest, and Claude's text streamed as drafts (`--include-partial-messages`, throttled to 10 Hz in `lifecycle.rs`, no `agent:runs` per delta). 296 Rust and 13 TS tests. Manual check pending. |
