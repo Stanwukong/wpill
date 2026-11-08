@@ -55,7 +55,7 @@ D50) signed off, all manual checks passed (3b on the author's other machine).** 
 **Beta (2026-11-08, D60):** v0.1.0 went out first as a GitHub pre-release (no checksum in its notes). The beta for testers is
 **1.0.0** (manifests bumped, the author's call): README for testers (status, Known limitations, Bugs and feedback), issue
 forms in `.github/ISSUE_TEMPLATE/`, and `scripts/release.ps1`, which builds, puts the SHA-256 in the notes and creates a
-draft pre-release for the author to publish. A log file for testers is proposed, not built. See
+draft pre-release for the author to publish. A log file for testers was proposed and declined for now (release builds still log nowhere). See
 [Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
