@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Check known limitations first
+    url: https://github.com/Stanwukong/wpill#known-limitations
+    about: Things that are known not to work yet in this release.

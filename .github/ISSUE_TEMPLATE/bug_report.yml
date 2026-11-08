@@ -1,0 +1,92 @@
+name: Bug report
+description: Something in Cay doesn't work the way it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing Cay. Please check the [known limitations](https://github.com/Stanwukong/wpill#known-limitations) first. Only the fields with a star are required.
+
+  - type: input
+    id: version
+    attributes:
+      label: Cay version
+      description: The number in the installer's name, for example 1.0.0.
+      placeholder: "1.0.0"
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: Press Win+R, type `winver` and press Enter. Copy the version and build, for example "23H2 (OS Build 22631.4460)".
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of Cay?
+      options:
+        - Install or startup
+        - Island and hover
+        - Running apps
+        - Media
+        - Activities (volume, brightness, battery, Bluetooth, Caps Lock, screenshots)
+        - Claude Code sessions
+        - Codex sessions
+        - OpenCode sessions
+        - Agent runs and routines
+        - Google (Calendar, Tasks, Gmail)
+        - Memory-heavy apps
+        - Timer
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: monitors
+    attributes:
+      label: Monitors
+      description: How many monitors, and is Cay on your main one?
+      placeholder: "2 monitors, Cay on the main one"
+
+  - type: input
+    id: scale
+    attributes:
+      label: Display scale
+      description: Settings > System > Display > Scale.
+      placeholder: "125%"
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: What did you do?
+      description: The steps that led to the problem, as best you remember them.
+      placeholder: |
+        1. Played a song in Spotify
+        2. Hovered the top of the screen
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshots or a screen recording
+      description: Drag images or a short video here. Win+Shift+S takes a screenshot, and the Snipping Tool can also record the screen. Please check they don't show anything private.
+
+  - type: textarea
+    id: agents
+    attributes:
+      label: Agent versions
+      description: Only if this is about Claude Code, Codex or OpenCode. Run `claude --version`, `codex --version` or `opencode --version`.
+      render: text
