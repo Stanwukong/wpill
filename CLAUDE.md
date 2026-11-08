@@ -339,6 +339,9 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
   by default merges unnamed containers (refs skip numbers), skips offscreen elements (`uia::Walked.offscreen`) and
   leaves out bounds (`bounds: true`); keep new fields off by default. Action replies carry the focused element
   instead of asking for another look. Judge a change by the audit lines' `ms`, `replyChars`, `chars` and `imageTokens`.
+  The walk (D59) fetches a windowless parent's children in one call; keep the walker for parents with their own HWND
+  (`TreeScope_Children` leaves out child windows another provider adds, C16). Compare walks by runtime ids, never by
+  printing a window's content (the foreground window may be the user's browser).
 - **Images for Claude** stay ≤1568 px long edge and ≤500 KB (Claude Code re-compresses over 512,000 bytes and cuts
   results over `MAX_MCP_OUTPUT_TOKENS`), and replies must stay well under the agent pipe's 4 MiB cap (an oversized reply
   is dropped and Claude Code waits). Claude Code stores tool images in its session transcripts under `~/.claude/projects`.

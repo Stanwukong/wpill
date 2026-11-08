@@ -1087,6 +1087,18 @@ them); diffs against the previous tree, a scoped `root`/`find`, screenshot `regi
 (`TreeScope_Children`, `UIA_RuntimeIdPropertyId` in the cache) and per-window grants for UIA actions are the next
 steps, not done yet (PLAN.md, "Desktop tools: cost and speed").
 
+### D59: The tree walk fetches a parent's children in one call
+*What:* `uia::walk` used `ControlViewWalker`: one cross-process call per child (first child, then each next sibling)
+plus an uncached `GetRuntimeId` per element. A windowless parent's children now come back in one call
+(`BuildUpdatedCache` with `TreeScope_Element | TreeScope_Children`), every property included, the runtime id too
+(`UIA_RuntimeIdPropertyId`, read from the cached `VARIANT`; `GetRuntimeId` stays as the fallback). A parent with its
+own HWND (`UIA_NativeWindowHandlePropertyId`), the window itself included, still goes through the walker (C16).
+*Why:* timed side by side on a WebView2 app (an ignored test, counts and ms only): the same 760 elements in the same
+order in 2.8 s instead of 5.3 s, 1000 in 2.1–2.7 s instead of 3.3–6.7 s; within the 3 s budget a walk now covers
+about 680 elements of that window instead of 400–550. Every new result was an exact prefix of the old one.
+*Alternatives:* `TreeScope_Subtree` in one call (fastest, but no node, depth or time bound: a big page could fail its
+2 s transaction timeout whole); the walker everywhere (C16 avoided, but 2–3× slower).
+
 ### C8: The agent pipe refused every bridge's hello
 *Symptom:* the first real agent run failed with "MCP tool mcp__topbar__approve not found"; TopBar's log said it had
 refused two connections "without a valid run token". *Diagnosis:* the bridge writes its hello as soon as it connects,
@@ -1168,6 +1180,14 @@ token), a logging hook exe built into a folder with a space, the TUI for permiss
 says when `CODEX_HOME` sends it away from `~\.codex`. *Lesson:* agent CLIs read their home from the environment,
 so tests and Connect must both say which folder they touch; and a hook only proves itself in the mode that uses it.
 
+### C16: The one-call children fetch lost a child window (D59)
+The first version of the faster walk returned 319 elements where the walker found 691. A diagnostic that compared
+each parent's cached children with the walker's (types and counts only) found a single parent out of 400: a WebView2
+control (`Microsoft.UI.Xaml.Controls.WebView2`, with its own HWND) whose second child, an `InputSiteWindowClass` XAML
+island window, was missing from `GetCachedChildren`, along with everything under it. Child windows that another
+provider adds don't come back in a `TreeScope_Children` cache. Parents with their own HWND are now walked a sibling
+at a time (there are few of them); after that the walks matched element for element.
+
 ### Still open
 - **Foreground-lock rules** in practice: the fallback chain is implemented but not yet exercised
   against elevated or minimized targets (manual test 7).
@@ -1248,6 +1268,7 @@ so tests and Connect must both say which folder they touch; and a hook only prov
 | 2026-11-05 | Stage 2.10d built (polish, D55) by the daily routine on the author's go-ahead before the 2.10c check: composer meta line and per-run drafts, run list groups and filter, Ctrl+N/Ctrl+F/arrows and one focus ring, empty/loading/error states. React only; 41 TS tests. Every Phase 2.10 task is built; manual checks pending. |
 | 2026-11-06 | Phase 5 design agreed (D56). Stage 5a built (D57): wall-clock timer, stopwatch and 25-minute focus with a break, `timer.json` across restarts, the `timerDone` activity, `mm:ss` and a ring in the pill, the panel's Timer section. Manual check pending. |
 | 2026-11-08 | Desktop tools made cheaper (D58) after `/usage` put Cay's `cay` MCP server at 21%: smaller `ui_tree` by default (containers merged, offscreen skipped, bounds on request, 250 elements / 24 KB), action replies with the focused element and no forced look, `ms`/`replyChars`/`imageTokens` in the audit. 335 Rust tests. The `motion-designer` agent now runs on Sonnet (it was 22% of usage on the session's model). |
+| 2026-11-08 | Faster tree walk (D59): a windowless parent's children in one UIA call with the runtime id cached, the walker kept for parents with their own HWND after a XAML island child went missing (C16). Same elements, 1.3–2.8× faster on a WebView2 app. 335 Rust tests. |
 | 2026-11-05 | Stage 2.10c built (the window, D54): maximize button, F11 and double-click with `command:maximized` from Rust, Esc restores first, `agent.window` remembered and fitted onto a current work area, a 760 px reading column when wide. 322 Rust and 16 TS tests. Manual check pending. |
 | 2026-11-05 | Stage 2.10b built (attachments, D53): Rust copies and scales, `--add-dir` for Claude Code, ACP `image`/`resource_link` blocks by `promptCapabilities`, clipboard (`CF_HDROP`, PNG, DIB) and drop commands, the Attach picker, chips, paste and drop in both composers. 317 Rust and 16 TS tests. Manual check pending. The routine resumed it after the author's VS Code session hit its usage limit mid-2.10b.2. |
 | 2026-11-05 | Phase 2.10 design agreed (D52, every recommendation). Stage 2.10a built by the daily routine: Markdown tables/links/strike/code (own parser, now pure and tested with `node --test`, no dependency), https links opened by Rust, the transcript as turns with folded tool groups and diffs, a summary card with duration, copy message/run, Jump to latest, and Claude's text streamed as drafts (`--include-partial-messages`, throttled to 10 Hz in `lifecycle.rs`, no `agent:runs` per delta). 296 Rust and 13 TS tests. Manual check pending. |

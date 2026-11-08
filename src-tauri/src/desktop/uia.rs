@@ -1,5 +1,8 @@
-//! A window's UI Automation tree: the control view, depth first, one cache request per element so each step is a
-//! single cross-process call. Bounded three ways: depth, node count, and a wall-clock budget (plus UIA's own
+//! A window's UI Automation tree: the control view, depth first. A windowless parent's children come back in one
+//! cross-process call (`TreeScope_Children` + `BuildUpdatedCache`) with every property Cay reads, the runtime id
+//! included. A parent with its own HWND is walked a sibling at a time instead: the one-call fetch leaves out child
+//! windows another provider adds (a XAML island under a WebView2 control did; D59, C16). Bounded three ways: depth,
+//! node count, and a wall-clock budget (plus UIA's own
 //! connection and transaction timeouts for hung providers). Needs an MTA thread (`mod.rs` runs it on one).
 
 use std::time::{Duration, Instant};
@@ -10,13 +13,14 @@ use windows::Win32::System::Ole::{
     SafeArrayAccessData, SafeArrayDestroy, SafeArrayGetLBound, SafeArrayGetUBound,
     SafeArrayUnaccessData,
 };
-use windows::Win32::System::Variant::{VariantClear, VT_BSTR};
+use windows::Win32::System::Variant::{VariantClear, VARENUM, VT_ARRAY, VT_BSTR, VT_I4};
 use windows::Win32::UI::Accessibility::{
     CUIAutomation8, IUIAutomation, IUIAutomation2, IUIAutomationCacheRequest, IUIAutomationElement,
-    IUIAutomationTreeWalker, TreeScope_Element, UIA_AutomationIdPropertyId,
-    UIA_BoundingRectanglePropertyId, UIA_ControlTypePropertyId, UIA_HasKeyboardFocusPropertyId,
-    UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId, UIA_IsOffscreenPropertyId,
-    UIA_IsPasswordPropertyId, UIA_NamePropertyId, UIA_ValueValuePropertyId,
+    IUIAutomationTreeWalker, TreeScope, TreeScope_Children, TreeScope_Element,
+    UIA_AutomationIdPropertyId, UIA_BoundingRectanglePropertyId, UIA_ControlTypePropertyId,
+    UIA_HasKeyboardFocusPropertyId, UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId,
+    UIA_IsOffscreenPropertyId, UIA_IsPasswordPropertyId, UIA_NamePropertyId,
+    UIA_NativeWindowHandlePropertyId, UIA_RuntimeIdPropertyId, UIA_ValueValuePropertyId,
 };
 
 use super::logic::Rect;
@@ -26,6 +30,8 @@ use crate::win32;
 /// The whole walk gets this long; a big browser page stops early and says so.
 const BUDGET: Duration = Duration::from_secs(3);
 const UIA_TIMEOUT_MS: u32 = 2000;
+/// Most children kept per parent (a huge list is cut by `caps.nodes` long before this).
+const MAX_CHILDREN: i32 = 2000;
 
 /// UI Automation with Cay's timeouts, so a hung provider can't hold a thread for long. Needs COM (MTA).
 pub fn automation() -> windows::core::Result<IUIAutomation> {
@@ -87,6 +93,7 @@ pub fn walk(hwnd: isize, caps: &Caps) -> windows::core::Result<Walked> {
     let uia = automation()?;
     // SAFETY: COM calls on smart pointers released on drop; the caller initialised COM (MTA) on this thread.
     unsafe {
+        let element_cache = uia.CreateCacheRequest()?;
         let cache = uia.CreateCacheRequest()?;
         for id in [
             UIA_NamePropertyId,
@@ -99,12 +106,21 @@ pub fn walk(hwnd: isize, caps: &Caps) -> windows::core::Result<Walked> {
             UIA_IsOffscreenPropertyId,
             UIA_IsPasswordPropertyId,
             UIA_ValueValuePropertyId,
+            UIA_RuntimeIdPropertyId,
+            UIA_NativeWindowHandlePropertyId,
         ] {
             cache.AddProperty(id)?;
+            element_cache.AddProperty(id)?;
         }
-        cache.SetTreeScope(TreeScope_Element)?;
-        let walker = uia.ControlViewWalker()?;
-        let root = uia.ElementFromHandleBuildCache(win32::from_raw(hwnd), &cache)?;
+        element_cache.SetTreeScope(TreeScope_Element)?;
+        // The element and its children (control view: the cache request's default filter), properties for all.
+        cache.SetTreeScope(TreeScope(TreeScope_Element.0 | TreeScope_Children.0))?;
+        let fetch = Fetch {
+            children: cache,
+            element: element_cache,
+            walker: uia.ControlViewWalker()?,
+        };
+        let root = uia.ElementFromHandleBuildCache(win32::from_raw(hwnd), &fetch.element)?;
 
         let mut nodes = Vec::new();
         let mut cut = None;
@@ -131,7 +147,7 @@ pub fn walk(hwnd: isize, caps: &Caps) -> windows::core::Result<Walked> {
                 continue;
             }
             // Children are pushed in reverse so the first child is visited next.
-            let children = children(&walker, &cache, &element, started);
+            let children = fetch.children_of(&element, started);
             for child in children.into_iter().rev() {
                 stack.push((child, depth + 1));
             }
@@ -144,25 +160,55 @@ pub fn walk(hwnd: isize, caps: &Caps) -> windows::core::Result<Walked> {
     }
 }
 
-unsafe fn children(
-    walker: &IUIAutomationTreeWalker,
-    cache: &IUIAutomationCacheRequest,
-    parent: &IUIAutomationElement,
-    started: Instant,
-) -> Vec<IUIAutomationElement> {
-    let mut out = Vec::new();
-    // SAFETY: COM calls on live smart pointers; a failed call ends the list.
-    unsafe {
-        let mut next = walker.GetFirstChildElementBuildCache(parent, cache).ok();
-        while let Some(child) = next {
-            if started.elapsed() > BUDGET || out.len() >= 2000 {
-                break;
+/// How children are fetched: in one call for a windowless parent, through the walker for one with an HWND.
+struct Fetch {
+    /// Element and children, every property.
+    children: IUIAutomationCacheRequest,
+    /// The element alone, every property (for the walker).
+    element: IUIAutomationCacheRequest,
+    walker: IUIAutomationTreeWalker,
+}
+
+impl Fetch {
+    /// A parent's children; a failed call is an element without children.
+    unsafe fn children_of(
+        &self,
+        parent: &IUIAutomationElement,
+        started: Instant,
+    ) -> Vec<IUIAutomationElement> {
+        // SAFETY: COM calls on live smart pointers; the array is read within its length.
+        unsafe {
+            let own_window = parent
+                .CachedNativeWindowHandle()
+                .is_ok_and(|h| !h.is_invalid());
+            if own_window {
+                let mut out = Vec::new();
+                let mut next = self
+                    .walker
+                    .GetFirstChildElementBuildCache(parent, &self.element)
+                    .ok();
+                while let Some(child) = next {
+                    if started.elapsed() > BUDGET || out.len() >= MAX_CHILDREN as usize {
+                        break;
+                    }
+                    next = self
+                        .walker
+                        .GetNextSiblingElementBuildCache(&child, &self.element)
+                        .ok();
+                    out.push(child);
+                }
+                return out;
             }
-            next = walker.GetNextSiblingElementBuildCache(&child, cache).ok();
-            out.push(child);
+            let Ok(parent) = parent.BuildUpdatedCache(&self.children) else {
+                return Vec::new();
+            };
+            let Ok(array) = parent.GetCachedChildren() else {
+                return Vec::new();
+            };
+            let len = array.Length().unwrap_or(0).clamp(0, MAX_CHILDREN);
+            (0..len).filter_map(|i| array.GetElement(i).ok()).collect()
         }
     }
-    out
 }
 
 unsafe fn node(e: &IUIAutomationElement, depth: u32) -> Node {
@@ -186,8 +232,21 @@ unsafe fn node(e: &IUIAutomationElement, depth: u32) -> Node {
             focused: e.CachedHasKeyboardFocus().is_ok_and(|b| b.as_bool()),
             offscreen: e.CachedIsOffscreen().is_ok_and(|b| b.as_bool()),
             password,
-            runtime_id: runtime_id(e),
+            runtime_id: cached_runtime_id(e).unwrap_or_else(|| runtime_id(e)),
         }
+    }
+}
+
+/// The runtime id from the cache (a VT_ARRAY of VT_I4), or `None` to ask the element directly.
+unsafe fn cached_runtime_id(e: &IUIAutomationElement) -> Option<Vec<i32>> {
+    // SAFETY: the VARIANT's tag is checked before reading the array arm; VariantClear frees the array.
+    unsafe {
+        let mut v = e.GetCachedPropertyValue(UIA_RuntimeIdPropertyId).ok()?;
+        let inner = &v.Anonymous.Anonymous;
+        let ids =
+            (inner.vt == VARENUM(VT_ARRAY.0 | VT_I4.0)).then(|| read_i32s(inner.Anonymous.parray));
+        let _ = VariantClear(&mut v);
+        ids.filter(|ids| !ids.is_empty())
     }
 }
 
