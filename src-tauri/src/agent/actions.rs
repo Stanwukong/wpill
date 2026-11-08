@@ -76,8 +76,8 @@ pub fn definitions() -> Vec<Value> {
         json!({
             "name": CLICK,
             "description": format!("Clicks with the real mouse (brings the window to the front first). \
-                Give an element's [n] ref from ui_tree (preferred), or x, y in physical screen px (as in \
-                ui_tree bounds), or x, y in image px of your latest screenshot of this window with \
+                Give an element's [n] ref from ui_tree (preferred), or x, y in physical screen px (from \
+                ui_tree with bounds: true), or x, y in image px of your latest screenshot of this window with \
                 from: \"screenshot\". Only when invoke can't do it. {APPROVED}"),
             "inputSchema": { "type": "object", "properties": {
                 "hwnd": hwnd, "element": element,
@@ -431,9 +431,14 @@ pub fn reply(rpc_id: Value, result: &Result<Acted, ActError>) -> Value {
                 let app = w.app.as_deref().unwrap_or("");
                 format!("{app} · {} (hwnd {})", w.title, w.hwnd)
             });
-    text.push_str(&format!(
-        " In front now: {front}. Look again before the next action."
-    ));
+    text.push_str(&format!(" In front now: {front}."));
+    if let Some(focus) = &acted.focus {
+        text.push_str(&format!(" Focus: {focus}."));
+    }
+    text.push_str(
+        " Look again only if you need to see the result (a dialog, new content, whether it worked) or the \
+         window changed.",
+    );
     mcp::result(
         rpc_id,
         json!({ "content": [{ "type": "text", "text": text }] }),
@@ -455,7 +460,7 @@ mod tests {
     use super::*;
     use crate::desktop::logic::Rect;
     use crate::desktop::plan::View;
-    use crate::desktop::Target;
+    use crate::desktop::{Target, WindowEntry};
 
     #[test]
     fn names_and_definitions() {
@@ -621,11 +626,33 @@ mod tests {
                 title: "notes.txt".into(),
             }),
             foreground: None,
+            focus: None,
         });
         let r = reply(json!(3), &ok);
         let text = r["result"]["content"][0]["text"].as_str().unwrap();
         assert!(
             text.starts_with("Invoked button \"Save\" in Notepad · notes.txt."),
+            "{text}"
+        );
+        assert!(!text.contains("Focus:"));
+        let focused = Ok(Acted {
+            what: "Clicked at 10, 20".into(),
+            note: None,
+            target: None,
+            foreground: Some(WindowEntry {
+                hwnd: 5,
+                app: Some("notepad".into()),
+                title: "notes.txt".into(),
+                bounds: Rect::default(),
+                minimized: false,
+                focused: true,
+            }),
+            focus: Some("edit \"Text editor\"".into()),
+        });
+        let r = reply(json!(5), &focused);
+        let text = r["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(
+            text.contains("In front now: notepad · notes.txt (hwnd 5). Focus: edit \"Text editor\". Look again only if"),
             "{text}"
         );
         assert!(r["result"].get("isError").is_none());

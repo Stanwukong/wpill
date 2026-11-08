@@ -74,7 +74,15 @@ unsafe fn read_i32s(array: *const SAFEARRAY) -> Vec<i32> {
     }
 }
 
-pub fn walk(hwnd: isize, caps: &Caps) -> windows::core::Result<(Vec<Node>, Option<Cut>)> {
+/// What a walk found: the nodes, why it stopped early, and how many offscreen elements it left out (without
+/// `caps.offscreen`, an offscreen element is skipped with everything inside it).
+pub struct Walked {
+    pub nodes: Vec<Node>,
+    pub cut: Option<Cut>,
+    pub offscreen: u32,
+}
+
+pub fn walk(hwnd: isize, caps: &Caps) -> windows::core::Result<Walked> {
     let started = Instant::now();
     let uia = automation()?;
     // SAFETY: COM calls on smart pointers released on drop; the caller initialised COM (MTA) on this thread.
@@ -100,6 +108,7 @@ pub fn walk(hwnd: isize, caps: &Caps) -> windows::core::Result<(Vec<Node>, Optio
 
         let mut nodes = Vec::new();
         let mut cut = None;
+        let mut offscreen = 0;
         // Depth-first with an explicit stack of (element, depth).
         let mut stack: Vec<(IUIAutomationElement, u32)> = vec![(root, 0)];
         while let Some((element, depth)) = stack.pop() {
@@ -111,7 +120,13 @@ pub fn walk(hwnd: isize, caps: &Caps) -> windows::core::Result<(Vec<Node>, Optio
                 cut = Some(Cut::Time);
                 break;
             }
-            nodes.push(node(&element, depth));
+            let n = node(&element, depth);
+            // The window itself is always kept, even when UIA calls it offscreen.
+            if depth > 0 && n.offscreen && !caps.offscreen {
+                offscreen += 1;
+                continue;
+            }
+            nodes.push(n);
             if depth + 1 >= caps.depth {
                 continue;
             }
@@ -121,7 +136,11 @@ pub fn walk(hwnd: isize, caps: &Caps) -> windows::core::Result<(Vec<Node>, Optio
                 stack.push((child, depth + 1));
             }
         }
-        Ok((nodes, cut))
+        Ok(Walked {
+            nodes,
+            cut,
+            offscreen,
+        })
     }
 }
 

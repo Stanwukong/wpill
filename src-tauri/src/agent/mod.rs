@@ -1007,6 +1007,7 @@ fn run_act(app: &AppHandle, job: LookJob) {
                     project,
                 )
             };
+            let started = Instant::now();
             let result = match prepared {
                 Err(e) => Err(e),
                 Ok(((hwnd, action, refs_pid), element)) => {
@@ -1063,18 +1064,27 @@ fn run_act(app: &AppHandle, job: LookJob) {
                 inner.acting = None;
                 inner.audit.clone()
             };
+            let took = started.elapsed();
+            let reply = actions::reply(job.rpc_id, &result);
             if let Some(audit) = audit {
                 audit.log(
                     &job.run_id,
                     "act",
-                    actions::audit_fields(name, &job.args, &result),
+                    tools::with_cost(
+                        actions::audit_fields(name, &job.args, &result),
+                        took,
+                        &reply,
+                    ),
                 );
             }
             match &result {
-                Ok(a) => log::info!("agent action {name} done: {}", a.what),
+                Ok(a) => log::info!(
+                    "agent action {name} done in {} ms: {}",
+                    took.as_millis(),
+                    a.what
+                ),
                 Err(e) => log::info!("agent action {name} failed: {}", e.code()),
             }
-            let reply = actions::reply(job.rpc_id, &result);
             if let Err(e) = job.pipe.write(reply.to_string().as_bytes()) {
                 log::debug!("agent action reply not delivered: {e}");
             }
@@ -1256,6 +1266,7 @@ fn run_look(app: &AppHandle, job: LookJob) {
         .name("agent-look".into())
         .spawn(move || {
             let name = tools::short_name(&job.tool).unwrap_or_default();
+            let started = Instant::now();
             let result = match tools::parse(name, &job.args) {
                 Ok(look) => {
                     glow::look_started(desktop::monitor_for(&look));
@@ -1265,6 +1276,7 @@ fn run_look(app: &AppHandle, job: LookJob) {
                 }
                 Err(why) => Err(desktop::LookError::Failed(why)),
             };
+            let took = started.elapsed();
             let reply = tools::reply(job.rpc_id, &result);
             let agents = app.state::<Agents>();
             let audit = {
@@ -1299,10 +1311,14 @@ fn run_look(app: &AppHandle, job: LookJob) {
                 inner.audit.clone()
             };
             if let Some(audit) = audit {
-                audit.log(&job.run_id, "look", tools::audit_fields(name, &result));
+                audit.log(
+                    &job.run_id,
+                    "look",
+                    tools::with_cost(tools::audit_fields(name, &result), took, &reply),
+                );
             }
             match &result {
-                Ok(_) => log::debug!("agent look {name} done"),
+                Ok(_) => log::debug!("agent look {name} done in {} ms", took.as_millis()),
                 Err(e) => log::info!("agent look {name} failed: {}", e.code()),
             }
             if let Err(e) = job.pipe.write(reply.to_string().as_bytes()) {
@@ -2955,15 +2971,21 @@ pub fn debug_command(app: &AppHandle, args: &[String]) {
                 match name.map(|n| tools::parse(n, &args)) {
                     Some(Ok(look)) => {
                         glow::look_started(desktop::monitor_for(&look));
+                        let started = Instant::now();
                         let result = desktop::run(look, None);
+                        let took = started.elapsed();
                         glow::look_ended();
                         if let (Ok(desktop::Outcome::Image { image, .. }), false) =
                             (&result, arg(3).is_empty())
                         {
                             let _ = std::fs::write(arg(3), &image.bytes);
                         }
-                        let audit = tools::audit_fields(name.unwrap_or_default(), &result);
                         let reply = tools::reply(json!(0), &result);
+                        let audit = tools::with_cost(
+                            tools::audit_fields(name.unwrap_or_default(), &result),
+                            took,
+                            &reply,
+                        );
                         let text: Vec<_> = reply["result"]["content"]
                             .as_array()
                             .into_iter()
@@ -2991,6 +3013,7 @@ pub fn debug_command(app: &AppHandle, args: &[String]) {
                                 let focus_app = app.clone();
                                 glow::act_started(desktop::monitor_of(call.hwnd));
                                 crate::hover::set_hands_off(true);
+                                let started = Instant::now();
                                 let result = tauri::async_runtime::spawn_blocking(move || {
                                     desktop::act(
                                         call.hwnd,
@@ -3004,11 +3027,14 @@ pub fn debug_command(app: &AppHandle, args: &[String]) {
                                 .unwrap_or_else(|e| Err(desktop::ActError::Failed(e.to_string())));
                                 crate::hover::set_hands_off(false);
                                 glow::act_ended();
+                                let took = started.elapsed().as_millis();
                                 let reply = actions::reply(json!(0), &result);
-                                Ok(reply["result"]["content"][0]["text"]
-                                    .as_str()
-                                    .unwrap_or_default()
-                                    .to_string())
+                                Ok(format!(
+                                    "{} ({took} ms)",
+                                    reply["result"]["content"][0]["text"]
+                                        .as_str()
+                                        .unwrap_or_default()
+                                ))
                             }
                             Err(e) => Err(AppError::AgentInvalid(e.message())),
                         }

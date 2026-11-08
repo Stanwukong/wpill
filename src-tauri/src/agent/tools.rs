@@ -48,15 +48,21 @@ pub fn definitions() -> Vec<Value> {
         json!({
             "name": UI_TREE,
             "description": "A window's UI Automation tree as an indented outline: control type, \"name\", \
-                = \"value\", #automationId, @x,y width x height (physical screen px) and flags (focused, \
-                disabled, offscreen…), each line starting with its [n] ref, which invoke, set_value and \
-                click take as `element` (refs last until the next ui_tree of that window). Cheaper and more \
-                exact than a screenshot for text, buttons and fields. Password fields never show a value. \
-                Read-only; the user approves it and sees the screen edges glow.",
+                = \"value\", #automationId and flags (focused, disabled, password), each line starting with \
+                its [n] ref, which invoke, set_value and click take as `element` (refs last until the next \
+                ui_tree of that window). Unnamed layout containers are left out (their contents move up a \
+                level, so ref numbers skip), and so is what's offscreen. More exact than a screenshot for \
+                text, buttons and fields; on big windows (browsers, Office) keep it small with maxDepth. \
+                Password fields never show a value. Read-only; the user approves it and sees the screen \
+                edges glow.",
             "inputSchema": { "type": "object", "properties": {
                 "hwnd": hwnd,
                 "maxDepth": { "type": "integer", "description": "Levels to walk (default 12, at most 25)." },
-                "maxNodes": { "type": "integer", "description": "Elements to return (default 400, at most 1000)." },
+                "maxNodes": { "type": "integer", "description": "Elements to walk (default 250, at most 1000)." },
+                "bounds": { "type": "boolean", "description": "Also each element's @x,y width x height in \
+                    physical screen px and the focusable flag; only to click by coordinates (default false)." },
+                "offscreen": { "type": "boolean", "description": "Also elements scrolled out of view or on \
+                    hidden pages (default false)." },
             }, "required": ["hwnd"] },
         }),
     ]
@@ -79,10 +85,14 @@ pub fn parse(name: &str, args: &Value) -> Result<Look, String> {
         SCREENSHOT => Ok(Look::Screenshot { hwnd }),
         UI_TREE => Ok(Look::UiTree {
             hwnd: hwnd.ok_or("ui_tree needs an hwnd from list_windows")?,
-            caps: Caps::new(
-                args.get("maxDepth").and_then(Value::as_u64),
-                args.get("maxNodes").and_then(Value::as_u64),
-            ),
+            caps: Caps {
+                bounds: args.get("bounds").and_then(Value::as_bool) == Some(true),
+                offscreen: args.get("offscreen").and_then(Value::as_bool) == Some(true),
+                ..Caps::new(
+                    args.get("maxDepth").and_then(Value::as_u64),
+                    args.get("maxNodes").and_then(Value::as_u64),
+                )
+            },
         }),
         _ => Err("unknown tool".into()),
     }
@@ -175,15 +185,40 @@ pub fn audit_fields(tool: &str, result: &Result<Outcome, LookError>) -> Value {
         Ok(Outcome::Image { image, target: t }) => json!({ "tool": tool, "ok": true,
             "target": t.as_ref().map(target).unwrap_or(json!("screen")),
             "width": image.width, "height": image.height, "bytes": image.bytes.len(),
-            "format": image.mime }),
+            "format": image.mime, "imageTokens": image_tokens(image.width, image.height) }),
         Ok(Outcome::Tree {
             nodes,
             cut,
             target: t,
+            outline,
             ..
         }) => json!({ "tool": tool, "ok": true, "target": target(t), "nodes": nodes,
+            "chars": outline.chars().count(),
             "cut": cut.map(|c| match c { Cut::Nodes => "nodes", Cut::Time => "time" }) }),
     }
+}
+
+/// Roughly what an image costs Claude (Anthropic's estimate: width × height / 750), for the audit.
+pub fn image_tokens(width: u32, height: u32) -> u64 {
+    u64::from(width) * u64::from(height) / 750
+}
+
+/// The characters of a reply's text blocks (what Claude reads besides images), for the audit.
+pub fn text_chars(reply: &Value) -> usize {
+    reply["result"]["content"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|c| c["text"].as_str())
+        .map(|t| t.chars().count())
+        .sum()
+}
+
+/// Adds how long a look or action took and how much text its reply holds to its audit line (D58).
+pub fn with_cost(mut fields: Value, took: std::time::Duration, reply: &Value) -> Value {
+    fields["ms"] = json!(took.as_millis() as u64);
+    fields["replyChars"] = json!(text_chars(reply));
+    fields
 }
 
 fn text(s: &str) -> Value {
@@ -235,6 +270,15 @@ mod tests {
             panic!()
         };
         assert_eq!(caps.nodes, crate::desktop::tree::MAX_NODES);
+        assert!(!caps.bounds && !caps.offscreen);
+        let Ok(Look::UiTree { caps, .. }) = parse(
+            UI_TREE,
+            &json!({ "hwnd": 5, "bounds": true, "offscreen": true }),
+        ) else {
+            panic!()
+        };
+        assert!(caps.bounds && caps.offscreen);
+        assert_eq!(caps.bytes, crate::desktop::tree::DEFAULT_BYTES);
     }
 
     #[test]
@@ -275,6 +319,13 @@ mod tests {
 
         let audit = audit_fields(SCREENSHOT, &result);
         assert_eq!(audit["bytes"], 3);
+        assert_eq!(audit["imageTokens"], 1843);
+        let costed = with_cost(audit.clone(), std::time::Duration::from_millis(42), &r);
+        assert_eq!(costed["ms"], 42);
+        assert_eq!(
+            costed["replyChars"],
+            content[1]["text"].as_str().unwrap().chars().count()
+        );
         assert_eq!(audit["target"]["app"], "chrome");
         assert!(!audit.to_string().contains("AQID"), "never the image");
     }

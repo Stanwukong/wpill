@@ -7,9 +7,11 @@ use super::plan::Element;
 
 pub const DEFAULT_DEPTH: u32 = 12;
 pub const MAX_DEPTH: u32 = 25;
-pub const DEFAULT_NODES: u32 = 400;
+pub const DEFAULT_NODES: u32 = 250;
 pub const MAX_NODES: u32 = 1000;
-/// Outline text cap: well under Claude Code's 25,000-token MCP result limit.
+/// Outline text cap by default (about 6k tokens): most windows fit, and a bigger one says it was cut.
+pub const DEFAULT_BYTES: usize = 24 * 1024;
+/// Outline text cap when Claude asks for more elements: well under Claude Code's 25,000-token MCP result limit.
 pub const MAX_BYTES: usize = 60 * 1024;
 /// Longest name or value kept per node.
 const MAX_FIELD: usize = 200;
@@ -19,18 +21,30 @@ pub struct Caps {
     pub depth: u32,
     pub nodes: u32,
     pub bytes: usize,
+    /// Each line's screen position and size and the `focusable` flag (only needed to click by coordinates).
+    pub bounds: bool,
+    /// Also walk what UIA marks offscreen (scrolled out of view, hidden pages) and what's inside it.
+    pub offscreen: bool,
 }
 
 impl Caps {
-    /// From the tool's optional `maxDepth` / `maxNodes`, clamped.
+    /// From the tool's optional `maxDepth` / `maxNodes`, clamped. Asking for more nodes than the default also
+    /// raises the text cap.
     pub fn new(depth: Option<u64>, nodes: Option<u64>) -> Self {
         let clamp = |v: Option<u64>, default: u32, max: u32| {
             v.map_or(default, |v| v.clamp(1, u64::from(max)) as u32)
         };
+        let nodes = clamp(nodes, DEFAULT_NODES, MAX_NODES);
         Self {
             depth: clamp(depth, DEFAULT_DEPTH, MAX_DEPTH),
-            nodes: clamp(nodes, DEFAULT_NODES, MAX_NODES),
-            bytes: MAX_BYTES,
+            nodes,
+            bytes: if nodes > DEFAULT_NODES {
+                MAX_BYTES
+            } else {
+                DEFAULT_BYTES
+            },
+            bounds: false,
+            offscreen: false,
         }
     }
 }
@@ -74,24 +88,43 @@ pub enum Cut {
     Time,
 }
 
-/// The outline: one line per node, two spaces per level, then its ref, e.g.
-/// `  [3] button "Save" #saveBtn @812,40 96x32 focusable`. Stops at `caps.bytes` and says so.
-pub fn render(nodes: &[Node], cut: Option<Cut>, caps: &Caps) -> String {
+/// The outline: one line per node, two spaces per level, then its ref, e.g. `  [3] button "Save" #saveBtn`
+/// (plus `@812,40 96x32 focusable` with `caps.bounds`). Unnamed layout containers get no line of their own (their
+/// children move up a level), so refs can skip numbers. `offscreen` is how many offscreen elements the walk left
+/// out. Stops at `caps.bytes` and says so.
+pub fn render(nodes: &[Node], cut: Option<Cut>, offscreen: u32, caps: &Caps) -> String {
     let mut out = String::new();
-    let mut shown = 0usize;
+    let mut hidden = 0usize;
+    // The depths of the current node's shown ancestors.
+    let mut shown: Vec<u32> = Vec::new();
     for (i, node) in nodes.iter().enumerate() {
-        let line = line(i, node);
+        while shown.last().is_some_and(|d| *d >= node.depth) {
+            shown.pop();
+        }
+        if merged(node) {
+            continue;
+        }
+        if hidden > 0 {
+            hidden += 1;
+            continue;
+        }
+        let line = line(i, node, shown.len(), caps.bounds);
         if out.len() + line.len() + 1 > caps.bytes {
-            break;
+            hidden = 1;
+            continue;
         }
         out.push_str(&line);
         out.push('\n');
-        shown += 1;
+        shown.push(node.depth);
     }
-    let hidden = nodes.len() - shown;
     if hidden > 0 {
         out.push_str(&format!(
             "… {hidden} more elements not shown (text limit). Use a smaller maxDepth, or a screenshot.\n"
+        ));
+    }
+    if offscreen > 0 {
+        out.push_str(&format!(
+            "… {offscreen} offscreen elements (and what's inside them) left out; offscreen: true includes them.\n"
         ));
     }
     match cut {
@@ -107,8 +140,27 @@ pub fn render(nodes: &[Node], cut: Option<Cut>, caps: &Caps) -> String {
     out
 }
 
-fn line(i: usize, n: &Node) -> String {
-    let mut s = "  ".repeat(n.depth as usize);
+/// A node with nothing to read or use: an unnamed pane, group, custom element, text, image or separator (its
+/// children are still shown). Never the window itself or what has focus.
+fn merged(n: &Node) -> bool {
+    const LAYOUT: [&str; 7] = [
+        "pane",
+        "group",
+        "custom",
+        "text",
+        "image",
+        "separator",
+        "element",
+    ];
+    n.depth > 0
+        && n.name.trim().is_empty()
+        && n.value.as_deref().is_none_or(str::is_empty)
+        && !n.focused
+        && LAYOUT.contains(&control_type_name(n.control_type))
+}
+
+fn line(i: usize, n: &Node, level: usize, bounds: bool) -> String {
+    let mut s = "  ".repeat(level);
     s.push_str(&format!("[{i}] "));
     s.push_str(control_type_name(n.control_type));
     if !n.name.trim().is_empty() {
@@ -123,7 +175,7 @@ fn line(i: usize, n: &Node) -> String {
     if !n.automation_id.is_empty() && n.automation_id.len() <= 64 {
         s.push_str(&format!(" #{}", n.automation_id));
     }
-    if !n.rect.is_empty() {
+    if bounds && !n.rect.is_empty() {
         s.push_str(&format!(
             " @{},{} {}x{}",
             n.rect.x, n.rect.y, n.rect.width, n.rect.height
@@ -131,7 +183,7 @@ fn line(i: usize, n: &Node) -> String {
     }
     for (on, flag) in [
         (!n.enabled, "disabled"),
-        (n.focusable, "focusable"),
+        (bounds && n.focusable, "focusable"),
         (n.focused, "focused"),
         (n.offscreen, "offscreen"),
         (n.password, "password"),
@@ -249,23 +301,57 @@ mod tests {
         let mut off = node(2, 50020, "x");
         off.enabled = false;
         off.offscreen = true;
-        let text = render(
-            &[node(0, 50032, "notes.txt - Notepad"), save, edit, off],
-            None,
-            &Caps::new(None, None),
-        );
+        let nodes = [node(0, 50032, "notes.txt - Notepad"), save, edit, off];
+        let text = render(&nodes, None, 0, &Caps::new(None, None));
         let lines: Vec<_> = text.lines().collect();
         assert_eq!(lines[0], "[0] window \"notes.txt - Notepad\"");
-        assert_eq!(
-            lines[1],
-            "  [1] button \"Save\" #saveBtn @812,40 96x32 focusable"
-        );
+        assert_eq!(lines[1], "  [1] button \"Save\" #saveBtn");
         assert_eq!(
             lines[2],
             "  [2] edit \"Text editor\" = \"hello \\\"world\\\" line 2\" focused"
         );
         assert_eq!(lines[3], "    [3] text \"x\" disabled offscreen");
         assert_eq!(lines.len(), 4);
+
+        let caps = Caps {
+            bounds: true,
+            ..Caps::new(None, None)
+        };
+        let text = render(&nodes, None, 0, &caps);
+        assert_eq!(
+            text.lines().nth(1),
+            Some("  [1] button \"Save\" #saveBtn @812,40 96x32 focusable")
+        );
+    }
+
+    #[test]
+    fn unnamed_containers_are_merged() {
+        let mut focused_pane = node(2, 50033, "");
+        focused_pane.focused = true;
+        let nodes = [
+            node(0, 50032, "App"),
+            node(1, 50033, ""),        // [1] unnamed pane: merged
+            node(2, 50026, ""),        // [2] unnamed group: merged
+            node(3, 50000, "OK"),      // [3] one level under the window
+            node(2, 50000, ""),        // [4] unnamed button: kept
+            focused_pane,              // [5] has focus: kept
+            node(3, 50020, "Hi"),      // [6] inside the focused pane
+            node(1, 50026, "Toolbar"), // [7] named group: kept
+            node(2, 50006, ""),        // [8] unnamed image: merged
+        ];
+        let text = render(&nodes, None, 0, &Caps::new(None, None));
+        let lines: Vec<_> = text.lines().collect();
+        assert_eq!(
+            lines,
+            [
+                "[0] window \"App\"",
+                "  [3] button \"OK\"",
+                "  [4] button",
+                "  [5] pane focused",
+                "    [6] text \"Hi\"",
+                "  [7] group \"Toolbar\"",
+            ]
+        );
     }
 
     #[test]
@@ -273,7 +359,7 @@ mod tests {
         let mut pw = node(1, 50004, "Password");
         pw.value = Some("hunter2".into());
         pw.password = true;
-        let text = render(&[pw], None, &Caps::new(None, None));
+        let text = render(&[pw], None, 0, &Caps::new(None, None));
         assert!(!text.contains("hunter2"));
         assert!(text.contains("[0] edit \"Password\" password"));
     }
@@ -284,15 +370,19 @@ mod tests {
             .map(|i| node(1, 50020, &format!("item {i} {}", "x".repeat(100))))
             .collect();
         let caps = Caps::new(None, None);
-        let text = render(&nodes, Some(Cut::Nodes), &caps);
-        assert!(text.len() <= caps.bytes + 200);
+        assert_eq!(caps.bytes, DEFAULT_BYTES);
+        assert_eq!(Caps::new(None, Some(600)).bytes, MAX_BYTES);
+        let text = render(&nodes, Some(Cut::Nodes), 3, &caps);
+        assert!(text.len() <= caps.bytes + 300);
         assert!(text.contains("more elements not shown"));
-        assert!(text.contains("stopped at 400 elements"));
-        let text = render(&nodes[..2], Some(Cut::Time), &caps);
+        assert!(text.contains("3 offscreen elements"));
+        assert!(text.contains(&format!("stopped at {DEFAULT_NODES} elements")));
+        let text = render(&nodes[..2], Some(Cut::Time), 0, &caps);
         assert!(text.contains("slow to answer"));
+        assert!(!text.contains("offscreen"));
         let long = node(0, 50020, &"y".repeat(500));
         assert_eq!(
-            line(0, &long).chars().count(),
+            line(0, &long, 0, false).chars().count(),
             "[0] text \"\"".len() + MAX_FIELD
         );
     }

@@ -51,7 +51,7 @@ D50) signed off, all manual checks passed (3b on the author's other machine).** 
 `self/phase-3-memory-heavy` (PR #2). Next, per the roadmap: [Phase 2.10, agent window UI](#phase-210-agent-window-ui-design-agreed-2026-11-05-d51-d52)
 (added 2026-11-05, D51; design agreed 2026-11-05, D52; built on branch `self/phase-2.10-agent-window`, PR #3; 2.10c–d in PR #4, merged 2026-11-05).
 **Stages 2.10a (readable transcript) and 2.10b (attachments) are built and merged (PR #3, 2026-11-05); 2.10c (the window: maximize, remembered place, wide layout, D54) and 2.10d (polish, D55) are built (2026-11-05, draft PR #4). Their manual checks are pending.** With 2.10d every Phase 2.10 task is built. After 2.10: [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
-[prompts/phase-5-utilities.md](prompts/phase-5-utilities.md); **design agreed 2026-11-06 (D56), all five recommended choices; stage 5a (timer, stopwatch, focus, D57) built 2026-11-06 on branch `self/phase-5-utilities`, PR #5; its manual check is pending, then 5b (shelf)**), the spikes, and last 4a-5 (release). See
+[prompts/phase-5-utilities.md](prompts/phase-5-utilities.md); **design agreed 2026-11-06 (D56), all five recommended choices; stage 5a (timer, stopwatch, focus, D57) built 2026-11-06 on branch `self/phase-5-utilities`, PR #5; its manual check is pending, then 5b (shelf)**), the spikes, and last 4a-5 (release). **Desktop tools made cheaper 2026-11-08 (D58): smaller trees, no forced look after actions, timings in the audit; the faster walk and narrower looks are next ([Desktop tools: cost and speed](#desktop-tools-cost-and-speed-started-2026-11-08-d58)).** See
 [Phase 3 design](#phase-3-design-agreed-drafted-by-the-daily-routine-approved-by-the-author-2026-11-04-d49).
 Tauri 2.12.5 · `windows` 0.62 · React 19 · Framer Motion 14 · Vite 8 · TypeScript 7.
 
@@ -1993,6 +1993,23 @@ run's own attachments folder. The tasks below are the work list; the stage bulle
         6. First launch with no runs or routines: "Runs you start show here". A run removed from the tray while open:
            "This run is no longer in Cay's list" with New task. "Loading…" appears only for a slow load.
         7. Island unchanged apart from the stopped ring; no focus stealing.
+
+### Desktop tools: cost and speed (started 2026-11-08, D58)
+
+`/usage` put Cay's `cay` MCP server (the per-run server for looks, actions and approvals) at 21% of the author's usage.
+- [x] Measure: `ms` and `replyChars` on every look and action audit line, `imageTokens` for screenshots, `chars` for
+  trees; `agent-test act` prints its time.
+- [x] Smaller `ui_tree` by default: unnamed containers merged, offscreen skipped (`offscreen: true`), bounds and
+  `focusable` only with `bounds: true`, 250 elements / 24 KB (60 KB when asking for more elements).
+- [x] Action replies say what has focus and no longer force a look after every action; the guidance asks for small looks.
+- [ ] Faster walk: `UIA_RuntimeIdPropertyId` in the cache request, children per parent (`TreeScope_Children` +
+  `GetCachedChildren`) instead of one sibling call at a time. Time it with the new audit fields first.
+- [ ] Narrower looks: `root: [n]` and `find`/`types` for `ui_tree`, `region` and `maxEdge` for screenshots; a second
+  tree of the same window as changes only (refs already keep the last one).
+- [ ] Needs the author's decision (changes D40 / 2.7d approvals): UIA actions (`invoke`, `set_value`) allowed once per
+  window for a run; one call for several UIA steps. Real input keeps asking every time.
+- [ ] Manual check: a haiku run in a scratch folder that reads and uses Notepad and a browser window; compare the audit
+  lines' `replyChars` and `ms` with a run from before D58.
 
 ### Phase 4b: settings
 A settings window (a normal, focusable window, separate from the island) for: activities on/off,

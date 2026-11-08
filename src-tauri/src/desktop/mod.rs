@@ -214,10 +214,13 @@ fn look_now(look: Look, expect_pid: Option<u32>) -> Result<Outcome, LookError> {
         }
         Look::UiTree { hwnd, caps } => {
             let target = windows::check(hwnd, expect_pid)?;
-            let (nodes, cut) =
-                uia::walk(target.hwnd, &caps).map_err(|e| LookError::Failed(e.message()))?;
+            let uia::Walked {
+                nodes,
+                cut,
+                offscreen,
+            } = uia::walk(target.hwnd, &caps).map_err(|e| LookError::Failed(e.message()))?;
             Ok(Outcome::Tree {
-                outline: tree::render(&nodes, cut, &caps),
+                outline: tree::render(&nodes, cut, offscreen, &caps),
                 nodes: nodes.len(),
                 cut,
                 target,
@@ -243,6 +246,9 @@ pub struct Acted {
     pub target: Option<Target>,
     /// The window in front afterwards (`None` when it's the desktop or one of Cay's).
     pub foreground: Option<WindowEntry>,
+    /// What has keyboard focus afterwards (`edit "Search"`), when a window is in front: with `foreground`, often
+    /// enough for Claude to go on without another look.
+    pub focus: Option<String>,
 }
 
 /// Runs an approved action on `hwnd` (none for `launch`). `expect_pid` is the target's process at approval time.
@@ -434,11 +440,19 @@ fn act_now(
         }
     };
     drop(guard);
+    let foreground = windows::focused().ok().flatten();
+    // Only a label (type and name), never a value; skipped when Cay or the desktop is in front.
+    let focus = foreground
+        .as_ref()
+        .and_then(|_| uia::automation().ok())
+        .and_then(|uia| act::focused(&uia))
+        .map(|(_, label)| label);
     Ok(Acted {
         what,
         note,
         target,
-        foreground: windows::focused().ok().flatten(),
+        foreground,
+        focus,
     })
 }
 

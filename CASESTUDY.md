@@ -1067,6 +1067,26 @@ beside the clock; and Do not disturb opens `ms-settings:notifications` (Windows 
 `quiethours`). *Alternatives:* a CSS-animated ring between ticks (no gain at one update a second); several timers at
 once.
 
+### D58: Desktop tools cost fewer tokens and fewer looks; each look and action is timed
+
+*What:* `ui_tree` now leaves out what Claude rarely needs. Unnamed layout containers (pane, group, custom, text,
+image, separator with no name, value or focus) get no line, and their children move up a level; refs keep their
+numbers, so they can skip. Offscreen elements are skipped with everything inside them, and a line says how many
+(`offscreen: true` brings them back). Position, size and `focusable` appear only with `bounds: true`, which is only
+needed to click by coordinates. The defaults are 250 elements and 24 KB of text (about 6k tokens, down from 400 and
+60 KB); asking for more than 250 elements raises the cap to 60 KB again. An action's reply now says what has keyboard
+focus afterwards (type and name, never a value) besides the window in front, and tells Claude to look again only
+when it needs to see the result, instead of "Look again before the next action". `GUIDANCE` and `ACP_GUIDANCE` say
+the same and ask for small looks. Every look and action's audit line gets `ms` and `replyChars`; screenshots also get
+`imageTokens` (width × height / 750) and trees `chars`. `agent-test act` prints the time too.
+*Why:* `/usage` showed the `cay` server (Cay's per-run MCP server, mostly looks) at 21% of the author's usage. A
+60 KB tree is about 15k tokens, eight times a full screenshot, and every look stays in the run's context, so the
+forced look after each action doubled both the tokens and the model turns, which are most of a step's time.
+*Alternatives:* a JSON tree (more tokens); removing `focusable` and bounds entirely (clicks by coordinates need
+them); diffs against the previous tree, a scoped `root`/`find`, screenshot `region`/`maxEdge`, a cached UIA walk
+(`TreeScope_Children`, `UIA_RuntimeIdPropertyId` in the cache) and per-window grants for UIA actions are the next
+steps, not done yet (PLAN.md, "Desktop tools: cost and speed").
+
 ### C8: The agent pipe refused every bridge's hello
 *Symptom:* the first real agent run failed with "MCP tool mcp__topbar__approve not found"; TopBar's log said it had
 refused two connections "without a valid run token". *Diagnosis:* the bridge writes its hello as soon as it connects,
@@ -1227,6 +1247,7 @@ so tests and Connect must both say which folder they touch; and a hook only prov
 | 2026-11-04 | Stage 3b.2 built (motion-designer): the × End control in a fixed slot, "Ending…", result lines in the figure's type, ended rows fading out; End state in `useHeavyProcesses` so it survives the panel collapsing during the confirm box. Headless renders reviewed; 3b manual check written. |
 | 2026-11-05 | Stage 2.10d built (polish, D55) by the daily routine on the author's go-ahead before the 2.10c check: composer meta line and per-run drafts, run list groups and filter, Ctrl+N/Ctrl+F/arrows and one focus ring, empty/loading/error states. React only; 41 TS tests. Every Phase 2.10 task is built; manual checks pending. |
 | 2026-11-06 | Phase 5 design agreed (D56). Stage 5a built (D57): wall-clock timer, stopwatch and 25-minute focus with a break, `timer.json` across restarts, the `timerDone` activity, `mm:ss` and a ring in the pill, the panel's Timer section. Manual check pending. |
+| 2026-11-08 | Desktop tools made cheaper (D58) after `/usage` put Cay's `cay` MCP server at 21%: smaller `ui_tree` by default (containers merged, offscreen skipped, bounds on request, 250 elements / 24 KB), action replies with the focused element and no forced look, `ms`/`replyChars`/`imageTokens` in the audit. 335 Rust tests. The `motion-designer` agent now runs on Sonnet (it was 22% of usage on the session's model). |
 | 2026-11-05 | Stage 2.10c built (the window, D54): maximize button, F11 and double-click with `command:maximized` from Rust, Esc restores first, `agent.window` remembered and fitted onto a current work area, a 760 px reading column when wide. 322 Rust and 16 TS tests. Manual check pending. |
 | 2026-11-05 | Stage 2.10b built (attachments, D53): Rust copies and scales, `--add-dir` for Claude Code, ACP `image`/`resource_link` blocks by `promptCapabilities`, clipboard (`CF_HDROP`, PNG, DIB) and drop commands, the Attach picker, chips, paste and drop in both composers. 317 Rust and 16 TS tests. Manual check pending. The routine resumed it after the author's VS Code session hit its usage limit mid-2.10b.2. |
 | 2026-11-05 | Phase 2.10 design agreed (D52, every recommendation). Stage 2.10a built by the daily routine: Markdown tables/links/strike/code (own parser, now pure and tested with `node --test`, no dependency), https links opened by Rust, the transcript as turns with folded tool groups and diffs, a summary card with duration, copy message/run, Jump to latest, and Claude's text streamed as drafts (`--include-partial-messages`, throttled to 10 Hz in `lifecycle.rs`, no `agent:runs` per delta). 296 Rust and 13 TS tests. Manual check pending. |

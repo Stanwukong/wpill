@@ -335,6 +335,10 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
   screenshots). The glow is always excluded, so it can't be screenshotted: check it through its window
   (`IsWindowVisible`, `GetWindowDisplayAffinity` = 17). The island hides during fullscreen, so test exclusion with it
   visible. Never return a password field's value (`tree.rs` drops it even if a walk collected one).
+- **Desktop tool replies cost tokens for the rest of a run (D58).** Every look stays in the run's context. `ui_tree`
+  by default merges unnamed containers (refs skip numbers), skips offscreen elements (`uia::Walked.offscreen`) and
+  leaves out bounds (`bounds: true`); keep new fields off by default. Action replies carry the focused element
+  instead of asking for another look. Judge a change by the audit lines' `ms`, `replyChars`, `chars` and `imageTokens`.
 - **Images for Claude** stay ≤1568 px long edge and ≤500 KB (Claude Code re-compresses over 512,000 bytes and cuts
   results over `MAX_MCP_OUTPUT_TOKENS`), and replies must stay well under the agent pipe's 4 MiB cap (an oversized reply
   is dropped and Claude Code waits). Claude Code stores tool images in its session transcripts under `~/.claude/projects`.
@@ -390,7 +394,7 @@ thousands of them: 4.5 GB in 6c). A rustc `STATUS_ACCESS_VIOLATION` mid-build wa
 - Animation: Framer Motion `layout` + spring transitions. Keep timing constants in
   `src/island/motion.ts`. Ambient loops (e.g. the charging ring) are CSS keyframes on `@property` values,
   paused unless their state is showing, with a `prefers-reduced-motion` fallback.
-- **UI changes go through the `motion-designer` agent** ([.claude/agents/motion-designer.md](.claude/agents/motion-designer.md)):
+- **UI changes go through the `motion-designer` agent** ([.claude/agents/motion-designer.md](.claude/agents/motion-designer.md), runs on Sonnet):
   any change to components, CSS, icons or motion in `src/`. It holds the visual and motion rules (minimal, native,
   token-based colors, Rust-owned state) and how to verify visuals (headless Edge renders or captures of the real island).
   Keep that file current when the motion system changes.
