@@ -31,6 +31,11 @@ pub struct Encoded {
 }
 
 pub fn encode(bitmap: &Bitmap) -> windows::core::Result<Encoded> {
+    encode_within(bitmap, MAX_EDGE)
+}
+
+/// `encode` with a smaller long edge (a screenshot's `maxEdge`; at most `MAX_EDGE`).
+pub fn encode_within(bitmap: &Bitmap, max_edge: u32) -> windows::core::Result<Encoded> {
     // SAFETY: plain WIC calls on COM smart pointers; `bitmap.pixels` holds width*height*4 bytes and WIC copies
     // them in CreateBitmapFromMemory.
     unsafe {
@@ -43,7 +48,13 @@ pub fn encode(bitmap: &Bitmap) -> windows::core::Result<Encoded> {
             bitmap.width * 4,
             &bitmap.pixels,
         )?;
-        encode_source(&factory, &source.cast()?, bitmap.width, bitmap.height)
+        encode_source(
+            &factory,
+            &source.cast()?,
+            bitmap.width,
+            bitmap.height,
+            max_edge.min(MAX_EDGE),
+        )
     }
 }
 
@@ -67,18 +78,19 @@ pub fn encode_file(path: &Path) -> windows::core::Result<Encoded> {
         if width == 0 || height == 0 {
             return Err(windows::core::Error::empty());
         }
-        encode_source(&factory, &frame.cast()?, width, height)
+        encode_source(&factory, &frame.cast()?, width, height, MAX_EDGE)
     }
 }
 
-/// Scales `source` so its long edge is at most `MAX_EDGE`, then encodes it (PNG, else JPEG) to fit.
+/// Scales `source` so its long edge is at most `max_edge`, then encodes it (PNG, else JPEG) to fit.
 unsafe fn encode_source(
     factory: &IWICImagingFactory,
     source: &IWICBitmapSource,
     source_width: u32,
     source_height: u32,
+    max_edge: u32,
 ) -> windows::core::Result<Encoded> {
-    let (width, height) = fit(source_width, source_height, MAX_EDGE);
+    let (width, height) = fit(source_width, source_height, max_edge);
     // SAFETY: the caller's COM objects; every object made here is released on drop.
     unsafe {
         let scaler = factory.CreateBitmapScaler()?;

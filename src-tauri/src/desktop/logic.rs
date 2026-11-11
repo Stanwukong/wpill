@@ -8,6 +8,8 @@ use serde::Serialize;
 /// Longest image edge sent to Claude. The API shrinks anything larger for most models (and Claude Code to
 /// 2000 px), so bigger only costs bytes.
 pub const MAX_EDGE: u32 = 1568;
+/// Smallest long edge a screenshot may ask for (`maxEdge`); smaller is unreadable.
+pub const MIN_EDGE: u32 = 200;
 /// Claude Code re-compresses images over 512,000 bytes itself; staying under keeps what we send what it sees.
 pub const MAX_IMAGE_BYTES: usize = 500_000;
 /// Never send more than this (the agent pipe drops messages over 4 MiB, and base64 adds a third).
@@ -45,6 +47,20 @@ impl Rect {
             (self.y + self.height).min(other.y + other.height),
         )
     }
+}
+
+/// A screenshot's `maxEdge`, clamped to `MIN_EDGE..=MAX_EDGE` (default `MAX_EDGE`).
+pub fn max_edge(asked: Option<u64>) -> u32 {
+    asked.map_or(MAX_EDGE, |v| {
+        v.clamp(u64::from(MIN_EDGE), u64::from(MAX_EDGE)) as u32
+    })
+}
+
+/// The part of `area` (the window's frame or the monitor) a screenshot's `region` asks for, or `None` when they
+/// don't overlap.
+pub fn region_within(area: Rect, region: Rect) -> Option<Rect> {
+    let r = region.intersect(&area);
+    (!r.is_empty()).then_some(r)
 }
 
 /// `width`×`height` scaled down (never up) so the long edge is at most `max_edge`, keeping the aspect ratio.
@@ -199,6 +215,21 @@ mod tests {
         assert_eq!(fit(3840, 2160, MAX_EDGE), (1568, 882));
         assert_eq!(fit(10_000, 3, MAX_EDGE), (1568, 1));
         assert_eq!(fit(0, 0, MAX_EDGE), (1, 1));
+    }
+
+    #[test]
+    fn edges_and_regions() {
+        assert_eq!(max_edge(None), MAX_EDGE);
+        assert_eq!(max_edge(Some(10)), MIN_EDGE);
+        assert_eq!(max_edge(Some(800)), 800);
+        assert_eq!(max_edge(Some(99_999)), MAX_EDGE);
+        let frame = Rect::from_ltrb(100, 100, 900, 700);
+        assert_eq!(
+            region_within(frame, Rect::from_ltrb(50, 600, 300, 800)),
+            Some(Rect::from_ltrb(100, 600, 300, 700))
+        );
+        assert_eq!(region_within(frame, Rect::from_ltrb(0, 0, 100, 100)), None);
+        assert_eq!(region_within(frame, frame), Some(frame));
     }
 
     #[test]

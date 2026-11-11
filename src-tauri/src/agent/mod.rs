@@ -1269,6 +1269,11 @@ fn run_look(app: &AppHandle, job: LookJob) {
             let started = Instant::now();
             let result = match tools::parse(name, &job.args) {
                 Ok(look) => {
+                    let look = {
+                        let agents = app.state::<Agents>();
+                        let inner = agents.lock();
+                        tools::resolve_root(look, &inner.refs, &job.run_id, job.pid, Instant::now())
+                    };
                     glow::look_started(desktop::monitor_for(&look));
                     let result = desktop::run(look, job.pid);
                     glow::look_ended();
@@ -1300,7 +1305,7 @@ fn run_look(app: &AppHandle, job: LookJob) {
                         let view = desktop::plan::View {
                             origin: image.origin,
                             scale: image.scale,
-                            frame: image.origin,
+                            frame: image.frame,
                         };
                         inner
                             .refs

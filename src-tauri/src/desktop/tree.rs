@@ -49,6 +49,67 @@ impl Caps {
     }
 }
 
+/// Which elements a tree shows (`find`, `types`). Empty: all of them. The walk is the same either way; a match is
+/// shown under its shown ancestors, so the outline still says where it is.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Filter {
+    /// Lowercased text to find in a name, value or automation id.
+    pub find: Option<String>,
+    /// Control type names (`button`, `edit` …), as the outline writes them.
+    pub types: Vec<String>,
+}
+
+/// Longest `find` text kept.
+const MAX_FIND: usize = 100;
+
+impl Filter {
+    /// From the tool's optional `find` and `types`. Unknown type names are an error that lists the known ones.
+    pub fn new(find: Option<&str>, types: &[&str]) -> Result<Self, String> {
+        let find = find
+            .map(|f| {
+                f.trim()
+                    .to_lowercase()
+                    .chars()
+                    .take(MAX_FIND)
+                    .collect::<String>()
+            })
+            .filter(|f| !f.is_empty());
+        let mut known = Vec::new();
+        for t in types {
+            let t = t.trim().to_lowercase();
+            if !CONTROL_TYPES.contains(&t.as_str()) {
+                return Err(format!(
+                    "unknown control type \"{t}\"; types are: {}",
+                    CONTROL_TYPES.join(", ")
+                ));
+            }
+            if !known.contains(&t) {
+                known.push(t);
+            }
+        }
+        Ok(Self { find, types: known })
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.find.is_none() && self.types.is_empty()
+    }
+
+    fn matches(&self, n: &Node) -> bool {
+        let typed = self.types.is_empty()
+            || self
+                .types
+                .iter()
+                .any(|t| t == control_type_name(n.control_type));
+        let found = self.find.as_deref().is_none_or(|f| {
+            let value = n.value.as_deref().filter(|_| !n.password).unwrap_or("");
+            [n.name.as_str(), value, n.automation_id.as_str()]
+                .iter()
+                .any(|text| text.to_lowercase().contains(f))
+        });
+        typed && found
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Node {
     /// 0 for the window itself.
@@ -91,31 +152,61 @@ pub enum Cut {
 /// The outline: one line per node, two spaces per level, then its ref, e.g. `  [3] button "Save" #saveBtn`
 /// (plus `@812,40 96x32 focusable` with `caps.bounds`). Unnamed layout containers get no line of their own (their
 /// children move up a level), so refs can skip numbers. `offscreen` is how many offscreen elements the walk left
-/// out. Stops at `caps.bytes` and says so.
-pub fn render(nodes: &[Node], cut: Option<Cut>, offscreen: u32, caps: &Caps) -> String {
+/// out. With a `filter`, only matching lines are written, each after those of its ancestors not written yet. Stops
+/// at `caps.bytes` and says so.
+pub fn render(
+    nodes: &[Node],
+    cut: Option<Cut>,
+    offscreen: u32,
+    caps: &Caps,
+    filter: &Filter,
+) -> String {
     let mut out = String::new();
     let mut hidden = 0usize;
-    // The depths of the current node's shown ancestors.
-    let mut shown: Vec<u32> = Vec::new();
+    let mut matched = 0usize;
+    // The current node's ancestors that get a line: (depth, ref, written yet).
+    let mut shown: Vec<(u32, usize, bool)> = Vec::new();
     for (i, node) in nodes.iter().enumerate() {
-        while shown.last().is_some_and(|d| *d >= node.depth) {
+        while shown.last().is_some_and(|(d, _, _)| *d >= node.depth) {
             shown.pop();
         }
-        if merged(node) {
+        let hit = !filter.is_empty() && filter.matches(node);
+        if merged(node) && !hit {
             continue;
         }
-        if hidden > 0 {
-            hidden += 1;
+        shown.push((node.depth, i, false));
+        if !filter.is_empty() && !hit {
             continue;
         }
-        let line = line(i, node, shown.len(), caps.bounds);
-        if out.len() + line.len() + 1 > caps.bytes {
-            hidden = 1;
-            continue;
+        matched += usize::from(hit);
+        // This line, after any ancestor lines not written yet.
+        for (level, (_, at, written)) in shown.iter_mut().enumerate() {
+            if *written {
+                continue;
+            }
+            *written = true;
+            let at = *at;
+            if hidden > 0 {
+                hidden += 1;
+                continue;
+            }
+            let line = line(at, &nodes[at], level, caps.bounds);
+            if out.len() + line.len() + 1 > caps.bytes {
+                hidden = 1;
+                continue;
+            }
+            out.push_str(&line);
+            out.push('\n');
         }
-        out.push_str(&line);
-        out.push('\n');
-        shown.push(node.depth);
+    }
+    if !filter.is_empty() {
+        out.push_str(&match matched {
+            0 => format!(
+                "… nothing matches among the {} elements walked.\n",
+                nodes.len()
+            ),
+            n => format!("… {n} matching of the {} elements walked.\n", nodes.len()),
+        });
     }
     if hidden > 0 {
         out.push_str(&format!(
@@ -217,55 +308,68 @@ fn quoted(text: &str) -> String {
 
 /// UIA control type ids (`UIA_ButtonControlTypeId` = 50000 …) to short names.
 pub fn control_type_name(id: i32) -> &'static str {
-    const NAMES: [&str; 41] = [
-        "button",
-        "calendar",
-        "checkbox",
-        "combobox",
-        "edit",
-        "hyperlink",
-        "image",
-        "listitem",
-        "list",
-        "menu",
-        "menubar",
-        "menuitem",
-        "progressbar",
-        "radiobutton",
-        "scrollbar",
-        "slider",
-        "spinner",
-        "statusbar",
-        "tab",
-        "tabitem",
-        "text",
-        "toolbar",
-        "tooltip",
-        "tree",
-        "treeitem",
-        "custom",
-        "group",
-        "thumb",
-        "datagrid",
-        "dataitem",
-        "document",
-        "splitbutton",
-        "window",
-        "pane",
-        "header",
-        "headeritem",
-        "table",
-        "titlebar",
-        "separator",
-        "semanticzoom",
-        "appbar",
-    ];
     usize::try_from(id - 50000)
         .ok()
         .and_then(|i| NAMES.get(i))
         .copied()
         .unwrap_or("element")
 }
+
+/// Every name `control_type_name` gives (what `types` takes).
+const CONTROL_TYPES: [&str; 42] = {
+    let mut all = [""; 42];
+    let mut i = 0;
+    while i < NAMES.len() {
+        all[i] = NAMES[i];
+        i += 1;
+    }
+    all[41] = "element";
+    all
+};
+
+const NAMES: [&str; 41] = [
+    "button",
+    "calendar",
+    "checkbox",
+    "combobox",
+    "edit",
+    "hyperlink",
+    "image",
+    "listitem",
+    "list",
+    "menu",
+    "menubar",
+    "menuitem",
+    "progressbar",
+    "radiobutton",
+    "scrollbar",
+    "slider",
+    "spinner",
+    "statusbar",
+    "tab",
+    "tabitem",
+    "text",
+    "toolbar",
+    "tooltip",
+    "tree",
+    "treeitem",
+    "custom",
+    "group",
+    "thumb",
+    "datagrid",
+    "dataitem",
+    "document",
+    "splitbutton",
+    "window",
+    "pane",
+    "header",
+    "headeritem",
+    "table",
+    "titlebar",
+    "separator",
+    "semanticzoom",
+    "appbar",
+];
 
 #[cfg(test)]
 mod tests {
@@ -302,7 +406,7 @@ mod tests {
         off.enabled = false;
         off.offscreen = true;
         let nodes = [node(0, 50032, "notes.txt - Notepad"), save, edit, off];
-        let text = render(&nodes, None, 0, &Caps::new(None, None));
+        let text = render(&nodes, None, 0, &Caps::new(None, None), &Filter::default());
         let lines: Vec<_> = text.lines().collect();
         assert_eq!(lines[0], "[0] window \"notes.txt - Notepad\"");
         assert_eq!(lines[1], "  [1] button \"Save\" #saveBtn");
@@ -317,7 +421,7 @@ mod tests {
             bounds: true,
             ..Caps::new(None, None)
         };
-        let text = render(&nodes, None, 0, &caps);
+        let text = render(&nodes, None, 0, &caps, &Filter::default());
         assert_eq!(
             text.lines().nth(1),
             Some("  [1] button \"Save\" #saveBtn @812,40 96x32 focusable")
@@ -339,7 +443,7 @@ mod tests {
             node(1, 50026, "Toolbar"), // [7] named group: kept
             node(2, 50006, ""),        // [8] unnamed image: merged
         ];
-        let text = render(&nodes, None, 0, &Caps::new(None, None));
+        let text = render(&nodes, None, 0, &Caps::new(None, None), &Filter::default());
         let lines: Vec<_> = text.lines().collect();
         assert_eq!(
             lines,
@@ -359,7 +463,7 @@ mod tests {
         let mut pw = node(1, 50004, "Password");
         pw.value = Some("hunter2".into());
         pw.password = true;
-        let text = render(&[pw], None, 0, &Caps::new(None, None));
+        let text = render(&[pw], None, 0, &Caps::new(None, None), &Filter::default());
         assert!(!text.contains("hunter2"));
         assert!(text.contains("[0] edit \"Password\" password"));
     }
@@ -372,12 +476,12 @@ mod tests {
         let caps = Caps::new(None, None);
         assert_eq!(caps.bytes, DEFAULT_BYTES);
         assert_eq!(Caps::new(None, Some(600)).bytes, MAX_BYTES);
-        let text = render(&nodes, Some(Cut::Nodes), 3, &caps);
+        let text = render(&nodes, Some(Cut::Nodes), 3, &caps, &Filter::default());
         assert!(text.len() <= caps.bytes + 300);
         assert!(text.contains("more elements not shown"));
         assert!(text.contains("3 offscreen elements"));
         assert!(text.contains(&format!("stopped at {DEFAULT_NODES} elements")));
-        let text = render(&nodes[..2], Some(Cut::Time), 0, &caps);
+        let text = render(&nodes[..2], Some(Cut::Time), 0, &caps, &Filter::default());
         assert!(text.contains("slow to answer"));
         assert!(!text.contains("offscreen"));
         let long = node(0, 50020, &"y".repeat(500));
@@ -388,11 +492,69 @@ mod tests {
     }
 
     #[test]
+    fn filters_show_matches_under_their_ancestors() {
+        let mut search = node(3, 50004, "Search");
+        search.value = Some("cats".into());
+        let mut pw = node(3, 50004, "PIN");
+        pw.value = Some("secret".into());
+        pw.password = true;
+        let mut id_only = node(2, 50033, "");
+        id_only.automation_id = "SaveBar".into();
+        let nodes = [
+            node(0, 50032, "App"),      // [0]
+            node(1, 50021, "Toolbar"),  // [1]
+            node(2, 50033, ""),         // [2] merged
+            node(3, 50000, "Save"),     // [3]
+            node(3, 50000, "Open"),     // [4]
+            search,                     // [5]
+            node(1, 50026, "Files"),    // [6]
+            node(2, 50007, "save.txt"), // [7]
+            pw,                         // [8]
+            id_only,                    // [9] unnamed pane, matched by its automation id
+        ];
+        let caps = Caps::new(None, None);
+        let f = Filter::new(Some(" SAVE "), &[]).unwrap();
+        let text = render(&nodes, None, 0, &caps, &f);
+        let lines: Vec<_> = text.lines().collect();
+        assert_eq!(
+            lines,
+            [
+                "[0] window \"App\"",
+                "  [1] toolbar \"Toolbar\"",
+                "    [3] button \"Save\"",
+                "  [6] group \"Files\"",
+                "    [7] listitem \"save.txt\"",
+                "    [9] pane #SaveBar",
+                "… 3 matching of the 10 elements walked.",
+            ]
+        );
+        let f = Filter::new(None, &["edit", "Edit"]).unwrap();
+        assert_eq!(f.types, ["edit"]);
+        let text = render(&nodes, None, 0, &caps, &f);
+        assert!(text.contains("    [5] edit \"Search\" = \"cats\""));
+        assert!(text.contains("[8] edit \"PIN\" password"));
+        assert!(text.contains("2 matching"));
+        let f = Filter::new(Some("cats"), &["edit"]).unwrap();
+        assert!(render(&nodes, None, 0, &caps, &f).contains("1 matching"));
+        let f = Filter::new(Some("secret"), &[]).unwrap();
+        let text = render(&nodes, None, 0, &caps, &f);
+        assert!(!text.contains("secret"), "a password's value never matches");
+        assert!(text.contains("nothing matches among the 10"));
+        assert!(Filter::new(None, &["buton"])
+            .unwrap_err()
+            .contains("button"));
+        assert!(Filter::new(Some("  "), &[]).unwrap().is_empty());
+    }
+
+    #[test]
     fn control_types() {
         assert_eq!(control_type_name(50000), "button");
         assert_eq!(control_type_name(50033), "pane");
         assert_eq!(control_type_name(50040), "appbar");
         assert_eq!(control_type_name(50041), "element");
         assert_eq!(control_type_name(0), "element");
+        assert_eq!(CONTROL_TYPES[0], "button");
+        assert_eq!(CONTROL_TYPES[40], "appbar");
+        assert_eq!(CONTROL_TYPES[41], "element");
     }
 }
