@@ -58,6 +58,7 @@ pub enum Look {
     UiTree {
         hwnd: i64,
         caps: Caps,
+        filter: tree::Filter,
     },
 }
 
@@ -233,7 +234,7 @@ fn look_now(look: Look, expect_pid: Option<u32>) -> Result<Outcome, LookError> {
                 target: Some(target),
             })
         }
-        Look::UiTree { hwnd, caps } => {
+        Look::UiTree { hwnd, caps, filter } => {
             let target = windows::check(hwnd, expect_pid)?;
             let uia::Walked {
                 nodes,
@@ -241,7 +242,7 @@ fn look_now(look: Look, expect_pid: Option<u32>) -> Result<Outcome, LookError> {
                 offscreen,
             } = uia::walk(target.hwnd, &caps).map_err(|e| LookError::Failed(e.message()))?;
             Ok(Outcome::Tree {
-                outline: tree::render(&nodes, cut, offscreen, &caps),
+                outline: tree::render(&nodes, cut, offscreen, &caps, &filter),
                 nodes: nodes.len(),
                 cut,
                 target,

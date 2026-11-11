@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 
 use super::mcp;
 use crate::desktop::logic::max_edge;
-use crate::desktop::tree::{Caps, Cut};
+use crate::desktop::tree::{Caps, Cut, Filter};
 use crate::desktop::{Look, LookError, Outcome, Rect, Target};
 
 pub const LIST_WINDOWS: &str = "list_windows";
@@ -75,6 +75,10 @@ pub fn definitions() -> Vec<Value> {
                     physical screen px and the focusable flag; only to click by coordinates (default false)." },
                 "offscreen": { "type": "boolean", "description": "Also elements scrolled out of view or on \
                     hidden pages (default false)." },
+                "find": { "type": "string", "description": "Only elements whose name, value or automation id \
+                    contains this text (any case), each under its ancestors. The walk's limits still apply." },
+                "types": { "type": "array", "items": { "type": "string" }, "description": "Only these \
+                    control types, as the outline names them (button, edit, hyperlink, listitem, menuitem …)." },
             }, "required": ["hwnd"] },
         }),
     ]
@@ -101,6 +105,7 @@ pub fn parse(name: &str, args: &Value) -> Result<Look, String> {
         }),
         UI_TREE => Ok(Look::UiTree {
             hwnd: hwnd.ok_or("ui_tree needs an hwnd from list_windows")?,
+            filter: filter(args)?,
             caps: Caps {
                 bounds: args.get("bounds").and_then(Value::as_bool) == Some(true),
                 offscreen: args.get("offscreen").and_then(Value::as_bool) == Some(true),
@@ -112,6 +117,24 @@ pub fn parse(name: &str, args: &Value) -> Result<Look, String> {
         }),
         _ => Err("unknown tool".into()),
     }
+}
+
+/// A tree's optional `find` text and `types` list.
+fn filter(args: &Value) -> Result<Filter, String> {
+    let find = match args.get("find").filter(|v| !v.is_null()) {
+        None => None,
+        Some(v) => Some(v.as_str().ok_or("find must be text")?),
+    };
+    let types: Vec<&str> = match args.get("types").filter(|v| !v.is_null()) {
+        None => Vec::new(),
+        Some(Value::String(one)) => vec![one.as_str()],
+        Some(Value::Array(list)) => list
+            .iter()
+            .map(|t| t.as_str().ok_or("types must be control type names"))
+            .collect::<Result<_, _>>()?,
+        Some(_) => return Err("types must be a list of control type names".into()),
+    };
+    Filter::new(find, &types)
 }
 
 /// A screenshot's optional `region` (`{x, y, width, height}`, screen px).
@@ -351,6 +374,22 @@ mod tests {
             panic!()
         };
         assert!(caps.bounds && caps.offscreen);
+        let Ok(Look::UiTree { filter, .. }) = parse(
+            UI_TREE,
+            &json!({ "hwnd": 5, "find": "Save", "types": ["Button", "edit"] }),
+        ) else {
+            panic!()
+        };
+        assert_eq!(filter.find.as_deref(), Some("save"));
+        assert_eq!(filter.types, ["button", "edit"]);
+        let Ok(Look::UiTree { filter, .. }) =
+            parse(UI_TREE, &json!({ "hwnd": 5, "types": "edit" }))
+        else {
+            panic!()
+        };
+        assert_eq!(filter.types, ["edit"]);
+        assert!(parse(UI_TREE, &json!({ "hwnd": 5, "types": ["nope"] })).is_err());
+        assert!(parse(UI_TREE, &json!({ "hwnd": 5, "find": 3 })).is_err());
         assert_eq!(caps.bytes, crate::desktop::tree::DEFAULT_BYTES);
     }
 

@@ -2014,8 +2014,9 @@ run's own attachments folder. The tasks below are the work list; the stage bulle
           the monitor; outside it is an error) and `maxEdge` (200–1568, default 1568). The reply's origin is the
           region; the view keeps the window's frame, so a click on a region screenshot maps right and a moved
           window is still caught. Guidance mentions both.
-    - [ ] N.2 `ui_tree` `find` (text in a name, value or automation id) and `types` (control type names): only
-          matching lines, each under its shown ancestors; refs unchanged.
+    - [x] N.2 `ui_tree` `find` (text in a name, value or automation id) and `types` (control type names): only
+          matching lines, each under its shown ancestors; refs unchanged. A last line counts the matches; unknown types are an error listing
+          the known ones; a password's value never matches.
     - [ ] N.3 `ui_tree` `root: n` (a ref from that window's last tree): walk from that element only.
     - [ ] N.4 A second tree of the same window as changes only (refs already keep the last one).
 - [ ] Needs the author's decision (changes D40 / 2.7d approvals): UIA actions (`invoke`, `set_value`) allowed once per
