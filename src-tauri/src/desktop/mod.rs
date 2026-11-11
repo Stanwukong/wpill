@@ -50,6 +50,10 @@ pub enum Look {
     /// `None`: the primary monitor.
     Screenshot {
         hwnd: Option<i64>,
+        /// Only this part of the window or screen (physical screen px).
+        region: Option<Rect>,
+        /// Longest image edge (`logic::MIN_EDGE..=MAX_EDGE`).
+        max_edge: u32,
     },
     UiTree {
         hwnd: i64,
@@ -60,7 +64,7 @@ pub enum Look {
 impl Look {
     pub fn hwnd(&self) -> Option<i64> {
         match self {
-            Look::Screenshot { hwnd } => *hwnd,
+            Look::Screenshot { hwnd, .. } => *hwnd,
             Look::UiTree { hwnd, .. } => Some(*hwnd),
             _ => None,
         }
@@ -72,8 +76,10 @@ pub struct Image {
     pub mime: &'static str,
     pub width: u32,
     pub height: u32,
-    /// The captured area's top-left, in physical screen px.
+    /// The captured area (a `region` of it, if one was asked for), in physical screen px.
     pub origin: Rect,
+    /// The whole window's frame (or the monitor) when it was taken, so an action can tell it moved.
+    pub frame: Rect,
     /// Screen px per image px.
     pub scale: f64,
 }
@@ -190,25 +196,40 @@ fn look_now(look: Look, expect_pid: Option<u32>) -> Result<Outcome, LookError> {
                 cay: true,
             },
         }),
-        Look::Screenshot { hwnd: None } => {
+        Look::Screenshot {
+            hwnd: None,
+            region,
+            max_edge,
+        } => {
             let area = windows::monitor_rect(None);
-            let bitmap = capture::screen(area).map_err(LookError::Failed)?;
+            let part = region.map_or(Ok(area), |r| in_area(area, r))?;
+            let bitmap = capture::screen(part).map_err(LookError::Failed)?;
             Ok(Outcome::Image {
-                image: image(&bitmap, area)?,
+                image: image(&bitmap, part, area, max_edge)?,
                 target: None,
             })
         }
-        Look::Screenshot { hwnd: Some(hwnd) } => {
+        Look::Screenshot {
+            hwnd: Some(hwnd),
+            region,
+            max_edge,
+        } => {
             let target = windows::check(hwnd, expect_pid)?;
             if windows::is_minimized(target.hwnd) {
                 return Err(LookError::Minimized);
             }
             let h = win32::from_raw(target.hwnd);
             let frame = windows::frame_bounds(h);
+            let part = region.map_or(Ok(frame), |r| in_area(frame, r))?;
             let bitmap =
                 capture::window(h, windows::window_rect(h), frame).map_err(LookError::Failed)?;
+            let bitmap = if part == frame {
+                bitmap
+            } else {
+                capture::crop(&bitmap, frame, part)
+            };
             Ok(Outcome::Image {
-                image: image(&bitmap, frame)?,
+                image: image(&bitmap, part, frame, max_edge)?,
                 target: Some(target),
             })
         }
@@ -461,8 +482,24 @@ pub fn monitor_of(hwnd: Option<i64>) -> Rect {
     windows::monitor_rect(hwnd.map(|h| h as isize))
 }
 
-fn image(bitmap: &capture::Bitmap, area: Rect) -> Result<Image, LookError> {
-    let encoded = encode::encode(bitmap).map_err(|e| LookError::Failed(e.message()))?;
+/// A screenshot's `region` within `area`, or why it can't be taken.
+fn in_area(area: Rect, region: Rect) -> Result<Rect, LookError> {
+    logic::region_within(area, region).ok_or_else(|| {
+        LookError::Failed(format!(
+            "the region is outside the window or screen (it spans @{},{} {}x{})",
+            area.x, area.y, area.width, area.height
+        ))
+    })
+}
+
+fn image(
+    bitmap: &capture::Bitmap,
+    area: Rect,
+    frame: Rect,
+    max_edge: u32,
+) -> Result<Image, LookError> {
+    let encoded =
+        encode::encode_within(bitmap, max_edge).map_err(|e| LookError::Failed(e.message()))?;
     if encoded.bytes.len() > logic::HARD_MAX_IMAGE_BYTES {
         return Err(LookError::Failed("the image came out too large".into()));
     }
@@ -473,10 +510,59 @@ fn image(bitmap: &capture::Bitmap, area: Rect) -> Result<Image, LookError> {
         width: encoded.width,
         height: encoded.height,
         origin: area,
+        frame,
     })
 }
 
 /// Opens an already-checked https link in the browser (the command window's transcript links, 2.10a).
 pub fn open_link(url: &str) -> Result<(), plan::ActError> {
     launch::open_url(url)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Live: a region of the primary screen at a smaller maxEdge (dimensions only; the pixels are dropped).
+    /// `cargo test --lib -- --ignored screenshot_region`
+    #[test]
+    #[ignore]
+    fn screenshot_region() {
+        let area = windows::monitor_rect(None);
+        let region = Rect {
+            x: area.x + 10,
+            y: area.y + 10,
+            width: 1000,
+            height: 500,
+        };
+        let Ok(Outcome::Image { image, .. }) = run(
+            Look::Screenshot {
+                hwnd: None,
+                region: Some(region),
+                max_edge: 400,
+            },
+            None,
+        ) else {
+            panic!("no image")
+        };
+        assert_eq!((image.width, image.height), (400, 200));
+        assert_eq!(image.origin, region);
+        assert_eq!(image.frame, area);
+        assert!((image.scale - 2.5).abs() < 0.01);
+        let outside = Rect {
+            x: area.x - 500,
+            y: area.y - 500,
+            width: 100,
+            height: 100,
+        };
+        assert!(run(
+            Look::Screenshot {
+                hwnd: None,
+                region: Some(outside),
+                max_edge: 400,
+            },
+            None,
+        )
+        .is_err());
+    }
 }

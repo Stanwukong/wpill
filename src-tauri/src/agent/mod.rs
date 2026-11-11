@@ -1300,7 +1300,7 @@ fn run_look(app: &AppHandle, job: LookJob) {
                         let view = desktop::plan::View {
                             origin: image.origin,
                             scale: image.scale,
-                            frame: image.origin,
+                            frame: image.frame,
                         };
                         inner
                             .refs

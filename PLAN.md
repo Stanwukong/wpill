@@ -2009,8 +2009,15 @@ run's own attachments folder. The tasks below are the work list; the stage bulle
 - [x] Faster walk (D59): `UIA_RuntimeIdPropertyId` in the cache request, a windowless parent's children in one call
   (`TreeScope_Children` + `BuildUpdatedCache`); parents with their own HWND still use the walker (C16). Same
   elements, 1.3–2.8× faster on a WebView2 app.
-- [ ] Narrower looks: `root: [n]` and `find`/`types` for `ui_tree`, `region` and `maxEdge` for screenshots; a second
-  tree of the same window as changes only (refs already keep the last one).
+- [ ] Narrower looks (split by the daily routine, 2026-11-11, branch `self/phase-desktop-narrower-looks`):
+    - [x] N.1 Screenshots take `region` (`{x, y, width, height}`, physical screen px, cut to the window's frame or
+          the monitor; outside it is an error) and `maxEdge` (200–1568, default 1568). The reply's origin is the
+          region; the view keeps the window's frame, so a click on a region screenshot maps right and a moved
+          window is still caught. Guidance mentions both.
+    - [ ] N.2 `ui_tree` `find` (text in a name, value or automation id) and `types` (control type names): only
+          matching lines, each under its shown ancestors; refs unchanged.
+    - [ ] N.3 `ui_tree` `root: n` (a ref from that window's last tree): walk from that element only.
+    - [ ] N.4 A second tree of the same window as changes only (refs already keep the last one).
 - [ ] Needs the author's decision (changes D40 / 2.7d approvals): UIA actions (`invoke`, `set_value`) allowed once per
   window for a run; one call for several UIA steps. Real input keeps asking every time.
 - [ ] Manual check: a haiku run in a scratch folder that reads and uses Notepad and a browser window; compare the audit

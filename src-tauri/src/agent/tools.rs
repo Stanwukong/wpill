@@ -5,8 +5,9 @@ use base64::Engine;
 use serde_json::{json, Value};
 
 use super::mcp;
+use crate::desktop::logic::max_edge;
 use crate::desktop::tree::{Caps, Cut};
-use crate::desktop::{Look, LookError, Outcome, Target};
+use crate::desktop::{Look, LookError, Outcome, Rect, Target};
 
 pub const LIST_WINDOWS: &str = "list_windows";
 pub const FOCUSED_WINDOW: &str = "focused_window";
@@ -40,10 +41,21 @@ pub fn definitions() -> Vec<Value> {
             "name": SCREENSHOT,
             "description": "A screenshot of one window (hwnd from list_windows; works when it's covered) or, \
                 without hwnd, of the primary screen. At most 1568 px on the long edge. The reply says where \
-                the image is on screen (origin, scale = screen px per image px). Costs image tokens: try \
-                ui_tree first for text and controls. Protected video can come out black. Read-only; the user \
+                the image is on screen (origin, scale = screen px per image px). Costs image tokens (about \
+                width x height / 750): try ui_tree first for text and controls, and keep it small with region \
+                (just the part you need) and maxEdge. Protected video can come out black. Read-only; the user \
                 approves it and sees the screen edges glow.",
-            "inputSchema": { "type": "object", "properties": { "hwnd": hwnd } },
+            "inputSchema": { "type": "object", "properties": {
+                "hwnd": hwnd,
+                "region": { "type": "object", "description": "Only this part, in physical screen px (as \
+                    list_windows bounds and ui_tree's bounds: true give them), cut to the window or screen.",
+                    "properties": {
+                        "x": { "type": "integer" }, "y": { "type": "integer" },
+                        "width": { "type": "integer" }, "height": { "type": "integer" },
+                    }, "required": ["x", "y", "width", "height"] },
+                "maxEdge": { "type": "integer", "description": "Longest image edge in px (default and at \
+                    most 1568, at least 200). 800 is often enough to read a window." },
+            } },
         }),
         json!({
             "name": UI_TREE,
@@ -82,7 +94,11 @@ pub fn parse(name: &str, args: &Value) -> Result<Look, String> {
     match name {
         LIST_WINDOWS => Ok(Look::ListWindows),
         FOCUSED_WINDOW => Ok(Look::FocusedWindow),
-        SCREENSHOT => Ok(Look::Screenshot { hwnd }),
+        SCREENSHOT => Ok(Look::Screenshot {
+            hwnd,
+            region: region(args.get("region"))?,
+            max_edge: max_edge(args.get("maxEdge").and_then(Value::as_u64)),
+        }),
         UI_TREE => Ok(Look::UiTree {
             hwnd: hwnd.ok_or("ui_tree needs an hwnd from list_windows")?,
             caps: Caps {
@@ -96,6 +112,31 @@ pub fn parse(name: &str, args: &Value) -> Result<Look, String> {
         }),
         _ => Err("unknown tool".into()),
     }
+}
+
+/// A screenshot's optional `region` (`{x, y, width, height}`, screen px).
+fn region(v: Option<&Value>) -> Result<Option<Rect>, String> {
+    let Some(v) = v.filter(|v| !v.is_null()) else {
+        return Ok(None);
+    };
+    const WRONG: &str =
+        "region must be {x, y, width, height} in screen px, width and height above 0";
+    let int = |k: &str| {
+        v.get(k)
+            .and_then(Value::as_i64)
+            .and_then(|n| i32::try_from(n).ok())
+            .ok_or(WRONG)
+    };
+    let (x, y, width, height) = (int("x")?, int("y")?, int("width")?, int("height")?);
+    if width <= 0 || height <= 0 {
+        return Err(WRONG.into());
+    }
+    Ok(Some(Rect {
+        x,
+        y,
+        width,
+        height,
+    }))
 }
 
 /// "Chrome · GitHub – Pull requests" (the app, then the title).
@@ -256,12 +297,44 @@ mod tests {
         assert_eq!(parse(LIST_WINDOWS, &json!({})), Ok(Look::ListWindows));
         assert_eq!(
             parse(SCREENSHOT, &json!({})),
-            Ok(Look::Screenshot { hwnd: None })
+            Ok(Look::Screenshot {
+                hwnd: None,
+                region: None,
+                max_edge: 1568
+            })
         );
         assert_eq!(
-            parse(SCREENSHOT, &json!({ "hwnd": "1234" })),
-            Ok(Look::Screenshot { hwnd: Some(1234) })
+            parse(SCREENSHOT, &json!({ "hwnd": "1234", "maxEdge": 800 })),
+            Ok(Look::Screenshot {
+                hwnd: Some(1234),
+                region: None,
+                max_edge: 800
+            })
         );
+        assert_eq!(
+            parse(
+                SCREENSHOT,
+                &json!({ "hwnd": 5, "region": { "x": -10, "y": 20, "width": 300, "height": 40 } })
+            ),
+            Ok(Look::Screenshot {
+                hwnd: Some(5),
+                region: Some(Rect {
+                    x: -10,
+                    y: 20,
+                    width: 300,
+                    height: 40
+                }),
+                max_edge: 1568
+            })
+        );
+        for bad in [
+            json!({ "x": 0, "y": 0, "width": 0, "height": 10 }),
+            json!({ "x": 0, "y": 0, "width": 10 }),
+            json!({ "x": "a", "y": 0, "width": 10, "height": 10 }),
+            json!([0, 0, 10, 10]),
+        ] {
+            assert!(parse(SCREENSHOT, &json!({ "region": bad })).is_err());
+        }
         assert!(parse(UI_TREE, &json!({})).is_err());
         assert!(parse(SCREENSHOT, &json!({ "hwnd": "abc" })).is_err());
         let Ok(Look::UiTree { caps, .. }) =
@@ -301,6 +374,7 @@ mod tests {
                 width: 1568,
                 height: 882,
                 origin: Rect::from_ltrb(0, 0, 1920, 1080),
+                frame: Rect::from_ltrb(0, 0, 1920, 1080),
                 scale: 1920.0 / 1568.0,
             },
             target: Some(chrome()),

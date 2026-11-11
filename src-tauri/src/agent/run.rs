@@ -36,7 +36,7 @@ makes the screen edges glow (and, unless the run is in auto mode, waits for the 
 one say in one sentence what you're looking for. Get a window's hwnd from list_windows (list again if a window has closed). Prefer ui_tree (text, exact) \
 over screenshot; take a screenshot only for visual questions (layout, images, charts) or when the tree is empty. \
 Every look stays in the conversation, so keep them few and small: a low maxDepth on big windows (browsers, Office), \
-bounds: true only when you'll click by coordinates. \
+bounds: true only when you'll click by coordinates, a screenshot's region and maxEdge when you need only part of a window. \
 Don't repeat sensitive things you happen to see that the task doesn't need.
 
 Cay's action tools (focus_window, invoke, set_value, click, type_text, press_keys, launch) act on the user's \

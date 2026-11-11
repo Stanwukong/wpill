@@ -129,6 +129,17 @@ fn draw(width: i32, height: i32, paint: impl FnOnce(HDC) -> bool) -> Result<Bitm
     }
 }
 
+/// The part of `b` (which shows `area` on screen) inside `region` (screen px, already within `area`).
+pub fn crop(b: &Bitmap, area: Rect, region: Rect) -> Bitmap {
+    cropped(
+        b,
+        region.x - area.x,
+        region.y - area.y,
+        region.width,
+        region.height,
+    )
+}
+
 fn cropped(b: &Bitmap, x: i32, y: i32, width: i32, height: i32) -> Bitmap {
     let (x, y) = (x.max(0) as usize, y.max(0) as usize);
     let width = (width as usize).min(b.width as usize - x.min(b.width as usize));
