@@ -1120,6 +1120,24 @@ GitHub pre-release flag); keeping hand-written notes with a checklist (already m
 Actions (needed later for SignPath, but not for an unsigned beta); letting the script publish (one wrong checksum
 or a TODO left in the notes would go straight to testers).
 
+### D61: Narrower looks: part of a screenshot, part of a tree
+*What:* `screenshot` takes `region` (physical screen px, cut to the window's frame or the monitor; a region outside
+it is an error) and `maxEdge` (200–1568). The reply's origin and scale describe the region, while the run's view keeps
+the whole frame, so a click on a region screenshot maps to the right screen point and a moved window still makes the
+view stale. `ui_tree` takes `find` (text in a name, value or automation id, any case; a password's value never
+matches) and `types` (control type names as the outline writes them; an unknown one is an error listing them all):
+only matching lines are written, each under its shown ancestors, with a count at the end; refs keep their numbers.
+`root: n` walks only element `[n]` of that window's latest tree: it's resolved from the run's refs (same process,
+under 10 minutes), found again like an action's element (`act::locate`, the identity checks of `act::find` without
+"enabled"), and the new tree's refs replace the window's earlier ones from `[0]`, which the reply says. A stale ref
+fails and asks for a tree without `root`. The run guidance mentions all of them.
+*Why:* D58 made the defaults smaller, but a look still had to take a whole window: a 1568 px screenshot is about 3.3k
+tokens when Claude wanted one button's state, and a whole tree when it wanted the one field it already knew the name of.
+*Alternatives:* `find` filtering inside the walk (it can't know a match's ancestors until it sees the match, and the
+walk's limits stay simplest as they are); numbering a `root` tree after the earlier one's refs (two trees' refs would
+have to live side by side); a region in image px (Claude has screen px from `list_windows` and `bounds: true`).
+Changes-only second trees (N.4) are next.
+
 ### C8: The agent pipe refused every bridge's hello
 *Symptom:* the first real agent run failed with "MCP tool mcp__topbar__approve not found"; TopBar's log said it had
 refused two connections "without a valid run token". *Diagnosis:* the bridge writes its hello as soon as it connects,
@@ -1289,6 +1307,7 @@ at a time (there are few of them); after that the walks matched element for elem
 | 2026-11-05 | Stage 2.10d built (polish, D55) by the daily routine on the author's go-ahead before the 2.10c check: composer meta line and per-run drafts, run list groups and filter, Ctrl+N/Ctrl+F/arrows and one focus ring, empty/loading/error states. React only; 41 TS tests. Every Phase 2.10 task is built; manual checks pending. |
 | 2026-11-06 | Phase 5 design agreed (D56). Stage 5a built (D57): wall-clock timer, stopwatch and 25-minute focus with a break, `timer.json` across restarts, the `timerDone` activity, `mm:ss` and a ring in the pill, the panel's Timer section. Manual check pending. |
 | 2026-11-08 | Desktop tools made cheaper (D58) after `/usage` put Cay's `cay` MCP server at 21%: smaller `ui_tree` by default (containers merged, offscreen skipped, bounds on request, 250 elements / 24 KB), action replies with the focused element and no forced look, `ms`/`replyChars`/`imageTokens` in the audit. 335 Rust tests. The `motion-designer` agent now runs on Sonnet (it was 22% of usage on the session's model). |
+| 2026-11-11 | Narrower looks (D61, daily routine): screenshot `region` and `maxEdge`; `ui_tree` `find`, `types` and `root`. 338 Rust tests. |
 | 2026-11-08 | Faster tree walk (D59): a windowless parent's children in one UIA call with the runtime id cached, the walker kept for parents with their own HWND after a XAML island child went missing (C16). Same elements, 1.3–2.8× faster on a WebView2 app. 335 Rust tests. |
 | 2026-11-08 | v0.1.0 published as a GitHub pre-release. Beta readiness (D60): version 1.0.0, README for testers, issue forms, `scripts/release.ps1` (checksum in the notes, draft only). |
 | 2026-11-05 | Stage 2.10c built (the window, D54): maximize button, F11 and double-click with `command:maximized` from Rust, Esc restores first, `agent.window` remembered and fitted onto a current work area, a 760 px reading column when wide. 322 Rust and 16 TS tests. Manual check pending. |

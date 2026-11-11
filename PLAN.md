@@ -52,6 +52,9 @@ D50) signed off, all manual checks passed (3b on the author's other machine).** 
 (added 2026-11-05, D51; design agreed 2026-11-05, D52; built on branch `self/phase-2.10-agent-window`, PR #3; 2.10c–d in PR #4, merged 2026-11-05).
 **Stages 2.10a (readable transcript) and 2.10b (attachments) are built and merged (PR #3, 2026-11-05); 2.10c (the window: maximize, remembered place, wide layout, D54) and 2.10d (polish, D55) are built (2026-11-05, draft PR #4). Their manual checks are pending.** With 2.10d every Phase 2.10 task is built. After 2.10: [Phase 5, utilities](#phase-5-utilities) (kick-off prompt:
 [prompts/phase-5-utilities.md](prompts/phase-5-utilities.md); **design agreed 2026-11-06 (D56), all five recommended choices; stage 5a (timer, stopwatch, focus, D57) built 2026-11-06 on branch `self/phase-5-utilities`, PR #5; its manual check is pending, then 5b (shelf)**), the spikes, and last 4a-5 (release). **Desktop tools made cheaper 2026-11-08 (D58): smaller trees, no forced look after actions, timings in the audit; a faster walk (D59). Narrower looks are next ([Desktop tools: cost and speed](#desktop-tools-cost-and-speed-started-2026-11-08-d58)).**
+**Narrower looks N.1–N.3 built 2026-11-11 by the daily routine (D61, branch `self/phase-desktop-narrower-looks`):
+screenshot `region`/`maxEdge`, `ui_tree` `find`/`types`/`root`. PARTIAL: N.4 (changes-only trees) is next; the manual
+check and the per-window UIA grant decision are the author's.**
 **Beta (2026-11-08, D60):** v0.1.0 went out first as a GitHub pre-release (no checksum in its notes). The beta for testers is
 **1.0.0** (manifests bumped, the author's call): README for testers (status, Known limitations, Bugs and feedback), issue
 forms in `.github/ISSUE_TEMPLATE/`, and `scripts/release.ps1`, which builds, puts the SHA-256 in the notes and creates a
@@ -2027,6 +2030,17 @@ run's own attachments folder. The tasks below are the work list; the stage bulle
   window for a run; one call for several UIA steps. Real input keeps asking every time.
 - [ ] Manual check: a haiku run in a scratch folder that reads and uses Notepad and a browser window; compare the audit
   lines' `replyChars` and `ms` with a run from before D58.
+- [ ] Manual check for N.1–N.3 (D61), with a debug Cay from the branch:
+    1. `agent-test look screenshot '{"hwnd":<notepad>,"region":{"x":…,"y":…,"width":400,"height":200},"maxEdge":400}'
+       C:\tmp\part.png`: the PNG shows just that part, at most 400 px wide.
+    2. In a run, ask for a click on something in a region screenshot: it lands on the right spot (the view maps region
+       px to screen px).
+    3. `agent-test look ui_tree '{"hwnd":<notepad>,"types":["menuitem"]}'`: only menu items, under the menu bar, and a
+       "… n matching" line; `"find":"zzz"` says nothing matches.
+    4. In a run: `ui_tree` of a browser, then `ui_tree` with `root` set to a list's ref: only that list, refs from `[0]`, and an
+       action on an old ref fails as gone. A `root` after the window changed fails and asks for a tree without it.
+    5. The audit lines show smaller `replyChars` / `imageTokens` than full looks, and the glow and approvals are
+       unchanged.
 
 ### Phase 4b: settings
 A settings window (a normal, focusable window, separate from the island) for: activities on/off,

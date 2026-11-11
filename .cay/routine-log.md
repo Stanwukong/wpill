@@ -153,3 +153,24 @@
   `--media-accent` (the default `--accent` is the charging green), and Do not disturb opens
   `ms-settings:notifications`. Your PR #5 review lists choice 4 as "text only, memory only, cleared on lock
   (recommended) · also images"; D56 recorded text only. Please confirm before 5c whether you want images too.
+
+## 2026-11-11 | Desktop tools: cost and speed, narrower looks (N.1–N.3)
+- Status: PARTIAL (N.4 changes-only trees not started; manual check and the per-window UIA grant decision are
+  Femi's). PR: see below.
+- Picked: no open PRs or review comments; Phase 5a's PR #5 is merged but its manual check isn't recorded, so 5b waits.
+  "Desktop tools: cost and speed" was started (D58) with "Narrower looks" open and not DRAFT, so I resumed it and split
+  it into N.1–N.4 in PLAN.md.
+- Tasks: ✅ N.1 8180b49 (screenshot region + maxEdge) · ✅ N.2 0aae524 (ui_tree find/types) · ✅ N.3 48b2057
+  (ui_tree root) · ⏳ N.4 not started (next run) · docs D61.
+- Checks: cargo fmt --check, clippy --all-targets -D warnings, cargo test --lib (338 passed, 3 ignored), the new live
+  `cargo test --lib -- --ignored screenshot_region` (a region of the primary screen at maxEdge 400: 400x200, origin =
+  region, frame = monitor; dimensions only, pixels dropped), pnpm typecheck, pnpm test (49), pnpm build: all clean.
+  Not run live in Cay: the installed Cay hosts this run, and a debug Cay can't start beside it (single instance).
+- Desktop build: installed Cay (`%LOCALAPPDATA%\Cay\cay.exe`, 1.0.0) built 2026-11-09 09:26, after main's last commit
+  6bb346e (2026-11-08 21:42), so it matches main. Nothing rebuilt.
+- How: shell edits by me, not the VS Code extension (Femi may be at the machine; no real input sent).
+- Next run: if the PR has comments, address them. Else N.4 on this branch: an opt-in `changes: true` for ui_tree that
+  compares with the run's previous tree of that window by runtime id (needs `Refs` to keep a value/name digest per
+  element) and writes only new/changed lines plus a removed count, refs from the new tree.
+- For Femi: run the N.1–N.3 manual check in PLAN.md; decide the per-window grant for UIA actions (it changes D40/2.7d
+  approvals, so the routine won't touch it); record the 5a manual check so 5b can start.
