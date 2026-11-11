@@ -59,7 +59,16 @@ pub enum Look {
         hwnd: i64,
         caps: Caps,
         filter: tree::Filter,
+        /// Walk only this element of the window and what's inside it.
+        root: Option<Root>,
     },
+}
+
+/// Where a tree starts: a ref as Claude gave it, then (before the look runs) the element that ref named.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Root {
+    Ref(usize),
+    Element(usize, plan::Element),
 }
 
 impl Look {
@@ -103,6 +112,8 @@ pub enum Outcome {
         target: Target,
         /// In ref order, for the action tools (2.7d).
         elements: Vec<plan::Element>,
+        /// The ref the tree started from (`root`), in the earlier tree's numbering.
+        from: Option<usize>,
     },
 }
 
@@ -234,19 +245,36 @@ fn look_now(look: Look, expect_pid: Option<u32>) -> Result<Outcome, LookError> {
                 target: Some(target),
             })
         }
-        Look::UiTree { hwnd, caps, filter } => {
+        Look::UiTree {
+            hwnd,
+            caps,
+            filter,
+            root,
+        } => {
             let target = windows::check(hwnd, expect_pid)?;
+            let (start, from) = match root {
+                None => (None, None),
+                Some(Root::Ref(n)) => return Err(LookError::Failed(stale_ref(n))),
+                Some(Root::Element(n, wanted)) => {
+                    let uia = uia::automation().map_err(|e| LookError::Failed(e.message()))?;
+                    let found = act::locate(&uia, target.hwnd, target.pid, &wanted)
+                        .map_err(|_| LookError::Failed(stale_ref(n)))?;
+                    (Some(found), Some(n))
+                }
+            };
             let uia::Walked {
                 nodes,
                 cut,
                 offscreen,
-            } = uia::walk(target.hwnd, &caps).map_err(|e| LookError::Failed(e.message()))?;
+            } = uia::walk(target.hwnd, start.as_ref(), &caps)
+                .map_err(|e| LookError::Failed(e.message()))?;
             Ok(Outcome::Tree {
                 outline: tree::render(&nodes, cut, offscreen, &caps, &filter),
                 nodes: nodes.len(),
                 cut,
                 target,
                 elements: tree::elements(&nodes),
+                from,
             })
         }
     }
@@ -481,6 +509,13 @@ fn act_now(
 /// The monitor an action is on (for the glow): the window's, or the primary one.
 pub fn monitor_of(hwnd: Option<i64>) -> Rect {
     windows::monitor_rect(hwnd.map(|h| h as isize))
+}
+
+/// Why `root: n` can't be used.
+pub fn stale_ref(n: usize) -> String {
+    format!(
+        "root [{n}] isn't in this window's latest ui_tree any more (or it's gone); take a ui_tree without root"
+    )
 }
 
 /// A screenshot's `region` within `area`, or why it can't be taken.

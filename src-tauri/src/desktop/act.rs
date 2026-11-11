@@ -84,6 +84,21 @@ pub fn find(
     pid: u32,
     wanted: &Element,
 ) -> Result<IUIAutomationElement, ActError> {
+    let found = locate(uia, hwnd, pid, wanted)?;
+    // SAFETY: a property read on a live element.
+    if !unsafe { found.CurrentIsEnabled() }.is_ok_and(|b| b.as_bool()) {
+        return Err(ActError::Disabled);
+    }
+    Ok(found)
+}
+
+/// Finds `wanted` in window `hwnd` (process `pid`) again: same runtime id, type, name and automation id.
+pub fn locate(
+    uia: &IUIAutomation,
+    hwnd: isize,
+    pid: u32,
+    wanted: &Element,
+) -> Result<IUIAutomationElement, ActError> {
     let found = by_point(uia, pid, wanted).or_else(|| by_search(uia, hwnd, wanted)?.ok());
     let found = match found {
         Some(e) => e,
@@ -109,9 +124,6 @@ pub fn find(
                 .is_ok_and(|n| n.to_string().trim() == wanted.name.trim());
         if !same {
             return Err(ActError::ElementGone);
-        }
-        if !found.CurrentIsEnabled().is_ok_and(|b| b.as_bool()) {
-            return Err(ActError::Disabled);
         }
     }
     Ok(found)

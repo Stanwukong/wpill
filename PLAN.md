@@ -2017,7 +2017,11 @@ run's own attachments folder. The tasks below are the work list; the stage bulle
     - [x] N.2 `ui_tree` `find` (text in a name, value or automation id) and `types` (control type names): only
           matching lines, each under its shown ancestors; refs unchanged. A last line counts the matches; unknown types are an error listing
           the known ones; a password's value never matches.
-    - [ ] N.3 `ui_tree` `root: n` (a ref from that window's last tree): walk from that element only.
+    - [x] N.3 `ui_tree` `root: n` (a ref from that window's last tree): walk from that element only. The ref is
+          resolved from the run's refs (same process, under 10 minutes) and found again like an action's element
+          (`act::locate`: runtime id, type, name, automation id; disabled is fine for a look). The new tree's refs
+          replace the window's earlier ones from `[0]`, and the reply says so. A stale ref is an error asking for a
+          tree without `root`.
     - [ ] N.4 A second tree of the same window as changes only (refs already keep the last one).
 - [ ] Needs the author's decision (changes D40 / 2.7d approvals): UIA actions (`invoke`, `set_value`) allowed once per
   window for a run; one call for several UIA steps. Real input keeps asking every time.

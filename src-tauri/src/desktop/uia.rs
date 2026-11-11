@@ -88,7 +88,12 @@ pub struct Walked {
     pub offscreen: u32,
 }
 
-pub fn walk(hwnd: isize, caps: &Caps) -> windows::core::Result<Walked> {
+/// Walks window `hwnd`, or only `from` (an element of it) and what's inside.
+pub fn walk(
+    hwnd: isize,
+    from: Option<&IUIAutomationElement>,
+    caps: &Caps,
+) -> windows::core::Result<Walked> {
     let started = Instant::now();
     let uia = automation()?;
     // SAFETY: COM calls on smart pointers released on drop; the caller initialised COM (MTA) on this thread.
@@ -120,7 +125,10 @@ pub fn walk(hwnd: isize, caps: &Caps) -> windows::core::Result<Walked> {
             element: element_cache,
             walker: uia.ControlViewWalker()?,
         };
-        let root = uia.ElementFromHandleBuildCache(win32::from_raw(hwnd), &fetch.element)?;
+        let root = match from {
+            Some(e) => e.BuildUpdatedCache(&fetch.element)?,
+            None => uia.ElementFromHandleBuildCache(win32::from_raw(hwnd), &fetch.element)?,
+        };
 
         let mut nodes = Vec::new();
         let mut cut = None;
@@ -137,7 +145,7 @@ pub fn walk(hwnd: isize, caps: &Caps) -> windows::core::Result<Walked> {
                 break;
             }
             let n = node(&element, depth);
-            // The window itself is always kept, even when UIA calls it offscreen.
+            // The window (or the root asked for) is always kept, even when UIA calls it offscreen.
             if depth > 0 && n.offscreen && !caps.offscreen {
                 offscreen += 1;
                 continue;

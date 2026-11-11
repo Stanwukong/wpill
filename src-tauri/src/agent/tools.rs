@@ -6,8 +6,9 @@ use serde_json::{json, Value};
 
 use super::mcp;
 use crate::desktop::logic::max_edge;
+use crate::desktop::refs::Refs;
 use crate::desktop::tree::{Caps, Cut, Filter};
-use crate::desktop::{Look, LookError, Outcome, Rect, Target};
+use crate::desktop::{Look, LookError, Outcome, Rect, Root, Target};
 
 pub const LIST_WINDOWS: &str = "list_windows";
 pub const FOCUSED_WINDOW: &str = "focused_window";
@@ -75,6 +76,9 @@ pub fn definitions() -> Vec<Value> {
                     physical screen px and the focusable flag; only to click by coordinates (default false)." },
                 "offscreen": { "type": "boolean", "description": "Also elements scrolled out of view or on \
                     hidden pages (default false)." },
+                "root": { "type": "integer", "description": "Walk only this element (its [n] ref from \
+                    this window's latest ui_tree) and what's inside it. The new tree's refs replace the \
+                    earlier ones, starting again at [0]." },
                 "find": { "type": "string", "description": "Only elements whose name, value or automation id \
                     contains this text (any case), each under its ancestors. The walk's limits still apply." },
                 "types": { "type": "array", "items": { "type": "string" }, "description": "Only these \
@@ -106,6 +110,18 @@ pub fn parse(name: &str, args: &Value) -> Result<Look, String> {
         UI_TREE => Ok(Look::UiTree {
             hwnd: hwnd.ok_or("ui_tree needs an hwnd from list_windows")?,
             filter: filter(args)?,
+            root: match args.get("root").filter(|v| !v.is_null()) {
+                None => None,
+                Some(v) => Some(Root::Ref(
+                    v.as_u64()
+                        .or_else(|| {
+                            v.as_str()
+                                .and_then(|s| s.trim().trim_matches(['[', ']']).parse().ok())
+                        })
+                        .and_then(|n| usize::try_from(n).ok())
+                        .ok_or("root must be an [n] ref from ui_tree")?,
+                )),
+            },
             caps: Caps {
                 bounds: args.get("bounds").and_then(Value::as_bool) == Some(true),
                 offscreen: args.get("offscreen").and_then(Value::as_bool) == Some(true),
@@ -116,6 +132,39 @@ pub fn parse(name: &str, args: &Value) -> Result<Look, String> {
             },
         }),
         _ => Err("unknown tool".into()),
+    }
+}
+
+/// A tree's `root: n` → the element ref `n` named in the run's latest tree of that window. A ref that's unknown,
+/// too old or from another process stays a ref, and the look then fails with "take a ui_tree without root".
+pub fn resolve_root(
+    look: Look,
+    refs: &Refs,
+    run: &str,
+    expect_pid: Option<u32>,
+    now: std::time::Instant,
+) -> Look {
+    match look {
+        Look::UiTree {
+            hwnd,
+            caps,
+            filter,
+            root: Some(Root::Ref(n)),
+        } => {
+            let root = match refs.element(run, hwnd, n, now) {
+                Ok((element, pid)) if expect_pid.is_none_or(|p| p == pid) => {
+                    Root::Element(n, element)
+                }
+                _ => Root::Ref(n),
+            };
+            Look::UiTree {
+                hwnd,
+                caps,
+                filter,
+                root: Some(root),
+            }
+        }
+        other => other,
     }
 }
 
@@ -223,8 +272,20 @@ pub fn reply(rpc_id: Value, result: &Result<Outcome, LookError>) -> Value {
             ]
         }
         Ok(Outcome::Tree {
-            outline, target, ..
+            outline,
+            target,
+            from: None,
+            ..
         }) => vec![text(&format!("UI of {}:\n{outline}", target_label(target)))],
+        Ok(Outcome::Tree {
+            outline,
+            target,
+            from: Some(n),
+            ..
+        }) => vec![text(&format!(
+            "UI of {} inside the earlier [{n}] (new refs; the earlier ones are gone):\n{outline}",
+            target_label(target)
+        ))],
     };
     mcp::result(rpc_id, json!({ "content": content }))
 }
@@ -255,9 +316,10 @@ pub fn audit_fields(tool: &str, result: &Result<Outcome, LookError>) -> Value {
             cut,
             target: t,
             outline,
+            from,
             ..
         }) => json!({ "tool": tool, "ok": true, "target": target(t), "nodes": nodes,
-            "chars": outline.chars().count(),
+            "chars": outline.chars().count(), "root": from.is_some(),
             "cut": cut.map(|c| match c { Cut::Nodes => "nodes", Cut::Time => "time" }) }),
     }
 }
@@ -390,7 +452,52 @@ mod tests {
         assert_eq!(filter.types, ["edit"]);
         assert!(parse(UI_TREE, &json!({ "hwnd": 5, "types": ["nope"] })).is_err());
         assert!(parse(UI_TREE, &json!({ "hwnd": 5, "find": 3 })).is_err());
+        for (root, want) in [(json!(12), 12), (json!("[7]"), 7), (json!("3"), 3)] {
+            let Ok(Look::UiTree { root, .. }) = parse(UI_TREE, &json!({ "hwnd": 5, "root": root }))
+            else {
+                panic!()
+            };
+            assert_eq!(root, Some(Root::Ref(want)));
+        }
+        assert!(parse(UI_TREE, &json!({ "hwnd": 5, "root": -1 })).is_err());
+        assert!(parse(UI_TREE, &json!({ "hwnd": 5, "root": "x" })).is_err());
         assert_eq!(caps.bytes, crate::desktop::tree::DEFAULT_BYTES);
+    }
+
+    #[test]
+    fn roots_resolve_from_the_latest_tree() {
+        use crate::desktop::plan::Element;
+        let now = std::time::Instant::now();
+        let mut refs = Refs::default();
+        let list = Element {
+            runtime_id: vec![42, 3],
+            control_type: 50008,
+            name: "Files".into(),
+            ..Element::default()
+        };
+        refs.put_tree("r", 5, 99, vec![Element::default(), list.clone()], now);
+        let look = |n| parse(UI_TREE, &json!({ "hwnd": 5, "root": n })).unwrap();
+        let root = |l: Look| match l {
+            Look::UiTree { root, .. } => root,
+            _ => panic!(),
+        };
+        assert_eq!(
+            root(resolve_root(look(1), &refs, "r", Some(99), now)),
+            Some(Root::Element(1, list))
+        );
+        for (n, run, pid) in [
+            (2, "r", Some(99)),
+            (1, "other", Some(99)),
+            (1, "r", Some(7)),
+        ] {
+            assert_eq!(
+                root(resolve_root(look(n), &refs, run, pid, now)),
+                Some(Root::Ref(n)),
+                "unknown ref, another run, or another process: stays a ref"
+            );
+        }
+        let plain = parse(UI_TREE, &json!({ "hwnd": 5 })).unwrap();
+        assert_eq!(resolve_root(plain.clone(), &refs, "r", None, now), plain);
     }
 
     #[test]
@@ -477,11 +584,24 @@ mod tests {
             cut: Some(Cut::Time),
             target: chrome(),
             elements: vec![],
+            from: None,
         });
         assert!(reply(json!(4), &tree)
             .to_string()
             .contains("UI of Chrome · GitHub"));
         assert_eq!(audit_fields(UI_TREE, &tree)["cut"], "time");
+        let scoped = Ok(Outcome::Tree {
+            outline: "[0] list \"Files\"\n".into(),
+            nodes: 1,
+            cut: None,
+            target: chrome(),
+            elements: vec![],
+            from: Some(12),
+        });
+        assert!(reply(json!(5), &scoped)
+            .to_string()
+            .contains("inside the earlier [12] (new refs"));
+        assert_eq!(audit_fields(UI_TREE, &scoped)["root"], true);
         assert!(!audit_fields(UI_TREE, &tree)
             .to_string()
             .contains("window \\\"x"));
