@@ -156,7 +156,7 @@
 
 ## 2026-11-11 | Desktop tools: cost and speed, narrower looks (N.1–N.3)
 - Status: PARTIAL (N.4 changes-only trees not started; manual check and the per-window UIA grant decision are
-  Femi's). PR: see below.
+  Femi's). Draft PR https://github.com/Stanwukong/wpill/pull/7.
 - Picked: no open PRs or review comments; Phase 5a's PR #5 is merged but its manual check isn't recorded, so 5b waits.
   "Desktop tools: cost and speed" was started (D58) with "Narrower looks" open and not DRAFT, so I resumed it and split
   it into N.1–N.4 in PLAN.md.

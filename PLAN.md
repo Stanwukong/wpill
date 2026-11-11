@@ -54,7 +54,7 @@ D50) signed off, all manual checks passed (3b on the author's other machine).** 
 [prompts/phase-5-utilities.md](prompts/phase-5-utilities.md); **design agreed 2026-11-06 (D56), all five recommended choices; stage 5a (timer, stopwatch, focus, D57) built 2026-11-06 on branch `self/phase-5-utilities`, PR #5; its manual check is pending, then 5b (shelf)**), the spikes, and last 4a-5 (release). **Desktop tools made cheaper 2026-11-08 (D58): smaller trees, no forced look after actions, timings in the audit; a faster walk (D59). Narrower looks are next ([Desktop tools: cost and speed](#desktop-tools-cost-and-speed-started-2026-11-08-d58)).**
 **Narrower looks N.1–N.3 built 2026-11-11 by the daily routine (D61, branch `self/phase-desktop-narrower-looks`):
 screenshot `region`/`maxEdge`, `ui_tree` `find`/`types`/`root`. PARTIAL: N.4 (changes-only trees) is next; the manual
-check and the per-window UIA grant decision are the author's.**
+check and the per-window UIA grant decision are the author's. Draft PR #7.**
 **Beta (2026-11-08, D60):** v0.1.0 went out first as a GitHub pre-release (no checksum in its notes). The beta for testers is
 **1.0.0** (manifests bumped, the author's call): README for testers (status, Known limitations, Bugs and feedback), issue
 forms in `.github/ISSUE_TEMPLATE/`, and `scripts/release.ps1`, which builds, puts the SHA-256 in the notes and creates a
